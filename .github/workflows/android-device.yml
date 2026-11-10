@@ -73,6 +73,7 @@ jobs:
             adb shell am start -n com.hebi.talksullae/.MainActivity
             sleep 3
             adb exec-out screencap -p > screenshots/home-font-200.png
+            python3 scripts/capture_2b_ui.py || echo "::warning::2-B preview captures incomplete; inspect screenshots/2b/capture-report.json"
       - name: Upload emulator reports and captures
         if: always()
         uses: actions/upload-artifact@v4
