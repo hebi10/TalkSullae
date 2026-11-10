@@ -18,7 +18,7 @@ Firebase 프로젝트 운영 연결·Firestore Rules 배포·Cloud Functions 배
 
 ## 2. Android 및 서버 기술 구성
 
-Android: Firebase BoM 35.1.0, Google Services plugin 4.5.0(설정 파일 존재 시만 적용), Credential Manager 1.3.0, Google Identity ID Token 1.1.1.
+Android: Firebase BoM 34.19.0, Google Services plugin 4.5.0(설정 파일 존재 시만 적용), Credential Manager 1.3.0, Google Identity ID Token 1.1.1.
 Server: Cloud Functions for Firebase 7.4.0, Firebase Admin 14.5.0, Node.js 22, Firestore Rules 2.
 
 실제 Google 로그인: Credential Manager에서 Google 계정 ID 토큰 획득 → FirebaseAuth의 GoogleAuthProvider로 로그인 → 사용자 UID 기준 온라인 방 목록 구독 → 서버 Callable 작업 가능.
