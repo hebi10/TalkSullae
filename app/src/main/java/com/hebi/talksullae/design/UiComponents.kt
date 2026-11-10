@@ -114,21 +114,47 @@ fun RoomCard(room: RoomPreview, onOpen: () -> Unit) {
     ContentCard(
         modifier = Modifier
             .testTag("room-${room.id}")
-            .semantics { contentDescription = "${room.name}, 멤버 ${room.memberCount}명, 읽지 않은 메시지 ${room.unreadCount}개" }
+            .semantics {
+                contentDescription = "${room.name}, 멤버 ${room.memberCount}명, 읽지 않은 메시지 ${room.unreadCount}개"
+            }
             .clickable(onClick = onOpen)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Groups, contentDescription = null)
             Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(room.name, style = MaterialTheme.typography.titleMedium)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        room.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (room.unreadCount > 0) {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = CardShape
+                        ) {
+                            Text(
+                                text = "${room.unreadCount}",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
                 Text(
-                    "${room.memberCount}명 · ${room.recentMessage}",
+                    text = "${room.memberCount}명 · ${room.recentMessage}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
-            if (room.unreadCount > 0) Text("${room.unreadCount}", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.width(8.dp))
             Icon(Icons.Default.ChevronRight, contentDescription = null)
         }
     }
