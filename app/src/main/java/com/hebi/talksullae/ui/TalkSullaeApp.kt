@@ -3,25 +3,35 @@ package com.hebi.talksullae.ui
 import android.app.Activity
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -36,17 +46,22 @@ import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -58,9 +73,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -168,6 +188,8 @@ fun TalkSullaeApp(
 
     val currentRoom = previewRooms.firstOrNull { it.id == selectedRoom } ?: previewRooms.first()
     val selectedGame = DemoCatalog.games.firstOrNull { it.id == gameId } ?: DemoCatalog.games.first()
+    val editingRoomChat = route == Room && roomTab == "chat" &&
+        WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
     TalkSullaeTheme(darkTheme = isDark) {
         Scaffold(
@@ -187,7 +209,7 @@ fun TalkSullaeApp(
                         else -> "톡술래"
                     },
                     subtitle = when (route) {
-                        Room -> "멤버 ${roomMembers.size}명 · UI 미리보기"
+                        Room -> if (editingRoomChat) null else "UI 미리보기"
                         Game -> "게임 흐름 미리보기 · 실제 플레이 아님"
                         else -> "채팅으로 즐기는 추리 게임 · 데모"
                     },
@@ -201,7 +223,7 @@ fun TalkSullaeApp(
             }
         ) { padding ->
             Box(
-                modifier = Modifier.fillMaxSize().padding(padding)
+                modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 when (route) {
@@ -257,27 +279,19 @@ fun TalkSullaeApp(
                             nickname = previewNickname
                         )
                     }
-                    Room -> Column(Modifier.fillMaxSize().testTag("room-screen")) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(
-                                onClick = { route = Members },
-                                modifier = Modifier.heightIn(min = 48.dp).testTag("room-members-open")
-                            ) { Text("멤버 ${roomMembers.size}명") }
-                            if (isRoomOwner) {
-                                TextButton(
-                                    onClick = { pendingInvitePreview = false; route = Invite },
-                                    modifier = Modifier.heightIn(min = 48.dp).testTag("room-invite-open")
-                                ) { Text("친구 초대") }
-                            }
-                        }
-                        RoomTabs(current = roomTab, onSelect = { roomTab = it })
+                    Room -> DemoRoomLayout(
+                        currentTab = roomTab,
+                        onSelectTab = { roomTab = it },
+                        memberCount = roomMembers.size,
+                        onMembers = { route = Members },
+                        onInvite = if (isRoomOwner) ({ pendingInvitePreview = false; route = Invite }) else null,
+                        editingChat = editingRoomChat
+                    ) { scrollableActions ->
                         when (roomTab) {
                             "chat" -> RoomChatScreen(
                                 messages = DemoCatalog.roomMessages + localMessages,
+                                editingChat = editingRoomChat,
+                                scrollableActions = scrollableActions,
                                 input = chatInput,
                                 onInput = { chatInput = it },
                                 onSend = {
@@ -404,35 +418,110 @@ private fun MainNavigation(current: String, onSelect: (String) -> Unit) {
 }
 
 @Composable
-private fun RoomTabs(current: String, onSelect: (String) -> Unit) {
+private fun DemoRoomLayout(
+    currentTab: String,
+    onSelectTab: (String) -> Unit,
+    memberCount: Int,
+    onMembers: () -> Unit,
+    onInvite: (() -> Unit)?,
+    editingChat: Boolean,
+    content: @Composable ((@Composable () -> Unit)?) -> Unit
+) {
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding().testTag("room-screen")) {
+        if (maxWidth >= 600.dp) {
+            Row(Modifier.fillMaxSize()) {
+                Surface(
+                    modifier = Modifier.width(180.dp).fillMaxHeight(),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+                        RoomActions(memberCount, onMembers, onInvite, vertical = true)
+                        RoomTabs(currentTab, onSelectTab, vertical = true)
+                    }
+                }
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
+                    Box(Modifier.widthIn(max = 640.dp).fillMaxSize()) { content(null) }
+                }
+            }
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                if (!editingChat) RoomActions(memberCount, onMembers, onInvite)
+                RoomTabs(currentTab, onSelectTab)
+                content(if (editingChat) ({ RoomActions(memberCount, onMembers, onInvite) }) else null)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoomActions(
+    memberCount: Int,
+    onMembers: () -> Unit,
+    onInvite: (() -> Unit)?,
+    vertical: Boolean = false
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        horizontalArrangement = if (vertical) Arrangement.Start else Arrangement.End,
+        maxItemsInEachRow = if (vertical) 1 else Int.MAX_VALUE
+    ) {
+        TextButton(
+            onClick = onMembers,
+            modifier = Modifier.heightIn(min = 48.dp).testTag("room-members-open")
+        ) { Text("멤버 ${memberCount}명") }
+        if (onInvite != null) {
+            TextButton(
+                onClick = onInvite,
+                modifier = Modifier.heightIn(min = 48.dp).testTag("room-invite-open")
+            ) { Text("친구 초대") }
+        }
+    }
+}
+
+@Composable
+private fun RoomTabs(current: String, onSelect: (String) -> Unit, vertical: Boolean = false) {
     val tabs = listOf(
         NavItem("chat", "채팅", Icons.Default.ChatBubbleOutline),
         NavItem("games", "게임", Icons.Default.SportsEsports),
         NavItem("records", "기록", Icons.Default.BarChart)
     )
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    val group = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).selectableGroup()
+    if (vertical) {
+        Column(group, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            tabs.forEach { tab -> RoomTab(tab, current, onSelect, Modifier.fillMaxWidth(), vertical = true) }
+        }
+    } else {
+        Row(group, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            tabs.forEach { tab -> RoomTab(tab, current, onSelect, Modifier.weight(1f), vertical = false) }
+        }
+    }
+}
+
+@Composable
+private fun RoomTab(
+    tab: NavItem, current: String, onSelect: (String) -> Unit, modifier: Modifier, vertical: Boolean
+) {
+    val selected = current == tab.id
+    Surface(
+        modifier = modifier.heightIn(min = 48.dp)
+            .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(tab.id) })
+            .testTag("room-tab-${tab.id}"),
+        color = if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+        contentColor = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = RoundedCornerShape(6.dp)
     ) {
-        tabs.forEach { tab ->
-            val selected = current == tab.id
-            androidx.compose.material3.Surface(
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                    .clickable { onSelect(tab.id) }
-                    .testTag("room-tab-${tab.id}"),
-                color = if (selected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.background,
-                shape = RoundedCornerShape(6.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(tab.icon, contentDescription = null, modifier = Modifier.size(19.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text(tab.title, style = MaterialTheme.typography.labelLarge)
-                }
-            }
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalArrangement = if (vertical) Arrangement.Start else Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(tab.icon, contentDescription = null, modifier = Modifier.size(19.dp))
+            Spacer(Modifier.width(5.dp))
+            Text(
+                tab.title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+            )
         }
     }
 }
@@ -524,42 +613,96 @@ private fun RoomsScreen(
 @Composable
 private fun RoomChatScreen(
     messages: List<MessagePreview>,
+    editingChat: Boolean,
+    scrollableActions: (@Composable () -> Unit)?,
     input: String,
     onInput: (String) -> Unit,
     onSend: () -> Unit,
     onGame: () -> Unit
 ) {
-    Column(Modifier.fillMaxSize()) {
-        ContentCard(modifier = Modifier.padding(16.dp)) {
-            Text("진행 가능한 게임", style = MaterialTheme.typography.bodySmall)
-            Text("너 누구야?", style = MaterialTheme.typography.titleMedium)
-            Text("주제를 정하고 익명으로 채팅해 정체를 맞히는 게임", style = MaterialTheme.typography.bodyMedium)
-            PrimaryAction("게임 화면 미리보기", onClick = onGame, modifier = Modifier.fillMaxWidth())
+    val messagesState = rememberLazyListState()
+    var previousMessageCount by remember { mutableStateOf(messages.size) }
+    var wasEditingChat by remember { mutableStateOf(false) }
+    LaunchedEffect(editingChat, messages.size) {
+        if (editingChat || wasEditingChat || messages.size > previousMessageCount) {
+            // Anchor the last message at the next measure, after the room header reflows.
+            messagesState.requestScrollToItem(messages.size)
         }
+        previousMessageCount = messages.size
+        wasEditingChat = editingChat
+    }
+    Column(Modifier.fillMaxSize()) {
         LazyColumn(
+            state = messagesState,
             modifier = Modifier.weight(1f).fillMaxWidth().testTag("chat-messages"),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
         ) {
+            item(key = "game-banner") {
+                Column(Modifier.padding(bottom = 8.dp)) {
+                    scrollableActions?.invoke()
+                    GamePreviewBanner(onGame)
+                }
+            }
             items(messages) { item ->
                 MessageBubble(item)
             }
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(
-            modifier = Modifier.fillMaxWidth().imePadding().padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
                 value = input,
                 onValueChange = onInput,
-                modifier = Modifier.weight(1f).testTag("chat-input"),
-                placeholder = { Text("이 기기에서만 확인할 메시지") },
+                modifier = Modifier.weight(1f).testTag("chat-input")
+                    .semantics { contentDescription = "이 기기의 데모 메시지" },
+                placeholder = { Text("데모 메시지") },
                 maxLines = 3,
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             )
             Spacer(Modifier.width(8.dp))
-            IconButton(onClick = onSend, enabled = input.isNotBlank(), modifier = Modifier.size(48.dp)) {
+            FilledIconButton(
+                onClick = onSend,
+                enabled = input.isNotBlank(),
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
                 Icon(Icons.Default.Send, contentDescription = "데모 메시지 추가")
             }
+        }
+    }
+}
+
+@Composable
+private fun GamePreviewBanner(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                Text("너 누구야?", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "데모 게임",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextButton(
+                onClick = onClick,
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .semantics { contentDescription = "너 누구야? 게임 시안 보기" }
+            ) { Text("시안 보기") }
         }
     }
 }
@@ -657,7 +800,7 @@ private fun SettingsScreen(darkTheme: Boolean, onThemeChange: (Boolean) -> Unit,
 @Composable
 private fun UnavailableScreen(title: String, description: String, onBack: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         PreviewNotice()
@@ -691,33 +834,57 @@ private fun GamePreviewScreen(
 
 @Composable
 private fun LobbyPreview(onNext: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        PreviewNotice("대기실은 시연용입니다. 실제 참가·준비·시작 권한은 연결되지 않았습니다.")
-        SectionTitle("게임 대기실")
-        ContentCard {
-            Text("너 누구야? · 5명 참가 (예시)", style = MaterialTheme.typography.titleMedium)
-            Text("민지 · 지훈 · 수빈 · 도윤 · 나", style = MaterialTheme.typography.bodyMedium)
-            Text("준비 4/5명 · 방장 시작 조건은 서버에서 검증 예정", style = MaterialTheme.typography.bodySmall)
+    Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            PreviewNotice("대기실은 시연용입니다. 실제 참가·준비·시작 권한은 연결되지 않았습니다.")
+            SectionTitle("게임 대기실")
+            ContentCard {
+                Text("너 누구야? · 준비 4/5명 (예시)", style = MaterialTheme.typography.titleMedium)
+                listOf("민지", "지훈", "수빈", "도윤", "나").forEach { name ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (name == "도윤") "준비 대기" else "준비 완료",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
-        Spacer(Modifier.weight(1f))
-        PrimaryAction("익명 채팅 시안 보기", onClick = onNext, modifier = Modifier.fillMaxWidth())
+        PrimaryAction(
+            "익명 채팅 시안 보기", onClick = onNext,
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        )
     }
 }
 
 @Composable
 private fun AnonymousChatPreview(onNext: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        PreviewNotice("정적 익명 채팅 시안 · 타이머 02:35는 실제 카운트다운이 아닙니다.")
-        ContentCard(modifier = Modifier.padding(16.dp)) {
-            Text("너 누구야? · ROUND 1 · 02:35 (예시)", style = MaterialTheme.typography.bodySmall)
-            Text("친구 중 무인도에서 가장 오래 살아남을 사람은?", style = MaterialTheme.typography.titleMedium)
-            Text("내 익명 정체: 부엉이", style = MaterialTheme.typography.bodyMedium)
-        }
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth().testTag("anonymous-chat-preview"),
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            item(key = "round-preview") {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PreviewNotice("정적 익명 채팅 시안 · 타이머 02:35는 실제 카운트다운이 아닙니다.")
+                    ContentCard {
+                        Text("너 누구야? · ROUND 1 · 02:35 (예시)", style = MaterialTheme.typography.bodySmall)
+                        Text("친구 중 무인도에서 가장 오래 살아남을 사람은?", style = MaterialTheme.typography.titleMedium)
+                        Text("내 익명 정체: 부엉이", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
             items(DemoCatalog.anonymousMessages) { message -> MessageBubble(message) }
         }
         PrimaryAction(

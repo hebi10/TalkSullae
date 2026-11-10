@@ -278,6 +278,7 @@ fun MembersScreen(
         val isKick = action == "kick"
         AlertDialog(
             onDismissRequest = { activeMember = null; action = "" },
+            shape = RoundedCornerShape(8.dp),
             title = { Text(if (isKick) "멤버 강퇴 시연" else "방장 위임 시연") },
             text = {
                 Text(
