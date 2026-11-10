@@ -1,0 +1,54 @@
+name: Firebase security and backend tests
+
+on:
+  push:
+    branches: [feat/2c-firebase-auth-room-permissions]
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - '.github/workflows/firebase-security.yml'
+  pull_request:
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - '.github/workflows/firebase-security.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  firebase-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install fixed SDK versions
+        working-directory: functions
+        run: npm install --no-audit --no-fund
+      - name: Syntax, input validation tests
+        working-directory: functions
+        run: npm run check && npm test
+      - name: Firestore rules and transactional room integration
+        run: npx --yes firebase-tools@15.35.0 emulators:exec --project demo-talksullae --only firestore "cd functions && npm run test:emulator"
+      - name: Upload Firebase emulator reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firebase-test-logs
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            firebase-debug.log
+            firestore-debug.log
