@@ -104,7 +104,7 @@ async function changeMember(db, request) {
   const roomId = roomIdValue(request.data?.roomId);
   const targetUid = request.data?.targetUid;
   const action = request.data?.action;
-  if (typeof targetUid !== "string" || !targetUid || targetUid.includes("/")) {
+  if (typeof targetUid !== "string" || !targetUid || targetUid.length > 128 || targetUid.includes("/")) {
     throw new HttpsError("invalid-argument", "대상 멤버가 잘못되었습니다.");
   }
   if (!["approve","reject","remove","transfer"].includes(action)) {
@@ -164,6 +164,9 @@ async function leaveRoom(db, request) {
     const isOwner = room.data().ownerId===uid;
     if (isOwner && room.data().memberCount>1) {
       throw new HttpsError("failed-precondition","먼저 다른 멤버에게 방장을 위임해 주세요.");
+    }
+    if (isOwner && room.data().pendingCount>0) {
+      throw new HttpsError("failed-precondition","가입 대기 요청을 먼저 처리한 후 방을 정리해 주세요.");
     }
     tx.update(memberRef,{status:"left",updatedAt:now()});
     tx.set(indexRef,{status:"left",roomName:room.data().name,updatedAt:now()});
