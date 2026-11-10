@@ -10,7 +10,7 @@
 
 ## 1. 결과
 
-- 다크 모드 22종(기본 S01~S19, 폴더블·게임 변형 포함), 라이트 모드 1종 및 폴더블 레이아웃 1종 등을 포함한 PNG 24개를 개별 파일로 저장했습니다.
+- 기본 S01~S18 및 공통 상태·폴더블·게임별 변형 24종(다크 22종, 폴더블 1종, 라이트 1종)의 PNG를 개별 파일로 저장했습니다.
 - 00_전체시안_미리보기.png 인덱스 이미지를 별도로 저장했습니다.
 - 실제 앱 코드가 없는 상태에서 디자인 명세에 맞추어 **정적 HTML/CSS 화면을 렌더링한 시안**으로, 각 텍스트·점수·날짜는 시연용 예시 값입니다.
 - 대표 익명 게임은 실제 이름 숨김·본인 별칭 표시·정체 매칭·승패/점수 분리 원칙을 적용했습니다.
@@ -20,7 +20,6 @@
 
 | 순서 | 화면 | Google Drive PNG |
 |---:|---|---|
-| 00 | 전체시안 미리보기 | [00_전체시안_미리보기.png](https://drive.google.com/file/d/1eYkrxzr_jkYJ26fF5reQ49CbmGHPkob_/view?usp=drivesdk) |
 | 01 | S01 시작 | [01_S01_시작.png](https://drive.google.com/file/d/1Jx5Op-TvPK1bN4lWCeRvvn06z-xDGJ5I/view?usp=drivesdk) |
 | 02 | S02 로그인 온보딩 | [02_S02_로그인_온보딩.png](https://drive.google.com/file/d/15suIMmusmQ2XelVMxDGhtMgZvL6utU8W/view?usp=drivesdk) |
 | 03 | S03 내방목록 | [03_S03_내방목록.png](https://drive.google.com/file/d/1yUmiz1CKhekMSV-VJAy_vPtqYDwsFyWC/view?usp=drivesdk) |
