@@ -14,9 +14,11 @@ class MainNavigationTest {
     @Test
     fun roomNavigationShowsRoomTabs() {
         composeRule.onNodeWithTag("room-list").assertExists()
-        composeRule.onNodeWithTag("main-tab-rooms").assertExists()
-        composeRule.onNodeWithTag("room-list").assertExists()
-        composeRule.onNodeWithTag("room-list").assertExists()
+        composeRule.onNodeWithTag("room-friday").performClick()
+        composeRule.onNodeWithTag("room-screen").assertExists()
+        composeRule.onNodeWithTag("room-tab-chat").assertExists()
+        composeRule.onNodeWithTag("room-tab-games").performClick()
+        composeRule.onNodeWithTag("game-list").assertExists()
     }
 
     @Test

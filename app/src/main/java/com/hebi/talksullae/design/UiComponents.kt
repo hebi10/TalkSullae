@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -111,6 +112,7 @@ fun PreviewNotice(text: String = "디자인 미리보기 · 실제 온라인 연
 fun RoomCard(room: RoomPreview, onOpen: () -> Unit) {
     ContentCard(
         modifier = Modifier
+            .testTag("room-${room.id}")
             .semantics { contentDescription = "${room.name}, 멤버 ${room.memberCount}명, 읽지 않은 메시지 ${room.unreadCount}개" }
             .clickable(onClick = onOpen)
     ) {

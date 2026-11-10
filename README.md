@@ -2,7 +2,7 @@
 
 친구들이 각자의 스마트폰에서 고정된 방에 참여해 익명 채팅과 심리·추리게임을 즐기고, 기록을 함께 쌓는 Android 앱입니다.
 
-> 현재 상태: **서비스 및 UI/UX 기획 단계**. 이 저장소에는 아직 Android 애플리케이션 코드, Gradle 프로젝트, Firebase 설정, GitHub Actions, Play 배포 기능이 없습니다.
+> 현재 상태: **2-A Android 공통 UI 구현 단계**. Android·Compose 기반과 로컬 UI 데모를 구현했으며, Firebase·실시간 게임·Play 배포는 아직 진행하지 않았습니다.
 
 ## 프로젝트 방향
 - Android: Kotlin + Jetpack Compose (제안, 개발 단계에서 구성)
@@ -26,3 +26,19 @@
 
 ## 현재 범위
 지금은 전체 화면 디자인 기획을 수행합니다. 앱 코드 구현, Firebase 프로덕션 연동, 서명 및 Play 배포는 미진행 상태입니다.
+
+## Android 2-A 공통 UI 개발 기반
+
+- 코드 작업 브랜치: [feat/2a-compose-foundation](https://github.com/hebi10/TalkSullae/tree/feat/2a-compose-foundation)
+- 최초 앱 식별자: `com.hebi.talksullae` (Play 등록 전 임시 확정)
+- Kotlin 2.2.21 · AGP 8.13.2 · Compose BOM 2025.10.01 · Java 17 · minSdk 26 · targetSdk 36
+- 처음 실행하면 실제 계정 대신 **기기 내 UI 데모**가 표시됩니다. 내 방 → 방 채팅/게임/기록, 익명 게임 시연, 다크/라이트 전환을 확인할 수 있습니다.
+- 로컬에 Android SDK와 JDK 17이 설치된 경우 다음과 같이 빌드할 수 있습니다.
+
+```powershell
+.\gradlew.bat testDebugUnitTest lintDebug assembleDebug
+```
+
+- [공통 UI 설계·검증 범위](docs/development/002a-android-foundation.md)
+- [GitHub Actions Android 검증](.github/workflows/android.yml): 단위 테스트·Lint·디버그 APK 생성
+- 실제 로그인, 카카오 공유, 서버 채팅, 게임 역할, 투표·점수 계산은 연결되지 않았습니다. GitHub 저장소에는 서명키·계정 비밀 정보·Firebase 설정값을 넣지 않습니다.
