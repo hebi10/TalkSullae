@@ -91,3 +91,13 @@ Firebase Cloud Functions Callable: https://firebase.google.com/docs/functions/ca
 Firestore Security Rules: https://firebase.google.com/docs/firestore/security/rules-conditions
 
 현재 이 문서는 운영 배포 성공 보고가 아니라 개발 및 로컬 에뮬레이터 검증 명세입니다.
+
+## 9. 2-C 보안 보완 및 QA 기준 (2026-11-10)
+
+- 권한이 회수되거나 멤버 상태가 활성 상태에서 변경되면, Android 화면에 남아 있던 방·멤버 정보와 Firestore 구독을 즉시 정리합니다.
+- 방장 혼자 남았더라도 가입 대기자가 있으면 방을 보관 처리하지 않고 먼저 가입 요청을 처리하도록 차단합니다. 승인/거절 후 정원·가입 대기 카운트의 일관성을 유지합니다.
+- 비정상적으로 긴 대상 사용자 ID를 서버에서 거부합니다.
+- 초대 코드 원문을 Android SavedInstanceState에 보관하지 않고 화면을 나가면 입력 내용이 사라지도록 변경했습니다.
+- Quickstep(에뮬레이터 **런처**)의 ANR 대화상자만 감지·닫는 캡처 보정 도구를 추가했으며 톡술래 앱 자체의 크래시/ANR은 숨기지 않습니다. UI 캡처가 미완료면 이제 에뮬레이터 CI가 실패하도록 설정했습니다.
+- 서버 보안 테스트 12개는 [GitHub 실행 #42794394374](https://github.com/hebi10/TalkSullae/actions/runs/42794394374)에서 통과했습니다.
+- Firebase 프로젝트 배포, Google OAuth 실계정 로그인, 두 기기 간 승인·강퇴 연동은 **별도 통합 검증 대상**이며 아직 완료되지 않았습니다.
