@@ -32,7 +32,17 @@ class OnlineRoomsViewModel(
     fun start() {
         if (listListener != null) return
         listListener = repository.watchMyRooms(uid,
-            { result -> stateMutable.update { it.copy(entries = result, error = null) } },
+            { result ->
+                val selectedId = stateMutable.value.selectedId
+                if (selectedId != null && result.none {
+                    it.id == selectedId && it.status == "active"
+                }) {
+                    revokeSelectedRoom("이 방의 가입 상태가 변경되어 목록으로 돌아왔습니다.")
+                    stateMutable.update { it.copy(entries = result, error = null) }
+                } else {
+                    stateMutable.update { it.copy(entries = result, error = null) }
+                }
+            },
             { message -> stateMutable.update { it.copy(error = message) } }
         )
     }
@@ -53,17 +63,29 @@ class OnlineRoomsViewModel(
         if (entry?.status != "active") return
         roomListener = repository.watchRoom(roomId,
             { value -> stateMutable.update { it.copy(selectedRoom = value) } },
-            { message -> stateMutable.update { it.copy(error = message) } }
+            { message -> revokeSelectedRoom(message) }
         )
         membersListener = repository.watchMembers(roomId,
             { value -> stateMutable.update { it.copy(members = value) } },
-            { message -> stateMutable.update { it.copy(error = message) } }
+            { message -> revokeSelectedRoom(message) }
         )
+    }
+
+    private fun revokeSelectedRoom(message: String) {
+        closeRoomListeners()
+        stateMutable.update {
+            it.copy(
+                selectedId = null, selectedRoom = null,
+                members = emptyList(), invite = null, info = message
+            )
+        }
     }
 
     fun closeRoom() {
         closeRoomListeners()
-        stateMutable.update { it.copy(selectedId = null, selectedRoom = null, invite = null) }
+        stateMutable.update {
+            it.copy(selectedId = null, selectedRoom = null, members = emptyList(), invite = null)
+        }
     }
 
     fun clearNotice() = stateMutable.update { it.copy(info = null, error = null) }
