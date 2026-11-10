@@ -29,11 +29,19 @@ class OnlineRoomsViewModel(
     private var roomListener: ListenerRegistration? = null
     private var membersListener: ListenerRegistration? = null
 
-    init {
+    fun start() {
+        if (listListener != null) return
         listListener = repository.watchMyRooms(uid,
             { result -> stateMutable.update { it.copy(entries = result, error = null) } },
             { message -> stateMutable.update { it.copy(error = message) } }
         )
+    }
+
+    fun stop() {
+        listListener?.remove()
+        listListener = null
+        closeRoomListeners()
+        stateMutable.value = OnlineRoomsState()
     }
 
     fun openRoom(roomId: String) {
@@ -117,8 +125,7 @@ class OnlineRoomsViewModel(
     }
 
     override fun onCleared() {
-        listListener?.remove()
-        closeRoomListeners()
+        stop()
         super.onCleared()
     }
 }
