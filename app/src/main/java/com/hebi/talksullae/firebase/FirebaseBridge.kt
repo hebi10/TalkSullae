@@ -6,6 +6,7 @@ import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.FirebaseApp
@@ -32,10 +33,14 @@ class GoogleLogin(private val activity: Activity) {
             .setServerClientId(clientId)
             .setFilterByAuthorizedAccounts(false)
             .build()
-        val result = CredentialManager.create(activity).getCredential(
-            context = activity,
-            request = GetCredentialRequest.Builder().addCredentialOption(option).build()
-        )
+        val result = try {
+            CredentialManager.create(activity).getCredential(
+                context = activity,
+                request = GetCredentialRequest.Builder().addCredentialOption(option).build()
+            )
+        } catch (e: NoCredentialException) {
+            throw IllegalStateException("Google 계정을 찾지 못했습니다. 기기의 Google 계정을 확인해 주세요.", e)
+        }
         val credential = result.credential
         check(credential is CustomCredential) {
             "Google 계정 인증 정보가 올바르지 않습니다."
