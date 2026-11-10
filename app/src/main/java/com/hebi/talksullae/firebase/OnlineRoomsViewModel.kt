@@ -66,7 +66,7 @@ class OnlineRoomsViewModel(
             stateMutable.update { it.copy(working = true, error = null, info = null) }
             try {
                 block()
-                stateMutable.update { it.copy(info = successMessage) }
+                stateMutable.update { if (it.info == null) it.copy(info = successMessage) else it }
             } catch (e: Exception) {
                 stateMutable.update { it.copy(error = e.localizedMessage ?: "연결 오류가 발생했습니다.") }
             } finally {
@@ -77,7 +77,7 @@ class OnlineRoomsViewModel(
 
     fun createRoom(name: String, description: String, approval: Boolean) =
         action("온라인 방 생성이 완료됐습니다.") {
-            val id = repository.createRoom(name, description, approval)
+            repository.createRoom(name, description, approval)
             // User's room index is populated by the server; its listener updates the list.
             stateMutable.update { it.copy(info = "새 온라인 방이 생성됐습니다.") }
             // The new room is selected only after the index becomes visible.
