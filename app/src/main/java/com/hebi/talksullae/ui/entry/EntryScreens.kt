@@ -71,7 +71,12 @@ fun WelcomeScreen(onContinue: () -> Unit, onInvitePreview: () -> Unit) {
 }
 
 @Composable
-fun OnboardingScreen(onContinueDemo: (String) -> Unit) {
+fun OnboardingScreen(
+    onContinueDemo: (String) -> Unit,
+    onGoogleSignIn: (() -> Unit)? = null,
+    signInBusy: Boolean = false,
+    authError: String? = null
+) {
     var nickname by rememberSaveable { mutableStateOf("게스트") }
     var avatar by rememberSaveable { mutableStateOf("부엉이") }
     val validNickname = nickname.trim().length in 2..16 && !nickname.contains("\n")
@@ -107,13 +112,18 @@ fun OnboardingScreen(onContinueDemo: (String) -> Unit) {
         }
         ContentCard {
             Text("온라인 로그인", style = MaterialTheme.typography.titleSmall)
-            Text("Google 로그인과 카카오 로그인은 Firebase 인증 연동 단계에서 제공합니다.")
+            Text(if (onGoogleSignIn == null) "Firebase 설정이 없어 온라인 로그인을 사용할 수 없습니다."
+                 else "Google 계정으로 로그인해 온라인 방을 이용할 수 있습니다.")
             OutlinedButton(
-                onClick = {},
-                enabled = false,
+                onClick = { onGoogleSignIn?.invoke() },
+                enabled = onGoogleSignIn != null && !signInBusy,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .testTag("onboarding-google-signin")
             ) {
-                Text("Google 로그인 · 연결 전")
+                Text(if (signInBusy) "Google 로그인 진행 중…" else "Google 계정으로 로그인")
+            }
+            if (authError != null) {
+                Text(authError, color = MaterialTheme.colorScheme.error)
             }
         }
         Spacer(Modifier.height(4.dp))
