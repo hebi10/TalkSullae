@@ -8,7 +8,6 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -38,8 +37,7 @@ class GoogleLogin(private val activity: Activity) {
             request = GetCredentialRequest.Builder().addCredentialOption(option).build()
         )
         val credential = result.credential
-        check(credential is CustomCredential &&
-            credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+        check(credential is CustomCredential) {
             "Google 계정 인증 정보가 올바르지 않습니다."
         }
         val idToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
