@@ -62,6 +62,7 @@ jobs:
           script: |
             ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest --stacktrace
             mkdir -p screenshots
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell settings put system font_scale 1.0
             adb shell am force-stop com.hebi.talksullae
             adb shell am start -n com.hebi.talksullae/.MainActivity
