@@ -75,3 +75,32 @@ test("new invitation replaces prior code and closed membership cannot be spoofed
   assert.equal((await db.collection("rooms").doc(roomId).get()).data().status,"archived");
   await assert.rejects(service.requestJoin(db,{...auth("guest"),data:{code:newInvite.code}}));
 });
+
+test("last owner must resolve pending applications before archiving room", async()=>{
+  const {roomId}=await service.createRoom(db,{...auth("pendingOwner"),data:{
+    name:"가입 대기 테스트",description:"",requiresApproval:true
+  }});
+  const roomRef=db.collection("rooms").doc(roomId);
+  const invite=await service.createInvitation(db,{...auth("pendingOwner"),data:{roomId}});
+  const application=await service.requestJoin(db,{...auth("waitingMember"),data:{code:invite.code}});
+  assert.equal(application.status,"pending");
+  assert.equal((await roomRef.get()).data().pendingCount,1);
+  await assert.rejects(service.leaveRoom(db,{...auth("pendingOwner"),data:{roomId}}));
+  assert.equal((await roomRef.get()).data().status,"active");
+  await service.changeMember(db,{...auth("pendingOwner"),data:{
+    roomId,targetUid:"waitingMember",action:"reject"
+  }});
+  assert.equal((await roomRef.get()).data().pendingCount,0);
+  await service.leaveRoom(db,{...auth("pendingOwner"),data:{roomId}});
+  assert.equal((await roomRef.get()).data().status,"archived");
+  assert.equal((await db.collection("userRooms").doc("waitingMember").collection("rooms").doc(roomId).get()).data().status,"rejected");
+});
+
+test("oversized member UID is rejected before reading Firestore",async()=>{
+  const {roomId}=await service.createRoom(db,{...auth("idOwner"),data:{
+    name:"방장 검증",description:"",requiresApproval:true
+  }});
+  await assert.rejects(service.changeMember(db,{...auth("idOwner"),data:{
+    roomId,targetUid:"x".repeat(129),action:"remove"
+  }}));
+});
