@@ -1,5 +1,6 @@
 package com.hebi.talksullae.ui
 
+import android.app.Activity
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -45,6 +46,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -54,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -83,10 +87,17 @@ import com.hebi.talksullae.design.PrimaryAction
 import com.hebi.talksullae.design.RoomCard
 import com.hebi.talksullae.design.SectionTitle
 import com.hebi.talksullae.design.TalkSullaeTheme
+import com.hebi.talksullae.firebase.FirebaseBridge
+import com.hebi.talksullae.firebase.GoogleLogin
+import com.hebi.talksullae.ui.rooms.OnlineRoomsHost
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.launch
 
 private const val Welcome = "welcome"
 private const val Onboarding = "onboarding"
 private const val Members = "members"
+private const val Online = "online"
 private const val Main = "main"
 private const val Room = "room"
 private const val Game = "game"
@@ -103,6 +114,19 @@ fun TalkSullaeApp(
 ) {
     var isDark by rememberSaveable { mutableStateOf(initialDarkTheme) }
     SideEffect { onDarkThemeChanged(isDark) }
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val configured = remember(context) { FirebaseBridge.isReady(context) }
+    val auth = remember(configured) { if (configured) FirebaseAuth.getInstance() else null }
+    var signedUser by remember { mutableStateOf<FirebaseUser?>(auth?.currentUser) }
+    var loginBusy by remember { mutableStateOf(false) }
+    var loginError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    DisposableEffect(auth) {
+        val listener = FirebaseAuth.AuthStateListener { signedUser = it.currentUser }
+        auth?.addAuthStateListener(listener)
+        onDispose { auth?.removeAuthStateListener(listener) }
+    }
     var route by rememberSaveable { mutableStateOf(Welcome) }
     var mainTab by rememberSaveable { mutableStateOf("rooms") }
     var roomTab by rememberSaveable { mutableStateOf("chat") }
@@ -136,6 +160,7 @@ fun TalkSullaeApp(
                 pendingInvitePreview = false
             }
             Members, Game -> route = Room
+            Online -> route = Main
             else -> route = Main
         }
     }
@@ -155,6 +180,7 @@ fun TalkSullaeApp(
                         Main -> "톡술래"
                         Room, Invite -> currentRoom.name
                         Members -> "멤버 관리"
+                        Online -> "온라인 방"
                         Game -> selectedGame.name
                         Create -> "새 방 만들기"
                         Settings -> "설정"
@@ -192,13 +218,31 @@ fun TalkSullaeApp(
                             } else {
                                 route = Main
                             }
-                        }
+                        },
+                        onGoogleSignIn = if (configured && activity != null) ({
+                            scope.launch {
+                                loginBusy = true
+                                loginError = null
+                                try {
+                                    GoogleLogin(activity).signIn()
+                                    route = Main
+                                    mainTab = "rooms"
+                                } catch (e: Exception) {
+                                    loginError = e.localizedMessage ?: "Google 로그인에 실패했습니다."
+                                } finally {
+                                    loginBusy = false
+                                }
+                            }
+                        }) else null,
+                        signInBusy = loginBusy,
+                        authError = loginError
                     )
                     Main -> when (mainTab) {
                         "rooms" -> RoomsScreen(
                             rooms = previewRooms,
                             openRoom = openRoom,
                             onCreate = { route = Create },
+                            onOpenOnline = if (signedUser != null) ({ route = Online }) else null,
                             onInvitePreview = {
                                 selectedRoom = "friends"
                                 pendingInvitePreview = true
@@ -265,6 +309,30 @@ fun TalkSullaeApp(
                             route = Room
                         }
                     )
+                    Online -> {
+                        val user = signedUser
+                        if (user != null) {
+                            OnlineRoomsHost(
+                                uid = user.uid,
+                                accountName = user.displayName ?: "Google 계정",
+                                onClose = { route = Main },
+                                onSignOut = {
+                                    if (activity != null) {
+                                        scope.launch {
+                                            GoogleLogin(activity).signOut()
+                                            route = Main
+                                        }
+                                    }
+                                }
+                            )
+                        } else {
+                            UnavailableScreen(
+                                title = "로그인 필요",
+                                description = "Google 계정으로 로그인 후 온라인 방을 이용할 수 있습니다.",
+                                onBack = goBack
+                            )
+                        }
+                    }
                     Create -> CreateRoomScreen(
                         onCreatePreview = { draft ->
                             val roomId = "local-${previewRooms.size + 1}"
@@ -374,6 +442,7 @@ private fun RoomsScreen(
     rooms: List<RoomPreview>,
     openRoom: (String) -> Unit,
     onCreate: () -> Unit,
+    onOpenOnline: (() -> Unit)? = null,
     onInvitePreview: () -> Unit
 ) {
     var mode by rememberSaveable { mutableStateOf(RoomPreviewMode.CONTENT) }
@@ -383,8 +452,15 @@ private fun RoomsScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            PreviewNotice("온라인에 연결되지 않은 기기 내 데모입니다. 생성된 방은 앱을 다시 실행하면 사라집니다.")
-            SectionTitle("내 방")
+            PreviewNotice("아래 목록은 로컬 데모 방입니다. 로그인한 계정의 온라인 방은 별도로 관리합니다.")
+            if (onOpenOnline != null) {
+                PrimaryAction(
+                    "내 온라인 방 관리 (Firebase)",
+                    onClick = onOpenOnline,
+                    modifier = Modifier.fillMaxWidth().testTag("rooms-open-online")
+                )
+            }
+            SectionTitle("내 방 · 데모")
             Text("친구들과 계속 이어지는 모임", style = MaterialTheme.typography.bodyMedium)
             Text("목록 상태 체험", style = MaterialTheme.typography.bodySmall)
             Row(
