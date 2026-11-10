@@ -41,6 +41,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -79,8 +80,12 @@ private const val Settings = "settings"
 private data class NavItem(val id: String, val title: String, val icon: ImageVector)
 
 @Composable
-fun TalkSullaeApp(initialDarkTheme: Boolean = true) {
+fun TalkSullaeApp(
+    initialDarkTheme: Boolean = true,
+    onDarkThemeChanged: (Boolean) -> Unit = {}
+) {
     var isDark by rememberSaveable { mutableStateOf(initialDarkTheme) }
+    SideEffect { onDarkThemeChanged(isDark) }
     var route by rememberSaveable { mutableStateOf(Main) }
     var mainTab by rememberSaveable { mutableStateOf("rooms") }
     var roomTab by rememberSaveable { mutableStateOf("chat") }
