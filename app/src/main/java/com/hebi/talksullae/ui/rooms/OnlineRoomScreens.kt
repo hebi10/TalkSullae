@@ -79,7 +79,7 @@ fun OnlineRoomsHost(
     var roomName by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var approval by rememberSaveable { mutableStateOf(true) }
-    var joinCode by rememberSaveable { mutableStateOf("") }
+    var joinCode by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf<Pair<String, String>?>(null) }
     val room = state.selectedRoom
     val selected = state.entries.firstOrNull { it.id == state.selectedId }
