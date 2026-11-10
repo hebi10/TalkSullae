@@ -22,7 +22,8 @@
 ## 문서
 - [톡술래 Google Drive 프로젝트](https://drive.google.com/drive/folders/1XskLt9niOOPdtVxVUO5eXmFMXX9S8qNI)
 - [서비스 기획서 v1.0](https://docs.google.com/document/d/13BMHPicBwI1kN1XrPsjHYfR4wkXmBz4lUDzcPecptvg/edit)
-- [디자인 설계 문서](docs/design/001-full-screen-ux-plan.md) — 디자인 작업 브랜치에서 검토
+- [디자인 설계 PR #1](https://github.com/hebi10/TalkSullae/pull/1) — 18개 화면의 상세 명세를 검토 중
+- [Google Drive 화면 설계 v1.0](https://docs.google.com/document/d/1d7A0zC76o42YfEy2HtHzU9IK4HYRJeQEIFr8x1zc9Ps/edit)
 
 ## 현재 범위
 지금은 전체 화면 디자인 기획을 수행합니다. 앱 코드 구현, Firebase 프로덕션 연동, 서명 및 Play 배포는 미진행 상태입니다.
