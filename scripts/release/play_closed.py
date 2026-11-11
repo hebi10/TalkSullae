@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 PACKAGE = "com.hebi.talksullae"
 BASE = "https://androidpublisher.googleapis.com"
@@ -52,12 +52,17 @@ def json_object(response):
     return data
 
 
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, *args, **kwargs):
+        return None
+
+
 class PlayClient:
     def __init__(self, token, transport=None):
         if not token or any(c.isspace() for c in token):
             raise PlaySafetyError("Missing Play API authorization token")
         self.token = token
-        self.transport = transport or urlopen
+        self.transport = transport or build_opener(NoRedirect()).open
 
     def request(self, method, path, data=None, binary=False):
         if not (path.startswith(EDITS + "/") or path == EDITS or
@@ -164,8 +169,8 @@ def deploy(client, track, bundle, code, version, notes):
                 "releaseNotes":[{"language":"ko-KR","text":notes}]
             }]
         })
-        client.request("POST", edit + ":validate", {})
-        client.request("POST", edit + ":commit", {})
+        client.request("POST", edit + ":validate")
+        client.request("POST", edit + ":commit")
         committed = True
         report["api_committed"] = True
     finally:
