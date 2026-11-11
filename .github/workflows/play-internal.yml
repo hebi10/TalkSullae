@@ -63,8 +63,8 @@ jobs:
           PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
           PLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
           PLAY_UPLOAD_CERT_SHA256: ${{ vars.PLAY_UPLOAD_CERT_SHA256 }}
-          PLAY_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER || 'projects/973619009476/locations/global/workloadIdentityPools/github/providers/github' }}
-          PLAY_SERVICE_ACCOUNT: ${{ vars.PLAY_SERVICE_ACCOUNT || 'play-gallipick@hebi-app-release-80847404.iam.gserviceaccount.com' }}
+          PLAY_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          PLAY_SERVICE_ACCOUNT: ${{ vars.PLAY_SERVICE_ACCOUNT }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
         run: python3 scripts/release/check_internal_readiness.py --report play-internal-readiness.json
       - name: Authenticate Workload Identity for read-only Play preflight
@@ -72,8 +72,8 @@ jobs:
         id: wif
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER || 'projects/973619009476/locations/global/workloadIdentityPools/github/providers/github' }}
-          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT || 'play-gallipick@hebi-app-release-80847404.iam.gserviceaccount.com' }}
+          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
           token_format: access_token
           access_token_scopes: https://www.googleapis.com/auth/androidpublisher
           create_credentials_file: false
