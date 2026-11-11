@@ -10,6 +10,7 @@ class FakeClient:
     def __init__(self, *, track="alpha", previous=1):
         self.track = track
         self.previous = previous
+        self.current = previous
         self.created = 0
         self.deleted = []
         self.calls = []
@@ -22,7 +23,7 @@ class FakeClient:
         self.deleted.append(edit)
 
     def list_tracks(self, edit):
-        return [{"track":self.track, "releases":[{"versionCodes":[str(self.previous)],
+        return [{"track":self.track, "releases":[{"versionCodes":[str(self.current)],
                 "status":"completed"}]}]
 
     def list_codes(self, edit, tracks):
@@ -32,6 +33,8 @@ class FakeClient:
         self.calls.append((method, path, data if not binary else "[binary]"))
         if path.endswith("/bundles?uploadType=media"):
             return {"versionCode":2}
+        if method == "PUT" and "/tracks/" in path:
+            self.current = 2
         return {}
 
 
@@ -99,8 +102,7 @@ class TestPlaySafety(unittest.TestCase):
             bundle.write_bytes(b"0" * 15000)
             result = deploy(fake, "alpha", bundle, 2, "0.3.0", "비공개 테스트")
         self.assertTrue(result["api_committed"])
-        # FakeClient returns a previously serving version on readback,
-        # so a committed edit alone is NOT sufficient to claim release success.
+        # FakeClient reflects the track update after commit, as Play should.
         self.assertEqual(result["verification"], "track_assigned")
 
 
