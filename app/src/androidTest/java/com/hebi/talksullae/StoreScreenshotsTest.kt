@@ -2,7 +2,12 @@ package com.hebi.talksullae
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
-import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -11,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
+import com.hebi.talksullae.design.AppTopBar
 import com.google.firebase.firestore.ListenerRegistration
 import com.hebi.talksullae.design.TalkSullaeTheme
 import com.hebi.talksullae.firebase.CloudMember
@@ -39,11 +45,11 @@ class StoreScreenshotsTest {
     @Test
     fun login() {
         compose.setContent {
-            TalkSullaeTheme(darkTheme = true) {
-                Surface { OnboardingScreen(onContinueDemo = {}, onGoogleSignIn = {}) }
+            StoreScreen("닉네임 · 아바타") {
+                OnboardingScreen(onContinueDemo = {}, onGoogleSignIn = {})
             }
         }
-        compose.onNodeWithTag("onboarding-google-signin").assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithTag("onboarding-google-signin").performScrollTo().assertIsDisplayed().assertIsEnabled()
         save("01-login")
     }
 
@@ -51,21 +57,19 @@ class StoreScreenshotsTest {
     fun onlineRooms() {
         val repository = SampleRoomsRepository()
         compose.setContent {
-            TalkSullaeTheme(darkTheme = true) {
-                Surface {
-                    OnlineRoomsHost("sample-owner", "샘플 계정", {}, {}, repository)
-                }
+            StoreScreen("온라인 방", "초대 코드 · 멤버 관리") {
+                OnlineRoomsHost("sample-owner", "샘플 계정", {}, {}, repository)
             }
         }
         compose.onNodeWithText("내 온라인 방").assertIsDisplayed()
         save("02-rooms")
 
-        compose.onNodeWithTag("online-create-toggle").performClick()
-        compose.onNodeWithTag("online-room-name").assertIsDisplayed()
+        compose.onNodeWithTag("online-create-toggle").performScrollTo().performClick()
+        compose.onNodeWithTag("online-room-name").performScrollTo().assertIsDisplayed()
         save("03-create")
-        compose.onNodeWithTag("online-create-toggle").performClick()
+        compose.onNodeWithTag("online-create-toggle").performScrollTo().performClick()
 
-        compose.onNodeWithText("열기").performClick()
+        compose.onNodeWithText("열기").performScrollTo().performClick()
         compose.onNodeWithText("승인").performScrollTo().assertIsDisplayed()
         save("04-approval")
 
@@ -84,11 +88,21 @@ class StoreScreenshotsTest {
         val output = File(instrumentation.targetContext.filesDir, "play-store-captures")
         output.mkdirs()
         try {
-            File(output, "$name.png").outputStream().use { stream ->
-                check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, stream))
+            check(screenshot.width == 1080 && screenshot.height == 1920)
+            File(output, "$name.jpg").outputStream().use { stream ->
+                check(screenshot.compress(Bitmap.CompressFormat.JPEG, 98, stream))
             }
         } finally {
             screenshot.recycle()
+        }
+    }
+}
+
+@Composable
+private fun StoreScreen(title: String, subtitle: String? = null, content: @Composable () -> Unit) {
+    TalkSullaeTheme(darkTheme = true) {
+        Scaffold(topBar = { AppTopBar(title, subtitle, onBack = {}) }) { padding ->
+            Box(Modifier.padding(padding).consumeWindowInsets(padding)) { content() }
         }
     }
 }
@@ -107,7 +121,11 @@ private class SampleRoomsRepository : OnlineRoomsRepository {
     }
 
     override fun watchMembers(roomId: String, onResult: (List<CloudMember>) -> Unit, onError: (String) -> Unit): ListenerRegistration {
-        onResult(listOf(CloudMember("sample-pending", "하늘", "pending"), CloudMember("sample-member", "지우", "active")))
+        onResult(listOf(
+            CloudMember("sample-owner", "샘플 계정", "active"),
+            CloudMember("sample-pending", "하늘", "pending"),
+            CloudMember("sample-member", "지우", "active")
+        ))
         return ListenerRegistration {}
     }
 

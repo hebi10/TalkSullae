@@ -16,7 +16,7 @@
 
 - [`store/google-play/ko-KR`](../../store/google-play/ko-KR)의 이름·설명과 [출시 노트](../../play/release-notes/ko-KR.txt)를 사용합니다.
 - 앱 아이콘은 512×512 PNG, 대표 그래픽은 1024×500 RGB PNG입니다. 기존 앱의 말풍선 모양과 무채색 테마를 사용했습니다.
-- Android API 36 휴대전화의 `talksullae-play-store-captures` 아티팩트에 화면 6장을 생성합니다. 실제 Android 화면을 합성 방 데이터로 캡처합니다. 로그인 성공이나 운영 Firebase 연결은 기기 2대에서 확인합니다.
+- Android API 36 휴대전화의 `talksullae-play-store-captures` 아티팩트에 1080×1920 JPEG 화면 6장을 생성합니다. 실제 Android 화면을 가상의 방 데이터로 캡처합니다. 로그인 성공과 운영 Firebase 연결은 기기 2대에서 확인합니다.
 - 스토어에서 사용하는 테스트 화면의 닉네임과 초대 코드에는 가상의 값을 사용합니다. 온라인 방을 홍보하는 화면에 로컬 게임 데모를 섞지 않습니다.
 
 ## 앱 콘텐츠 선언 검토

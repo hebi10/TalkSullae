@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from capture_matrix import PACKAGE, adb, size_from_png
+from capture_matrix import PACKAGE, adb
 
 
 SCREENS = ("01-login", "02-rooms", "03-create", "04-approval", "05-invite", "06-members")
@@ -13,6 +13,10 @@ SCREENS = ("01-login", "02-rooms", "03-create", "04-approval", "05-invite", "06-
 
 def export_screenshots(output):
     output.mkdir(parents=True, exist_ok=True)
+    adb("shell", "wm", "size", "1080x1920")
+    adb("shell", "wm", "density", "336")
+    adb("shell", "settings", "put", "system", "font_scale", "1.0")
+    adb("shell", "am", "force-stop", PACKAGE)
     adb("shell", "run-as", PACKAGE, "rm", "-rf", "files/play-store-captures")
     report = output / "instrumentation.txt"
     report.write_text(adb(
@@ -24,12 +28,12 @@ def export_screenshots(output):
         sys.executable, str(Path(__file__).with_name("assert_instrumentation.py")), str(report), "2"
     ], check=True)
     for screen in SCREENS:
-        filename = f"{screen}.png"
+        filename = f"{screen}.jpg"
         screenshot = adb(
             "exec-out", "run-as", PACKAGE, "cat", f"files/play-store-captures/{filename}", binary=True
         )
-        if size_from_png(screenshot) != (1080, 2400):
-            raise RuntimeError(f"Unexpected screenshot dimensions: {filename}")
+        if not screenshot.startswith(b"\xff\xd8\xff") or not screenshot.endswith(b"\xff\xd9"):
+            raise RuntimeError(f"Invalid Play Store JPEG: {filename}")
         (output / filename).write_bytes(screenshot)
 
 
