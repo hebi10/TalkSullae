@@ -134,7 +134,7 @@ jobs:
         env:
           PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
           PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
-        run: python3 scripts/release/play_closed.py check --track "$PLAY_CLOSED_TRACK" --report play-preflight.json
+        run: python3 scripts/release/play_closed.py check --track "$PLAY_CLOSED_TRACK" --version-code "${{ needs.source.outputs.code }}" --report play-preflight.json
       - name: Archive safe preflight result
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,0 +1,123 @@
+name: 2-F Play closed release readiness (never publishes)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/play-preflight-2f.yml'
+      - '.github/workflows/play-closed.yml'
+      - 'scripts/release/**'
+      - 'app/build.gradle.kts'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/play-preflight-2f.yml'
+      - '.github/workflows/play-closed.yml'
+      - 'scripts/release/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: talksullae-play-2f-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-smoke:
+    name: Unit guards and unsigned release compilation (no secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test release safety and readiness logic
+        run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+      - name: Install release compile SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Compile release without signing keys
+        run: ./gradlew --no-daemon --max-workers=2 lintRelease bundleRelease --stacktrace
+      - name: Verify output is explicitly non-publishable
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle=app/build/outputs/bundle/release/app-release.aab
+          test -s "$bundle"
+          unzip -tq "$bundle" >/dev/null
+          if jarsigner -verify "$bundle" 2>&1 | grep -Fq 'jar verified.'; then
+            echo 'Unexpected signed bundle in unsigned smoke check' >&2
+            exit 1
+          fi
+          echo '2-F unsigned release compiled successfully. No signed AAB was produced or uploaded.' >> "$GITHUB_STEP_SUMMARY"
+
+  protected-preflight:
+    name: Protected configuration and optional Play API check (no upload)
+    needs: release-smoke
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      FIREBASE_ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_ANDROID_GOOGLE_SERVICES_JSON }}
+      PLAY_UPLOAD_KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+      PLAY_UPLOAD_STORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_STORE_PASSWORD }}
+      PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+      PLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+      PLAY_UPLOAD_CERT_SHA256: ${{ vars.PLAY_UPLOAD_CERT_SHA256 }}
+      PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+      PLAY_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+      PLAY_SERVICE_ACCOUNT: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect protected setting presence without exposing values
+        id: audit
+        run: python3 scripts/release/check_release_readiness.py --report 2f-readiness.json
+      - name: Authenticate with approved Workload Identity
+        if: steps.audit.outputs.can_check_play == 'true' && steps.audit.outputs.auth_method == 'wif'
+        id: wif
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Authenticate with private Google Play service account JSON
+        if: steps.audit.outputs.can_check_play == 'true' && steps.audit.outputs.auth_method == 'json'
+        id: json
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Verify existing closed track and fresh versionCode via Play API
+        if: steps.audit.outputs.can_check_play == 'true'
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
+        run: |
+          python3 scripts/release/play_closed.py check --track "$PLAY_CLOSED_TRACK" \
+            --version-code "${{ steps.audit.outputs.version_code }}" --report 2f-play-api-check.json
+      - name: Upload safe, non-secret readiness results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-2f-readiness
+          path: |
+            2f-readiness.json
+            2f-play-api-check.json
+          retention-days: 14
+          if-no-files-found: ignore

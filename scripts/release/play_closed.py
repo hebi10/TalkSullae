@@ -117,7 +117,7 @@ class PlayClient:
         return codes
 
 
-def check_preflight(client, track):
+def check_preflight(client, track, requested_code=None):
     track = track_name(track)
     edit = client.create_edit()
     try:
@@ -125,7 +125,11 @@ def check_preflight(client, track):
         if not any(t.get("track") == track for t in tracks):
             raise PlaySafetyError("The exact closed-testing track does not yet exist in Play Console")
         codes = client.list_codes(edit, tracks)
-        return {"package":PACKAGE, "track":track, "current_max_code":max(codes, default=0),
+        current_max = max(codes, default=0)
+        if requested_code is not None and release_code(requested_code) <= current_max:
+            raise PlaySafetyError("Source versionCode is not greater than the existing Play versionCodes")
+        return {"package":PACKAGE, "track":track, "current_max_code":current_max,
+                "requested_version_code":requested_code,
                 "check":"passed", "note":"Release API cannot create a new Play app or complete Play Console declarations"}
     finally:
         client.delete_edit(edit)
@@ -209,7 +213,7 @@ def main():
     try:
         client = PlayClient(os.environ.get("PLAY_ACCESS_TOKEN"))
         if args.mode == "check":
-            report = check_preflight(client, args.track)
+            report = check_preflight(client, args.track, args.version_code)
         else:
             if args.bundle is None or args.version_code is None or args.notes_file is None:
                 raise PlaySafetyError("Verified bundle, version code and notes file are mandatory")

@@ -70,6 +70,20 @@ class TestPlaySafety(unittest.TestCase):
         self.assertEqual(len(fake.deleted), 1)
         self.assertEqual(fake.calls, [])
 
+    def test_preflight_refuses_version_code_already_used(self):
+        fake = FakeClient(previous=2)
+        with self.assertRaisesRegex(PlaySafetyError, "versionCode"):
+            check_preflight(fake, "alpha", requested_code=2)
+        self.assertEqual(len(fake.deleted), 1)
+        self.assertEqual(fake.calls, [])
+
+    def test_preflight_accepts_higher_source_version(self):
+        fake = FakeClient(previous=1)
+        result = check_preflight(fake, "alpha", requested_code=2)
+        self.assertEqual(result["requested_version_code"], 2)
+        self.assertEqual(result["current_max_code"], 1)
+        self.assertEqual(fake.calls, [])
+
     def test_preflight_rejects_missing_closed_track(self):
         fake = FakeClient(track="internal")
         with self.assertRaises(PlaySafetyError):
