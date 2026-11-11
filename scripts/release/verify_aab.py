@@ -20,7 +20,7 @@ def run(*cmd):
 
 def version_from_source(path):
     content = Path(path).read_text(encoding="utf-8")
-    match_code = re.search(r"(?m)^\s*versionCode\s*=\s*([1-9]\d+)\s*$", content)
+    match_code = re.search(r"(?m)^\s*versionCode\s*=\s*([1-9]\d*)\s*$", content)
     match_name = re.search(r'(?m)^\s*versionName\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$', content)
     if not match_code or not match_name:
         raise ValueError("Unambiguous release versionCode/versionName not found in Gradle")
