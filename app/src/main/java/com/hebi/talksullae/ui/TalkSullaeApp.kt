@@ -2,6 +2,7 @@ package com.hebi.talksullae.ui
 
 import android.app.Activity
 import android.content.res.Configuration
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -74,6 +75,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -781,11 +783,21 @@ private fun ProfileScreen(
 
 @Composable
 private fun SettingsScreen(darkTheme: Boolean, onThemeChange: (Boolean) -> Unit, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val privacyPolicyUrl = "https://github.com/hebi10/TalkSullae/blob/main/docs/privacy-policy.md"
+    val openPolicy: (String) -> Unit = { url ->
+        try {
+            uriHandler.openUri(url)
+        } catch (_: IllegalArgumentException) {
+            Toast.makeText(context, "링크를 열 수 없습니다. 문의: asdlkj0104@gmail.com", Toast.LENGTH_LONG).show()
+        }
+    }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PreviewNotice("계정·알림·개인정보 실제 변경은 아직 사용할 수 없습니다.")
+        PreviewNotice("알림 설정과 신고·차단 기능은 준비 중입니다.")
         ContentCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("다크 모드", modifier = Modifier.weight(1f))
@@ -793,8 +805,13 @@ private fun SettingsScreen(darkTheme: Boolean, onThemeChange: (Boolean) -> Unit,
             }
         }
         ContentCard {
-            Text("계정 삭제·신고·차단", style = MaterialTheme.typography.titleMedium)
-            Text("1-C에서 상태별 UI를 설계했습니다. 서버 연동 후 구현합니다.")
+            Text("개인정보 및 계정", style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = { openPolicy(privacyPolicyUrl) }) {
+                Text("개인정보처리방침")
+            }
+            TextButton(onClick = { openPolicy("$privacyPolicyUrl#account-deletion") }) {
+                Text("계정 및 데이터 삭제 요청")
+            }
         }
         PrimaryAction("내 방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
     }
