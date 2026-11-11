@@ -1,0 +1,86 @@
+name: Android emulator UI checks
+
+on:
+  push:
+    branches: [feat/2a-compose-foundation]
+    paths:
+      - 'app/**'
+      - '.github/workflows/android-device.yml'
+      - 'build.gradle.kts'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'settings.gradle.kts'
+  pull_request:
+    paths:
+      - 'app/**'
+      - '.github/workflows/android-device.yml'
+      - 'build.gradle.kts'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'settings.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: emulator-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulator:
+    name: Compose navigation on Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install Android SDK 36
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Build debug and instrumentation APK
+        run: ./gradlew --no-daemon --max-workers=2 assembleDebug assembleDebugAndroidTest --stacktrace
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest --stacktrace
+            mkdir -p screenshots
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell settings put system font_scale 1.0
+            adb shell am force-stop com.hebi.talksullae
+            adb shell am start -n com.hebi.talksullae/.MainActivity
+            sleep 3
+            adb exec-out screencap -p > screenshots/home-default.png
+            adb shell settings put system font_scale 2.0
+            adb shell am force-stop com.hebi.talksullae
+            adb shell am start -n com.hebi.talksullae/.MainActivity
+            sleep 3
+            adb exec-out screencap -p > screenshots/home-font-200.png
+      - name: Upload emulator reports and captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-emulator-ui-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            screenshots/
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
