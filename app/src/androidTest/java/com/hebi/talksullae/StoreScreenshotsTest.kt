@@ -1,7 +1,10 @@
 package com.hebi.talksullae
 
 import android.graphics.Bitmap
+import android.graphics.Color
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
@@ -40,6 +43,13 @@ class StoreScreenshotsTest {
     @Before
     fun requireCaptureMode() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("capturePlayStore") == "true")
+        val activity = compose.activity
+        compose.runOnUiThread {
+            activity.enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+            )
+        }
     }
 
     @Test
@@ -84,7 +94,25 @@ class StoreScreenshotsTest {
     private fun save(name: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val screenshot = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        var renderedFrame: Bitmap? = null
+        compose.waitUntil(timeoutMillis = 8_000) {
+            val capture = instrumentation.uiAutomation.takeScreenshot() ?: return@waitUntil false
+            val frame = if (capture.config == Bitmap.Config.HARDWARE) {
+                val softwareBitmap = capture.copy(Bitmap.Config.ARGB_8888, false)
+                capture.recycle()
+                requireNotNull(softwareBitmap)
+            } else {
+                capture
+            }
+            if (containsRenderedContent(frame)) {
+                renderedFrame = frame
+                true
+            } else {
+                frame.recycle()
+                false
+            }
+        }
+        val screenshot = requireNotNull(renderedFrame)
         val output = File(instrumentation.targetContext.filesDir, "play-store-captures")
         output.mkdirs()
         try {
@@ -95,6 +123,20 @@ class StoreScreenshotsTest {
         } finally {
             screenshot.recycle()
         }
+    }
+
+    private fun containsRenderedContent(frame: Bitmap): Boolean {
+        var hasDarkBackground = false
+        var hasLightContent = false
+        for (y in 100 until frame.height - 100 step 8) {
+            for (x in 40 until frame.width - 40 step 8) {
+                val pixel = frame.getPixel(x, y)
+                hasDarkBackground = hasDarkBackground || Color.red(pixel) < 45
+                hasLightContent = hasLightContent || Color.red(pixel) > 170
+                if (hasDarkBackground && hasLightContent) return true
+            }
+        }
+        return false
     }
 }
 
