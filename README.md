@@ -2,11 +2,11 @@
 
 친구들이 각자의 스마트폰에서 고정된 방에 참여해 익명 채팅과 심리·추리게임을 즐기고, 기록을 함께 쌓는 Android 앱입니다.
 
-> 현재 상태: **2-A Android 공통 UI 구현 단계**. Android·Compose 기반과 로컬 UI 데모를 구현했으며, Firebase·실시간 게임·Play 배포는 아직 진행하지 않았습니다.
+> 현재 상태: **2-D Android·Firebase 자동 QA 완료 / Google Play 비공개 테스트 미배포**. Google 로그인·온라인 방 관리는 코드로 구현했으나 실제 계정 2명 E2E 검증이 남아 있습니다. 실시간 채팅·게임·시즌은 데모 단계입니다.
 
 ## 프로젝트 방향
-- Android: Kotlin + Jetpack Compose (제안, 개발 단계에서 구성)
-- 서버: Firebase Authentication · Firestore · Cloud Functions · FCM (연동 예정)
+- Android: Kotlin + Jetpack Compose (구현됨)
+- 서버: Firebase Authentication · Firestore · Cloud Functions (방·권한 구현), FCM (후속)
 - 초대: 카카오톡 공유 링크 + Android App Links (카카오톡 자체 채팅방 연동 아님)
 - 핵심 게임: 너 누구야?, 라이어 채팅, 금지어 채팅, 밸런스 예측
 - 일반 채팅과 게임 채팅 분리, 익명 매핑 서버 관리, 방장 권한 검증
@@ -42,4 +42,13 @@
 
 - [공통 UI 설계·검증 범위](docs/development/002a-android-foundation.md)
 - [GitHub Actions Android 검증](.github/workflows/android.yml): 단위 테스트·Lint·디버그 APK 생성
-- 실제 로그인, 카카오 공유, 서버 채팅, 게임 역할, 투표·점수 계산은 연결되지 않았습니다. GitHub 저장소에는 서명키·계정 비밀 정보·Firebase 설정값을 넣지 않습니다.
+- 본 섹션은 2-A 로컬 데모 설명입니다. 온라인 방은 2-C로 별도 구현됐고, 실시간 채팅·게임 판정·점수 계산은 미구현입니다.
+
+## Firebase·Play 상태 (2-C / 2-D)
+- `app/google-services.json`은 Git에 저장하지 않으며 배포 시 비공개 Secret에서 복원합니다.
+- Firebase Auth·Firestore 및 서울 Cloud Functions의 온라인 방 생성·초대·승인·강퇴·위임·탈퇴 코드가 구현되어 있습니다. 실제 Google 계정 2명 E2E는 미검증입니다.
+- Android API 29·35·36 휴대폰 및 API36 태블릿의 Firebase·Android 종합 QA는 [#42951822274](https://github.com/hebi10/TalkSullae/actions/runs/42951822274)에서 통과했습니다 (4환경 화면 캡처 48장).
+- [비공개 Play 배포 워크플로](.github/workflows/play-closed.yml)는 `main`에서 승인된 `check → build → deploy` 모드만 허용합니다. Play 최초 앱 등록·정책·고정 키·API 권한 설정 전에는 제출하지 않습니다.
+- 릴리스 및 인증 정보는 GitHub Actions Secrets/Variables에서만 주입합니다. GitHub에 서명키·토큰·Firebase 설정값을 넣지 않습니다.
+- [2-D QA·배포 미완료 추적](https://github.com/hebi10/TalkSullae/issues/11) · [2-D 원본 캡처](https://drive.google.com/file/d/1KzuuCJAPzn6J-Os0pUlGwDZGShiPDsFu/view)
+

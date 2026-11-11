@@ -13,9 +13,34 @@ android {
         buildConfigField("boolean", "FIREBASE_CONFIGURED", file("google-services.json").exists().toString())
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-dev"
+        versionCode = 2
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        val keyFile = System.getenv("TALK_PLAY_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+        val hasStorePassword = !System.getenv("TALK_PLAY_STORE_PASSWORD").isNullOrBlank()
+        val keyAlias = System.getenv("TALK_PLAY_KEY_ALIAS")?.takeIf { it.isNotBlank() }
+        val hasKeyPassword = !System.getenv("TALK_PLAY_KEY_PASSWORD").isNullOrBlank()
+        if (keyFile != null && hasStorePassword && keyAlias != null && hasKeyPassword) {
+            create("talkPlayUpload") {
+                storeFile = file(keyFile)
+                storePassword = System.getenv("TALK_PLAY_STORE_PASSWORD")
+                this.keyAlias = keyAlias
+                keyPassword = System.getenv("TALK_PLAY_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isDebuggable = false
+            isMinifyEnabled = false
+            if (signingConfigs.names.contains("talkPlayUpload")) {
+                signingConfig = signingConfigs.getByName("talkPlayUpload")
+            }
+        }
     }
 
     buildFeatures {
