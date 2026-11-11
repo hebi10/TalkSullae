@@ -1,0 +1,277 @@
+name: Play closed-testing guarded publisher
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'check Play app/track, build signed AAB, or deploy after full QA'
+        required: true
+        default: check
+        type: choice
+        options: [check, build, deploy]
+  push:
+    branches: [main]
+    paths:
+      - 'app/build.gradle.kts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: talksullae-play-closed-publisher
+  cancel-in-progress: false
+
+jobs:
+  source:
+    if: >-
+      github.repository == 'hebi10/TalkSullae' &&
+      (github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[deploy-closed]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.verify.outputs.mode }}
+      code: ${{ steps.verify.outputs.code }}
+      version: ${{ steps.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require exact main release source
+        id: verify
+        env:
+          REQUESTED_MODE: ${{ inputs.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo 'Play testing deployment is forbidden from feature branches.' >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            MODE=deploy
+            git show -1 --format=%B | grep -Fq '[deploy-closed]' ||
+              { echo 'Release intent was not explicit.' >&2; exit 1; }
+          else
+            MODE="$REQUESTED_MODE"
+          fi
+          case "$MODE" in check|build|deploy) ;; *)
+            echo 'Only check, build or deploy may be requested.' >&2; exit 1;; esac
+          python3 - <<'PY'
+          import os, sys
+          from pathlib import Path
+          sys.path.insert(0, 'scripts/release')
+          from verify_aab import version_from_source
+          code, name = version_from_source('app/build.gradle.kts')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as stream:
+              stream.write('code=' + str(code) + '\n')
+              stream.write('version=' + name + '\n')
+          print('Source version:', name, 'code:', code)
+          PY
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+  qa:
+    needs: source
+    if: needs.source.outputs.mode != 'check'
+    uses: ./.github/workflows/qa-2d.yml
+
+  play-preflight:
+    needs: source
+    if: needs.source.outputs.mode != 'build'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check explicit closed-track and authentication configuration
+        id: auth-method
+        env:
+          WIF_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          WIF_SA: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'scripts/release')
+          from play_closed import track_name
+          track_name(os.environ.get('PLAY_CLOSED_TRACK',''))
+          PY
+          if [[ -n "$WIF_PROVIDER" && -n "$WIF_SA" ]]; then
+            echo 'method=wif' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$PLAY_JSON" ]]; then
+            echo 'method=json' >> "$GITHUB_OUTPUT"
+          else
+            echo 'No authorized Google Play service account or Workload Identity is configured.' >&2
+            exit 1
+          fi
+      - name: Authenticate with approved WIF identity
+        if: steps.auth-method.outputs.method == 'wif'
+        id: wif
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Authenticate with private service account JSON
+        if: steps.auth-method.outputs.method == 'json'
+        id: json
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Check exact existing Play app and closed track (no upload)
+        env:
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+          PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
+        run: python3 scripts/release/play_closed.py check --track "$PLAY_CLOSED_TRACK" --report play-preflight.json
+      - name: Archive safe preflight result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-play-preflight
+          path: play-preflight.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  signed-aab:
+    needs: [source, qa]
+    if: needs.source.outputs.mode != 'check' && needs.qa.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      FIREBASE_ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_ANDROID_GOOGLE_SERVICES_JSON }}
+      PLAY_UPLOAD_KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+      PLAY_UPLOAD_STORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_STORE_PASSWORD }}
+      PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+      PLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+      TALK_PLAY_STORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_STORE_PASSWORD }}
+      TALK_PLAY_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+      TALK_PLAY_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+      PLAY_UPLOAD_CERT_SHA256: ${{ vars.PLAY_UPLOAD_CERT_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install Android release SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Restore and validate original Play upload key and Firebase config
+        run: python3 scripts/release/restore_secrets.py
+      - name: Download SHA-256-pinned bundletool 1.18.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 'https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar' --output "$RUNNER_TEMP/bundletool.jar"
+          printf '%s  %s\n' 'a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29' "$RUNNER_TEMP/bundletool.jar" | sha256sum --check
+      - name: Build release signed with fixed Play upload key
+        run: ./gradlew --no-daemon --max-workers=2 lintRelease bundleRelease --stacktrace
+      - name: Verify AAB signer, exact package/version, OAuth and bundle integrity
+        run: |
+          mkdir -p play-dist
+          python3 scripts/release/verify_aab.py --aab app/build/outputs/bundle/release/app-release.aab --bundletool "$RUNNER_TEMP/bundletool.jar" --output play-dist/manifest.json
+          cp app/build/outputs/bundle/release/app-release.aab play-dist/app-release.aab
+          cp play/release-notes/ko-KR.txt play-dist/ko-KR.txt
+      - name: Upload provenance-checked signed AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-closed-signed-aab
+          path: play-dist/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Clear private keys and Firebase config
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/talksullae-upload-keystore" app/google-services.json
+
+  closed-publish:
+    needs: [source, qa, signed-aab, play-preflight]
+    if: >-
+      needs.source.outputs.mode == 'deploy' &&
+      needs.qa.result == 'success' &&
+      needs.signed-aab.result == 'success' &&
+      needs.play-preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    environment: play-closed
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: talksullae-closed-signed-aab
+          path: play-dist
+      - name: Recheck Play authentication
+        id: auth-method
+        env:
+          WIF_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          WIF_SA: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [[ -n "$WIF_PROVIDER" && -n "$WIF_SA" ]]; then
+            echo 'method=wif' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$PLAY_JSON" ]]; then
+            echo 'method=json' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Missing Google Play API authorization.' >&2
+            exit 1
+          fi
+      - name: Authenticate WIF for Play closed track
+        if: steps.auth-method.outputs.method == 'wif'
+        id: wif
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Authenticate private JSON for Play closed track
+        if: steps.auth-method.outputs.method == 'json'
+        id: json
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Upload and commit ONLY approved closed testing release
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+          CODE: ${{ needs.source.outputs.code }}
+          VERSION: ${{ needs.source.outputs.version }}
+        run: |
+          python3 scripts/release/play_closed.py deploy --track "$PLAY_CLOSED_TRACK" \
+            --bundle play-dist/app-release.aab --version-code "$CODE" \
+            --version "$VERSION" --notes-file play-dist/ko-KR.txt \
+            --report play-result.json
+      - name: Archive Play acceptance/readback report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-play-closed-api-result
+          path: play-result.json
+          if-no-files-found: ignore
+          retention-days: 14
