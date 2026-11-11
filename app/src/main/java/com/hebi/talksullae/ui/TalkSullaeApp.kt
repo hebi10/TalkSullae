@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,9 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -43,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +61,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.hebi.talksullae.data.DemoRoomMembers
+import com.hebi.talksullae.data.RoomDraft
+import com.hebi.talksullae.data.RoomPreview
+import com.hebi.talksullae.data.RoomPreviewMode
+import com.hebi.talksullae.ui.entry.CreateRoomScreen
+import com.hebi.talksullae.ui.entry.OnboardingScreen
+import com.hebi.talksullae.ui.entry.WelcomeScreen
+import com.hebi.talksullae.ui.rooms.InviteScreen
+import com.hebi.talksullae.ui.rooms.MembersScreen
 import com.hebi.talksullae.data.DemoCatalog
 import com.hebi.talksullae.data.GamePreview
 import com.hebi.talksullae.data.MessagePreview
@@ -70,6 +84,9 @@ import com.hebi.talksullae.design.RoomCard
 import com.hebi.talksullae.design.SectionTitle
 import com.hebi.talksullae.design.TalkSullaeTheme
 
+private const val Welcome = "welcome"
+private const val Onboarding = "onboarding"
+private const val Members = "members"
 private const val Main = "main"
 private const val Room = "room"
 private const val Game = "game"
@@ -86,13 +103,23 @@ fun TalkSullaeApp(
 ) {
     var isDark by rememberSaveable { mutableStateOf(initialDarkTheme) }
     SideEffect { onDarkThemeChanged(isDark) }
-    var route by rememberSaveable { mutableStateOf(Main) }
+    var route by rememberSaveable { mutableStateOf(Welcome) }
     var mainTab by rememberSaveable { mutableStateOf("rooms") }
     var roomTab by rememberSaveable { mutableStateOf("chat") }
     var gameId by rememberSaveable { mutableStateOf("identity") }
     var gamePhase by rememberSaveable { mutableStateOf("lobby") }
     var selectedRoom by rememberSaveable { mutableStateOf("friday") }
     var chatInput by rememberSaveable { mutableStateOf("") }
+    var previewNickname by rememberSaveable { mutableStateOf("게스트") }
+    var pendingInvitePreview by rememberSaveable { mutableStateOf(false) }
+    val previewRooms = remember { mutableStateListOf<RoomPreview>().apply { addAll(DemoCatalog.rooms) } }
+    val kickedMembers = remember { mutableStateMapOf<String, Set<String>>() }
+    val ownerOverrides = remember { mutableStateMapOf<String, String>() }
+    val roomMembers = DemoRoomMembers.initialMembers(selectedRoom).filterNot {
+        it.id in (kickedMembers[selectedRoom] ?: emptySet())
+    }
+    val ownerId = ownerOverrides[selectedRoom] ?: DemoRoomMembers.initialOwner(selectedRoom)
+    val isRoomOwner = ownerId == DemoRoomMembers.MY_ID
     val localMessages = remember { mutableStateListOf<MessagePreview>() }
 
     val openRoom: (String) -> Unit = {
@@ -102,14 +129,19 @@ fun TalkSullaeApp(
     }
     val goBack: () -> Unit = {
         when (route) {
-            Game, Create, Invite -> route = Room
-            Settings -> route = Main
+            Onboarding -> route = Welcome
+            Create, Settings -> route = Main
+            Invite -> {
+                route = if (pendingInvitePreview) Main else Room
+                pendingInvitePreview = false
+            }
+            Members, Game -> route = Room
             else -> route = Main
         }
     }
-    BackHandler(enabled = route != Main) { goBack() }
+    BackHandler(enabled = route != Main && route != Welcome) { goBack() }
 
-    val currentRoom = DemoCatalog.rooms.firstOrNull { it.id == selectedRoom } ?: DemoCatalog.rooms.first()
+    val currentRoom = previewRooms.firstOrNull { it.id == selectedRoom } ?: previewRooms.first()
     val selectedGame = DemoCatalog.games.firstOrNull { it.id == gameId } ?: DemoCatalog.games.first()
 
     TalkSullaeTheme(darkTheme = isDark) {
@@ -118,19 +150,22 @@ fun TalkSullaeApp(
             topBar = {
                 AppTopBar(
                     title = when (route) {
+                        Welcome -> "톡술래"
+                        Onboarding -> "닉네임 · 아바타"
                         Main -> "톡술래"
                         Room, Invite -> currentRoom.name
+                        Members -> "멤버 관리"
                         Game -> selectedGame.name
                         Create -> "새 방 만들기"
                         Settings -> "설정"
                         else -> "톡술래"
                     },
                     subtitle = when (route) {
-                        Room -> "멤버 ${currentRoom.memberCount}명 · UI 미리보기"
+                        Room -> "멤버 ${roomMembers.size}명 · UI 미리보기"
                         Game -> "게임 흐름 미리보기 · 실제 플레이 아님"
                         else -> "채팅으로 즐기는 추리 게임 · 데모"
                     },
-                    onBack = if (route == Main) null else goBack
+                    onBack = if (route == Main || route == Welcome) null else goBack
                 )
             },
             bottomBar = {
@@ -144,19 +179,57 @@ fun TalkSullaeApp(
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 when (route) {
+                    Welcome -> WelcomeScreen(
+                        onContinue = { pendingInvitePreview = false; route = Onboarding },
+                        onInvitePreview = { pendingInvitePreview = true; route = Onboarding }
+                    )
+                    Onboarding -> OnboardingScreen(
+                        onContinueDemo = {
+                            previewNickname = it
+                            if (pendingInvitePreview) {
+                                selectedRoom = "friends"
+                                route = Invite
+                            } else {
+                                route = Main
+                            }
+                        }
+                    )
                     Main -> when (mainTab) {
                         "rooms" -> RoomsScreen(
+                            rooms = previewRooms,
                             openRoom = openRoom,
-                            onCreate = { route = Create }
+                            onCreate = { route = Create },
+                            onInvitePreview = {
+                                selectedRoom = "friends"
+                                pendingInvitePreview = true
+                                route = Invite
+                            }
                         )
                         "records" -> RankingsScreen(title = "내 기록")
                         else -> ProfileScreen(
                             darkTheme = isDark,
                             onThemeChange = { isDark = it },
-                            onSettings = { route = Settings }
+                            onSettings = { route = Settings },
+                            nickname = previewNickname
                         )
                     }
                     Room -> Column(Modifier.fillMaxSize().testTag("room-screen")) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = { route = Members },
+                                modifier = Modifier.heightIn(min = 48.dp).testTag("room-members-open")
+                            ) { Text("멤버 ${roomMembers.size}명") }
+                            if (isRoomOwner) {
+                                TextButton(
+                                    onClick = { pendingInvitePreview = false; route = Invite },
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("room-invite-open")
+                                ) { Text("친구 초대") }
+                            }
+                        }
                         RoomTabs(current = roomTab, onSelect = { roomTab = it })
                         when (roomTab) {
                             "chat" -> RoomChatScreen(
@@ -192,15 +265,43 @@ fun TalkSullaeApp(
                             route = Room
                         }
                     )
-                    Create -> UnavailableScreen(
-                        title = "방 생성 UI",
-                        description = "실제 방 생성은 Firebase와 방장 권한 검증 연동 후 제공됩니다.",
+                    Create -> CreateRoomScreen(
+                        onCreatePreview = { draft ->
+                            val roomId = "local-${previewRooms.size + 1}"
+                            previewRooms.add(
+                                RoomPreview(
+                                    id = roomId,
+                                    name = draft.name,
+                                    memberCount = 1,
+                                    recentMessage = "이 기기 전용 미리보기 방",
+                                    unreadCount = 0
+                                )
+                            )
+                            selectedRoom = roomId
+                            roomTab = "chat"
+                            route = Room
+                        },
+                        onCancel = { route = Main }
+                    )
+                    Invite -> InviteScreen(
+                        roomName = currentRoom.name,
+                        isOwner = isRoomOwner,
+                        guestOnly = pendingInvitePreview,
+                        onViewMembers = { pendingInvitePreview = false; route = Members },
                         onBack = goBack
                     )
-                    Invite -> UnavailableScreen(
-                        title = "초대 링크 UI",
-                        description = "카카오톡 공유와 가입 승인은 현재 연결되지 않았습니다.",
-                        onBack = goBack
+                    Members -> MembersScreen(
+                        roomName = currentRoom.name,
+                        members = roomMembers,
+                        ownerId = ownerId,
+                        onInvite = { pendingInvitePreview = false; route = Invite },
+                        onKickPreview = { memberId ->
+                            kickedMembers[selectedRoom] =
+                                (kickedMembers[selectedRoom] ?: emptySet()) + memberId
+                        },
+                        onTransferPreview = { memberId ->
+                            ownerOverrides[selectedRoom] = memberId
+                        }
                     )
                     Settings -> SettingsScreen(
                         darkTheme = isDark,
@@ -269,27 +370,77 @@ private fun RoomTabs(current: String, onSelect: (String) -> Unit) {
 }
 
 @Composable
-private fun RoomsScreen(openRoom: (String) -> Unit, onCreate: () -> Unit) {
+private fun RoomsScreen(
+    rooms: List<RoomPreview>,
+    openRoom: (String) -> Unit,
+    onCreate: () -> Unit,
+    onInvitePreview: () -> Unit
+) {
+    var mode by rememberSaveable { mutableStateOf(RoomPreviewMode.CONTENT) }
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("room-list"),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            PreviewNotice()
-            Spacer(Modifier.heightIn(min = 12.dp))
-            Text("내 방", style = MaterialTheme.typography.headlineMedium)
-            Text(
-                "친구들과 계속 이어지는 모임",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            PreviewNotice("온라인에 연결되지 않은 기기 내 데모입니다. 생성된 방은 앱을 다시 실행하면 사라집니다.")
+            SectionTitle("내 방")
+            Text("친구들과 계속 이어지는 모임", style = MaterialTheme.typography.bodyMedium)
+            Text("목록 상태 체험", style = MaterialTheme.typography.bodySmall)
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    RoomPreviewMode.CONTENT to "목록",
+                    RoomPreviewMode.EMPTY to "빈 화면",
+                    RoomPreviewMode.LOADING to "로딩",
+                    RoomPreviewMode.OFFLINE to "오프라인"
+                ).forEach { (value, label) ->
+                    FilterChip(
+                        selected = mode == value,
+                        onClick = { mode = value },
+                        label = { Text(label) },
+                        modifier = Modifier.heightIn(min = 48.dp)
+                            .testTag("rooms-state-${value.name}")
+                    )
+                }
+            }
         }
-        items(DemoCatalog.rooms, key = { it.id }) { room ->
-            RoomCard(room, onOpen = { openRoom(room.id) })
+        when (mode) {
+            RoomPreviewMode.LOADING -> item {
+                Column(
+                    modifier = Modifier.fillMaxWidth().testTag("rooms-loading")
+                        .padding(vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator()
+                    Text("방 목록 불러오는 중 (시연)", modifier = Modifier.padding(top = 12.dp))
+                }
+            }
+            RoomPreviewMode.EMPTY -> item {
+                CenteredInfo("아직 참여한 방이 없습니다", "새 방을 만들거나 받은 초대를 확인해 보세요.")
+            }
+            RoomPreviewMode.OFFLINE, RoomPreviewMode.CONTENT -> {
+                if (mode == RoomPreviewMode.OFFLINE) {
+                    item {
+                        PreviewNotice("오프라인 화면 시연 중 · 실제 서버 연결 상태는 확인하지 않습니다.")
+                    }
+                }
+                items(rooms, key = { it.id }) { room ->
+                    RoomCard(room, onOpen = { openRoom(room.id) })
+                }
+            }
         }
         item {
-            PrimaryAction("새 방 만들기 · 연결 예정", onClick = onCreate, modifier = Modifier.fillMaxWidth())
+            PrimaryAction("새 방 만들기", onClick = onCreate, modifier = Modifier.fillMaxWidth().testTag("rooms-create"))
+        }
+        item {
+            TextButton(
+                onClick = onInvitePreview,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .testTag("rooms-join-preview")
+            ) { Text("초대받은 화면 보기") }
         }
     }
 }
@@ -383,7 +534,8 @@ private fun RankingsScreen(title: String) {
 private fun ProfileScreen(
     darkTheme: Boolean,
     onThemeChange: (Boolean) -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    nickname: String
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -392,7 +544,7 @@ private fun ProfileScreen(
         PreviewNotice()
         SectionTitle("내 프로필")
         ContentCard {
-            Text("나 · 게스트 미리보기", style = MaterialTheme.typography.titleMedium)
+            Text("${nickname} · 데모 미리보기", style = MaterialTheme.typography.titleMedium)
             Text("로그인 및 개인 통계는 연결 전입니다.", style = MaterialTheme.typography.bodyMedium)
         }
         ContentCard {
