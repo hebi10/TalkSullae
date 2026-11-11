@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 10495)
-Total output lines: 953
-
 package com.hebi.talksullae.ui
 
 import android.app.Activity
@@ -374,7 +371,154 @@ fun TalkSullaeApp(
                     Invite -> InviteScreen(
                         roomName = currentRoom.name,
                         isOwner = isRoomOwner,
-  …1495 tokens truncated…on(tab.icon, contentDescription = null, modifier = Modifier.size(19.dp))
+                        guestOnly = pendingInvitePreview,
+                        onViewMembers = { pendingInvitePreview = false; route = Members },
+                        onBack = goBack
+                    )
+                    Members -> MembersScreen(
+                        roomName = currentRoom.name,
+                        members = roomMembers,
+                        ownerId = ownerId,
+                        onInvite = { pendingInvitePreview = false; route = Invite },
+                        onKickPreview = { memberId ->
+                            kickedMembers[selectedRoom] =
+                                (kickedMembers[selectedRoom] ?: emptySet()) + memberId
+                        },
+                        onTransferPreview = { memberId ->
+                            ownerOverrides[selectedRoom] = memberId
+                        }
+                    )
+                    Settings -> SettingsScreen(
+                        darkTheme = isDark,
+                        onThemeChange = { isDark = it },
+                        onBack = goBack
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MainNavigation(current: String, onSelect: (String) -> Unit) {
+    val tabs = listOf(
+        NavItem("rooms", "내 방", Icons.Default.Groups),
+        NavItem("records", "기록", Icons.Default.EmojiEvents),
+        NavItem("profile", "마이", Icons.Default.Person)
+    )
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+        tabs.forEach { tab ->
+            NavigationBarItem(
+                selected = current == tab.id,
+                onClick = { onSelect(tab.id) },
+                icon = { Icon(tab.icon, contentDescription = null) },
+                label = { Text(tab.title) },
+                alwaysShowLabel = true,
+                modifier = Modifier.testTag("main-tab-${tab.id}")
+            )
+        }
+    }
+}
+
+@Composable
+private fun DemoRoomLayout(
+    currentTab: String,
+    onSelectTab: (String) -> Unit,
+    memberCount: Int,
+    onMembers: () -> Unit,
+    onInvite: (() -> Unit)?,
+    editingChat: Boolean,
+    content: @Composable ((@Composable () -> Unit)?) -> Unit
+) {
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding().testTag("room-screen")) {
+        if (maxWidth >= 600.dp) {
+            Row(Modifier.fillMaxSize()) {
+                Surface(
+                    modifier = Modifier.width(180.dp).fillMaxHeight(),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+                        RoomActions(memberCount, onMembers, onInvite, vertical = true)
+                        RoomTabs(currentTab, onSelectTab, vertical = true)
+                    }
+                }
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
+                    Box(Modifier.widthIn(max = 640.dp).fillMaxSize()) { content(null) }
+                }
+            }
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                if (!editingChat) RoomActions(memberCount, onMembers, onInvite)
+                RoomTabs(currentTab, onSelectTab)
+                content(if (editingChat) ({ RoomActions(memberCount, onMembers, onInvite) }) else null)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoomActions(
+    memberCount: Int,
+    onMembers: () -> Unit,
+    onInvite: (() -> Unit)?,
+    vertical: Boolean = false
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        horizontalArrangement = if (vertical) Arrangement.Start else Arrangement.End,
+        maxItemsInEachRow = if (vertical) 1 else Int.MAX_VALUE
+    ) {
+        TextButton(
+            onClick = onMembers,
+            modifier = Modifier.heightIn(min = 48.dp).testTag("room-members-open")
+        ) { Text("멤버 ${memberCount}명") }
+        if (onInvite != null) {
+            TextButton(
+                onClick = onInvite,
+                modifier = Modifier.heightIn(min = 48.dp).testTag("room-invite-open")
+            ) { Text("친구 초대") }
+        }
+    }
+}
+
+@Composable
+private fun RoomTabs(current: String, onSelect: (String) -> Unit, vertical: Boolean = false) {
+    val tabs = listOf(
+        NavItem("chat", "채팅", Icons.Default.ChatBubbleOutline),
+        NavItem("games", "게임", Icons.Default.SportsEsports),
+        NavItem("records", "기록", Icons.Default.BarChart)
+    )
+    val group = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).selectableGroup()
+    if (vertical) {
+        Column(group, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            tabs.forEach { tab -> RoomTab(tab, current, onSelect, Modifier.fillMaxWidth(), vertical = true) }
+        }
+    } else {
+        Row(group, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            tabs.forEach { tab -> RoomTab(tab, current, onSelect, Modifier.weight(1f), vertical = false) }
+        }
+    }
+}
+
+@Composable
+private fun RoomTab(
+    tab: NavItem, current: String, onSelect: (String) -> Unit, modifier: Modifier, vertical: Boolean
+) {
+    val selected = current == tab.id
+    Surface(
+        modifier = modifier.heightIn(min = 48.dp)
+            .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(tab.id) })
+            .testTag("room-tab-${tab.id}"),
+        color = if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+        contentColor = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = RoundedCornerShape(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalArrangement = if (vertical) Arrangement.Start else Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(tab.icon, contentDescription = null, modifier = Modifier.size(19.dp))
             Spacer(Modifier.width(5.dp))
             Text(
                 tab.title,
