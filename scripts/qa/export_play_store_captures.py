@@ -16,7 +16,8 @@ def export_screenshots(output):
     adb("shell", "run-as", PACKAGE, "rm", "-rf", "files/play-store-captures")
     report = output / "instrumentation.txt"
     report.write_text(adb(
-        "shell", "am", "instrument", "-w", "-r", "-e", "class", f"{PACKAGE}.StoreScreenshotsTest",
+        "shell", "am", "instrument", "-w", "-r", "-e", "capturePlayStore", "true",
+        "-e", "class", f"{PACKAGE}.StoreScreenshotsTest",
         f"{PACKAGE}.test/androidx.test.runner.AndroidJUnitRunner",
     ), encoding="utf-8")
     subprocess.run([

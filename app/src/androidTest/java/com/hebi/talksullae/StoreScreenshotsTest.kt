@@ -22,12 +22,19 @@ import com.hebi.talksullae.firebase.OnlineRoomsRepository
 import com.hebi.talksullae.ui.entry.OnboardingScreen
 import com.hebi.talksullae.ui.rooms.OnlineRoomsHost
 import java.io.File
+import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
 class StoreScreenshotsTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Before
+    fun requireCaptureMode() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("capturePlayStore") == "true")
+    }
 
     @Test
     fun login() {
