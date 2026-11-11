@@ -131,7 +131,8 @@ def check_preflight(client, track):
         client.delete_edit(edit)
 
 
-def deploy(client, track, bundle, code, version, notes):
+def deploy(client, track, bundle, code, version, notes, report=None):
+    report = report if report is not None else {}
     track = track_name(track)
     code = release_code(code)
     if not re.fullmatch(r"0\.[0-9]+\.[0-9]+", version):
@@ -143,9 +144,10 @@ def deploy(client, track, bundle, code, version, notes):
     payload = bundle.read_bytes()
     if len(payload) < 10000:
         raise PlaySafetyError("The release AAB is unexpectedly small")
-    report = {"package":PACKAGE, "track":track, "version_code":code,
-              "bundle_sha256":hashlib.sha256(payload).hexdigest(),
-              "api_committed":False, "verification":"not_confirmed"}
+    report.update({"package":PACKAGE, "track":track, "version_code":code,
+                   "bundle_sha256":hashlib.sha256(payload).hexdigest(),
+                   "api_committed":False, "verification":"not_confirmed",
+                   "upload_stage":"not_started"})
     edit = client.create_edit()
     committed = False
     try:
@@ -155,9 +157,11 @@ def deploy(client, track, bundle, code, version, notes):
         used = client.list_codes(edit, tracks)
         if used and code <= max(used):
             raise PlaySafetyError("The new versionCode must exceed every Play track and uploaded artifact")
+        report["upload_stage"] = "requested"
         api_response = client.request(
             "POST", "/upload" + edit + "/bundles?uploadType=media", payload, binary=True
         )
+        report["upload_stage"] = "acknowledged"
         if release_code(api_response.get("versionCode")) != code:
             raise PlaySafetyError("Play bundle versionCode does not match the validated AAB")
         client.request("PUT", edit + "/tracks/" + quote(track, safe=""), {
@@ -210,7 +214,7 @@ def main():
             if args.bundle is None or args.version_code is None or args.notes_file is None:
                 raise PlaySafetyError("Verified bundle, version code and notes file are mandatory")
             report = deploy(client, args.track, args.bundle, args.version_code, args.version,
-                            args.notes_file.read_text(encoding="utf-8").strip())
+                            args.notes_file.read_text(encoding="utf-8").strip(), report=report)
         report["result"] = "accepted_by_api"
         print(json.dumps(report, ensure_ascii=False))
     except (PlaySafetyError, OSError) as err:
