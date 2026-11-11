@@ -59,7 +59,8 @@ def restore():
     try:
         cert = subprocess.run(
             ["keytool", "-exportcert", "-keystore", str(keystore),
-             "-alias", alias, "-storepass", password, "-keypass", key_password],
+             "-alias", alias, "-storepass:env", "PLAY_UPLOAD_STORE_PASSWORD",
+             "-keypass:env", "PLAY_UPLOAD_KEY_PASSWORD"],
             check=True, capture_output=True, timeout=40
         ).stdout
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):

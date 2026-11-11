@@ -49,9 +49,10 @@ def verify_firebase():
     ):
         raise ValueError("Release BuildConfig has Firebase disabled")
     matches = []
-    for file in Path("app/build/generated/res").rglob("values.xml"):
-        if "ReleaseGoogleServices" not in str(file):
-            continue
+    generated_release_res = Path("app/build/generated/res/google-services/release")
+    if not generated_release_res.is_dir():
+        raise ValueError("Release Google Services resource directory is missing")
+    for file in generated_release_res.rglob("values.xml"):
         values = {item.attrib.get("name"):item.text for item in ET.parse(file).getroot()}
         if values.get("google_app_id") == app_id and values.get("default_web_client_id") in web_ids:
             matches.append(str(file))
