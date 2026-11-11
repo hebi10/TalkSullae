@@ -51,7 +51,8 @@ jobs:
           set -euo pipefail
           bundle=app/build/outputs/bundle/release/app-release.aab
           test -s "$bundle"
-          if jarsigner -verify "$bundle" >/dev/null 2>&1; then
+          unzip -tq "$bundle" >/dev/null
+          if jarsigner -verify "$bundle" 2>&1 | grep -Fq 'jar verified.'; then
             echo 'Unexpected signed bundle in unsigned smoke check' >&2
             exit 1
           fi
