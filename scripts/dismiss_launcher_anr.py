@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Close only Android emulator launcher ANRs; never hide TalkSullae app failures."""
+"""Handle Android emulator System UI / launcher ANRs without hiding TalkSullae failures."""
 import re
 import subprocess
 import time
@@ -47,7 +47,7 @@ def dismiss_launcher_dialog():
         button = next((node for node in root.iter() if node.attrib.get("text", "") in labels), None)
         if button is None:
             raise RuntimeError("Recognized emulator ANR has no safe action button: " + kind)
-        box = re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]", button.attrib.get("bounds", ""))
+        box = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", button.attrib.get("bounds", ""))
         if box is None:
             raise RuntimeError("Emulator ANR action has no valid bounds")
         x1, y1, x2, y2 = [int(value) for value in box.groups()]
