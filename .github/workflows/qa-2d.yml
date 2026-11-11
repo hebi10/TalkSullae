@@ -12,6 +12,7 @@ on:
       - 'settings.gradle.kts'
       - '.github/workflows/qa-2d.yml'
       - 'scripts/qa/**'
+      - 'scripts/release/**'
       - 'scripts/dismiss_launcher_anr.py'
   workflow_dispatch:
   workflow_call:
@@ -64,6 +65,8 @@ jobs:
         with:
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
+      - name: Validate Play publisher safety and source versions
+        run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
       - name: Install Android compile SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
       - name: Unit tests, Lint and app / instrumentation APKs
