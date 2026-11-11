@@ -16,12 +16,21 @@ def adb(*args):
     ).stdout.decode("utf-8", errors="replace")
 
 def hierarchy():
-    adb("shell", "uiautomator", "dump", "/sdcard/talksullae-system.xml")
-    raw = adb("shell", "cat", "/sdcard/talksullae-system.xml")
-    start, end = raw.find("<?xml"), raw.rfind("</hierarchy>")
-    if start < 0 or end < 0:
-        raise RuntimeError("Could not inspect emulator system dialog")
-    return ET.fromstring(raw[start:end + len("</hierarchy>")])
+    path = "/sdcard/talksullae-system.xml"
+    for attempt in range(3):
+        try:
+            adb("shell", "rm", "-f", path)
+            adb("shell", "uiautomator", "dump", path)
+            raw = adb("shell", "cat", path)
+            start, end = raw.find("<?xml"), raw.rfind("</hierarchy>")
+            if start >= 0 and end >= 0:
+                return ET.fromstring(raw[start:end + len("</hierarchy>")])
+        except (subprocess.CalledProcessError, ET.ParseError):
+            if attempt == 2:
+                raise
+        if attempt < 2:
+            time.sleep(1)
+    raise RuntimeError("Could not inspect emulator system dialog")
 
 def dialog_type(root):
     texts = [node.attrib.get("text", "") for node in root.iter()]

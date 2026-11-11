@@ -2,6 +2,7 @@
 """Prevent emulator ANR handling from hiding app failures or clicking unsafe actions."""
 import importlib.util
 from pathlib import Path
+import subprocess
 import unittest
 from unittest.mock import call, patch
 import xml.etree.ElementTree as ET
@@ -21,6 +22,23 @@ def dialog(title, buttons=()):
 
 
 class EmulatorAnrSafetyTests(unittest.TestCase):
+    def test_hierarchy_retries_when_emulator_dump_file_is_missing(self):
+        missing = subprocess.CalledProcessError(1, ["adb", "shell", "cat"])
+        reads = iter([missing, '<?xml version="1.0"?><hierarchy></hierarchy>'])
+
+        def run_adb(*args):
+            if args[:2] != ("shell", "cat"):
+                return ""
+            result = next(reads)
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        with patch.object(anr, "adb", side_effect=run_adb) as adb, \
+             patch.object(anr.time, "sleep"):
+            self.assertEqual(anr.hierarchy().tag, "hierarchy")
+        self.assertEqual(adb.call_args_list.count(call("shell", "cat", "/sdcard/talksullae-system.xml")), 2)
+
     def test_system_ui_uses_wait_not_close(self):
         root = dialog("System UI isn't responding", ("Close app", "Wait"))
         with patch.object(anr, "hierarchy", side_effect=[root, dialog("")]), \

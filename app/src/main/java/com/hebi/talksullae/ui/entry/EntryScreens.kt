@@ -39,7 +39,7 @@ import com.hebi.talksullae.design.PreviewNotice
 import com.hebi.talksullae.design.PrimaryAction
 
 @Composable
-fun WelcomeScreen(onContinue: () -> Unit, onInvitePreview: () -> Unit) {
+fun WelcomeScreen(onlineConfigured: Boolean, onContinue: () -> Unit, onInvitePreview: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -48,13 +48,15 @@ fun WelcomeScreen(onContinue: () -> Unit, onInvitePreview: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         Icon(Icons.Default.ChatBubbleOutline, contentDescription = null, modifier = Modifier.height(72.dp).fillMaxWidth())
         Text("톡술래", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-        Text("채팅으로 즐기는 친구들의 추리 게임", style = MaterialTheme.typography.bodyLarge)
+        Text("친구와 함께 쓰는 온라인 방", style = MaterialTheme.typography.bodyLarge)
         ContentCard {
             Text("모두 같은 방에서", style = MaterialTheme.typography.titleMedium)
-            Text("친구들과 채팅하고, 익명으로 대화하며, 누가 누구인지 맞혀보세요.")
-            Text("게임 기록은 이후 온라인 서버 연결 단계에서 지원할 예정입니다.", style = MaterialTheme.typography.bodySmall)
+            Text("방을 만들고 초대 코드로 친구를 모아 가입 요청과 멤버를 관리하세요.")
         }
-        PreviewNotice("현재는 UI 체험 버전입니다. 로그인·카카오톡 링크·온라인 방은 연결되지 않았습니다.")
+        PreviewNotice(
+            if (onlineConfigured) "Google 계정으로 로그인하면 온라인 방을 이용할 수 있습니다. 채팅과 게임은 데모에서 미리 볼 수 있습니다."
+            else "이 빌드는 기기에서 데모를 체험할 수 있습니다."
+        )
         PrimaryAction(
             label = "시작하기",
             onClick = onContinue,
@@ -88,7 +90,7 @@ fun OnboardingScreen(
     ) {
         Text("처음 오셨나요?", style = MaterialTheme.typography.headlineMedium)
         Text("닉네임과 아바타를 선택해 UI를 체험해 보세요.", style = MaterialTheme.typography.bodyMedium)
-        PreviewNotice("계정이나 프로필은 온라인에 등록되지 않습니다. 이 화면에서 실제 약관 동의를 받지 않습니다.")
+        PreviewNotice("아래 닉네임과 아바타는 기기 내 데모에서 사용합니다.")
         OutlinedTextField(
             value = nickname,
             onValueChange = { nickname = it },

@@ -211,6 +211,8 @@ fun TalkSullaeApp(
                     subtitle = when (route) {
                         Room -> if (editingRoomChat) null else "UI 미리보기"
                         Game -> "게임 흐름 미리보기 · 실제 플레이 아님"
+                        Online -> "초대 코드 · 멤버 관리"
+                        Welcome, Onboarding -> null
                         else -> "채팅으로 즐기는 추리 게임 · 데모"
                     },
                     onBack = if (route == Main || route == Welcome) null else goBack
@@ -228,6 +230,7 @@ fun TalkSullaeApp(
             ) {
                 when (route) {
                     Welcome -> WelcomeScreen(
+                        onlineConfigured = configured && activity != null,
                         onContinue = { pendingInvitePreview = false; route = Onboarding },
                         onInvitePreview = { pendingInvitePreview = true; route = Onboarding }
                     )
