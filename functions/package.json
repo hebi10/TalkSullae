@@ -7,9 +7,9 @@
   },
   "main": "index.js",
   "scripts": {
-    "test": "node --test test/policy.test.js",
-    "check": "node --check index.js && node --check src/roomService.js && node --check src/policy.js",
-    "test:emulator": "node --test --test-concurrency=1 test/roomService.test.js test/rules.test.js"
+    "test": "node --test test/policy.test.js test/safetyReport.test.js",
+    "check": "node --check index.js && node --check src/roomService.js && node --check src/policy.js && node --check src/safetyReport.js",
+    "test:emulator": "node --test --test-concurrency=1 test/roomService.test.js test/rules.test.js test/safetyReportEmulator.test.js"
   },
   "dependencies": {
     "firebase-admin": "14.5.0",

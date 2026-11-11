@@ -11,11 +11,13 @@ let testEnv;
 const roomId = "room-rules-1";
 
 before(async()=>{
+  const emulator = /^(127\.0\.0\.1|localhost):(\d+)$/.exec(process.env.FIRESTORE_EMULATOR_HOST || "");
+  assert.ok(emulator, "Rules tests require a local Firestore emulator");
   testEnv = await initializeTestEnvironment({
     projectId:"demo-talksullae",
     firestore:{
-      host:"127.0.0.1",
-      port:8080,
+      host:emulator[1],
+      port:Number(emulator[2]),
       rules:readFileSync(resolve(__dirname,"../../firestore.rules"),"utf8")
     }
   });
@@ -78,4 +80,29 @@ test("unauthenticated reads denied and revoked owner loses room access",async()=
   });
   const db=testEnv.authenticatedContext("owner").firestore();
   await assertFails(getDoc(doc(db,"rooms",roomId)));
+});
+
+test("all app clients are denied reads and writes to safety reports and cooldowns", async () => {
+  const collections = ["safetyReports", "safetyReportRateLimits"];
+  await testEnv.withSecurityRulesDisabled(async context => {
+    const admin = context.firestore();
+    for (const name of collections) {
+      await setDoc(doc(admin, name, "fixture"), { actorUid: "reporter" });
+    }
+  });
+  const clients = [
+    testEnv.unauthenticatedContext().firestore(),
+    testEnv.authenticatedContext("reporter").firestore(),
+    testEnv.authenticatedContext("owner").firestore()
+  ];
+  for (const db of clients) {
+    for (const name of collections) {
+      const ref = doc(db, name, "fixture");
+      await assertFails(getDoc(ref));
+      await assertFails(getDocs(collection(db, name)));
+      await assertFails(setDoc(doc(db, name, "new"), { actorUid: "reporter" }));
+      await assertFails(updateDoc(ref, { actorUid: "tampered" }));
+      await assertFails(deleteDoc(ref));
+    }
+  }
 });

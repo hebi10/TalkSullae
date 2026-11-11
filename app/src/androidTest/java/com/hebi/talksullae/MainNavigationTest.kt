@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import org.junit.Rule
 import org.junit.Test
@@ -90,5 +91,18 @@ class MainNavigationTest {
         composeRule.onNodeWithTag("rooms-state-EMPTY").performClick()
         composeRule.onNodeWithText("아직 참여한 방이 없습니다").assertExists()
         composeRule.onNodeWithTag("rooms-create").assertExists()
+    }
+
+    @Test
+    fun safetyReportOpensFromSettingsForGuests() {
+        openDemo()
+        composeRule.onNodeWithTag("main-tab-profile").performClick()
+        composeRule.onNodeWithText("설정 화면").performScrollTo().performClick()
+        composeRule.onNodeWithTag("safety-report-open").performScrollTo().performClick()
+        composeRule.onNodeWithTag("safety-report-screen").assertExists()
+        composeRule.onNodeWithTag("safety-report-details").performTextInput("기능 확인용 신고입니다.")
+        composeRule.onNodeWithTag("safety-report-send").assertIsNotEnabled()
+        composeRule.onNodeWithTag("safety-report-policy").assertExists()
+        composeRule.onNodeWithTag("safety-report-receipt").assertDoesNotExist()
     }
 }

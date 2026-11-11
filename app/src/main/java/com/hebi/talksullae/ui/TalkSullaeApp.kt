@@ -54,6 +54,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -74,6 +75,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -85,6 +87,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hebi.talksullae.data.DemoRoomMembers
 import com.hebi.talksullae.data.RoomDraft
 import com.hebi.talksullae.data.RoomPreview
@@ -109,7 +112,10 @@ import com.hebi.talksullae.design.SectionTitle
 import com.hebi.talksullae.design.TalkSullaeTheme
 import com.hebi.talksullae.firebase.FirebaseBridge
 import com.hebi.talksullae.firebase.GoogleLogin
+import com.hebi.talksullae.firebase.googleUid
 import com.hebi.talksullae.ui.rooms.OnlineRoomsHost
+import com.hebi.talksullae.ui.safety.SafetyReportScreen
+import com.hebi.talksullae.ui.safety.SafetyReportViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.launch
@@ -124,6 +130,7 @@ private const val Game = "game"
 private const val Create = "create"
 private const val Invite = "invite"
 private const val Settings = "settings"
+private const val SafetyReport = "safety-report"
 
 private data class NavItem(val id: String, val title: String, val icon: ImageVector)
 
@@ -148,6 +155,11 @@ fun TalkSullaeApp(
         onDispose { auth?.removeAuthStateListener(listener) }
     }
     var route by rememberSaveable { mutableStateOf(Welcome) }
+    val reportModel: SafetyReportViewModel? = if (route == SafetyReport) viewModel() else null
+    val reportGoogleUid = signedUser.googleUid()
+    LaunchedEffect(reportModel, reportGoogleUid) {
+        reportModel?.accountChanged(reportGoogleUid)
+    }
     var mainTab by rememberSaveable { mutableStateOf("rooms") }
     var roomTab by rememberSaveable { mutableStateOf("chat") }
     var gameId by rememberSaveable { mutableStateOf("identity") }
@@ -175,6 +187,7 @@ fun TalkSullaeApp(
         when (route) {
             Onboarding -> route = Welcome
             Create, Settings -> route = Main
+            SafetyReport -> if (reportModel?.close() == true) route = Settings
             Invite -> {
                 route = if (pendingInvitePreview) Main else Room
                 pendingInvitePreview = false
@@ -206,13 +219,14 @@ fun TalkSullaeApp(
                         Game -> selectedGame.name
                         Create -> "새 방 만들기"
                         Settings -> "설정"
+                        SafetyReport -> "안전 신고"
                         else -> "톡술래"
                     },
                     subtitle = when (route) {
                         Room -> if (editingRoomChat) null else "UI 미리보기"
                         Game -> "게임 흐름 미리보기 · 실제 플레이 아님"
                         Online -> "초대 코드 · 멤버 관리"
-                        Welcome, Onboarding -> null
+                        Welcome, Onboarding, SafetyReport -> null
                         else -> "채팅으로 즐기는 추리 게임 · 데모"
                     },
                     onBack = if (route == Main || route == Welcome) null else goBack
@@ -391,8 +405,19 @@ fun TalkSullaeApp(
                     Settings -> SettingsScreen(
                         darkTheme = isDark,
                         onThemeChange = { isDark = it },
+                        onSafetyReport = { route = SafetyReport },
                         onBack = goBack
                     )
+                    SafetyReport -> reportModel?.let { model ->
+                        SafetyReportScreen(
+                            model = model,
+                            googleUid = reportGoogleUid,
+                            onSignIn = if (configured && activity != null) ({
+                                model.signIn { signedUser = GoogleLogin(activity).signIn() }
+                            }) else null,
+                            onBack = goBack
+                        )
+                    }
                 }
             }
         }
@@ -780,7 +805,14 @@ private fun ProfileScreen(
 }
 
 @Composable
-private fun SettingsScreen(darkTheme: Boolean, onThemeChange: (Boolean) -> Unit, onBack: () -> Unit) {
+private fun SettingsScreen(
+    darkTheme: Boolean,
+    onThemeChange: (Boolean) -> Unit,
+    onSafetyReport: () -> Unit,
+    onBack: () -> Unit
+) {
+    val uriHandler = LocalUriHandler.current
+    var privacyLinkFailed by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -792,8 +824,31 @@ private fun SettingsScreen(darkTheme: Boolean, onThemeChange: (Boolean) -> Unit,
                 Switch(checked = darkTheme, onCheckedChange = onThemeChange)
             }
         }
+        OutlinedButton(
+            onClick = onSafetyReport,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("safety-report-open"),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("안전 신고")
+        }
+        TextButton(
+            onClick = {
+                privacyLinkFailed = try {
+                    uriHandler.openUri("https://github.com/hebi10/TalkSullae/blob/main/docs/privacy-policy.md")
+                    false
+                } catch (_: IllegalArgumentException) {
+                    true
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("개인정보처리방침 보기")
+        }
+        if (privacyLinkFailed) {
+            Text("개인정보처리방침을 열 수 없습니다.", color = MaterialTheme.colorScheme.error)
+        }
         ContentCard {
-            Text("계정 삭제·신고·차단", style = MaterialTheme.typography.titleMedium)
+            Text("계정 삭제·차단", style = MaterialTheme.typography.titleMedium)
             Text("1-C에서 상태별 UI를 설계했습니다. 서버 연동 후 구현합니다.")
         }
         PrimaryAction("내 방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())

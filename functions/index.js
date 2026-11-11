@@ -2,6 +2,7 @@ const { initializeApp,getApps } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 const { onCall } = require("firebase-functions/v2/https");
 const room = require("./src/roomService");
+const { submitSafetyReport } = require("./src/safetyReport");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -12,3 +13,4 @@ exports.createInvitation = onCall(config, request=>room.createInvitation(db,requ
 exports.requestJoin = onCall(config, request=>room.requestJoin(db,request));
 exports.changeMember = onCall(config, request=>room.changeMember(db,request));
 exports.leaveRoom = onCall(config, request=>room.leaveRoom(db,request));
+exports.submitSafetyReport = onCall(config, request=>submitSafetyReport(db,request));
