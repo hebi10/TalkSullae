@@ -66,6 +66,7 @@ jobs:
           apk = Path("app/build/outputs/apk/debug/app-debug.apk")
           source = Path("app/google-services.json")
           configured = source.exists()
+          resource_path = None
           if configured:
               config = json.loads(source.read_text())
               client = next(c for c in config["client"] if c["client_info"]["android_client_info"]["package_name"] == "com.hebi.talksullae")
@@ -73,12 +74,14 @@ jobs:
               web_ids = {o["client_id"] for o in client["oauth_client"] if o["client_type"] == 3}
               build_config = Path("app/build/generated/source/buildConfig/debug/com/hebi/talksullae/BuildConfig.java").read_text()
               assert re.search(r"FIREBASE_CONFIGURED\s*=\s*true\s*;", build_config), "Firebase build flag is disabled"
-              values = {}
-              for resource in Path("app/build/generated/res/google-services").rglob("values.xml"):
-                  values.update({entry.attrib.get("name"): entry.text for entry in ET.parse(resource).getroot()})
-              assert values.get("google_app_id") == app_id, "Firebase app resource mismatch"
-              assert values.get("default_web_client_id") in web_ids, "Google login resource mismatch"
-          result = {"firebaseConfigured": configured, "projectId": "talksullae" if configured else None, "packageName": "com.hebi.talksullae", "apkSha256": hashlib.sha256(apk.read_bytes()).hexdigest()}
+              matches = []
+              for resource in Path("app/build/generated/res").rglob("values.xml"):
+                  values = {entry.attrib.get("name"): entry.text for entry in ET.parse(resource).getroot()}
+                  if values.get("google_app_id") == app_id and values.get("default_web_client_id") in web_ids:
+                      matches.append(resource)
+              assert len(matches) == 1, "Expected one generated Firebase app/OAuth resource file"
+              resource_path = str(matches[0])
+          result = {"firebaseConfigured": configured, "projectId": "talksullae" if configured else None, "packageName": "com.hebi.talksullae", "googleServicesResource": resource_path, "apkSha256": hashlib.sha256(apk.read_bytes()).hexdigest()}
           destination = Path("build-evidence")
           destination.mkdir(exist_ok=True)
           (destination / "firebase-build.json").write_text(json.dumps(result, indent=2) + "\n")
