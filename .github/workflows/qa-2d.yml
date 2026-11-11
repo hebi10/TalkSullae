@@ -160,8 +160,8 @@ jobs:
             adb shell wm size ${{ matrix.size }}
             adb shell wm density ${{ matrix.density }}
             adb shell settings put secure show_ime_with_hard_keyboard 1
-            adb install -r qa-build/app/build/outputs/apk/debug/app-debug.apk
-            adb install -r qa-build/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb install -r qa-build/debug/app-debug.apk
+            adb install -r qa-build/androidTest/debug/app-debug-androidTest.apk
             mkdir -p "qa-captures/${{ matrix.name }}"
             adb shell am instrument -w -r com.hebi.talksullae.test/androidx.test.runner.AndroidJUnitRunner | tee "qa-captures/${{ matrix.name }}/instrumentation.txt"
             python3 scripts/qa/assert_instrumentation.py "qa-captures/${{ matrix.name }}/instrumentation.txt" 7
