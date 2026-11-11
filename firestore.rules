@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function activeMember(roomId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid)).data.status == "active";
+    }
+
+    // Owner and membership mutations go through trusted callable Functions only.
+    match /rooms/{roomId} {
+      allow get: if activeMember(roomId);
+      allow list, create, update, delete: if false;
+
+      match /members/{userId} {
+        allow get: if signedIn() && (request.auth.uid == userId || activeMember(roomId));
+        allow list: if activeMember(roomId);
+        allow create, update, delete: if false;
+      }
+
+      match /invites/{inviteId} {
+        allow read, write: if false;
+      }
+
+      match /{other=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /userRooms/{userId} {
+      allow read, write: if false;
+      match /rooms/{roomId} {
+        allow get, list: if signedIn() && request.auth.uid == userId;
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /{other=**} {
+      allow read, write: if false;
+    }
+  }
+}

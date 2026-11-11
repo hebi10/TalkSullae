@@ -1,0 +1,22 @@
+{
+  "name": "talksullae-room-api",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": "22"
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test test/policy.test.js",
+    "check": "node --check index.js && node --check src/roomService.js && node --check src/policy.js",
+    "test:emulator": "node --test --test-concurrency=1 test/roomService.test.js test/rules.test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "14.5.0",
+    "firebase-functions": "7.4.0"
+  },
+  "devDependencies": {
+    "firebase": "13.2.0",
+    "@firebase/rules-unit-testing": "6.0.0"
+  }
+}

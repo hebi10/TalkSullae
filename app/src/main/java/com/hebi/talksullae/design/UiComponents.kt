@@ -29,6 +29,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
@@ -181,12 +184,25 @@ fun MessageBubble(message: MessagePreview) {
         horizontalArrangement = if (message.isOwn) Arrangement.End else Arrangement.Start
     ) {
         Column(horizontalAlignment = if (message.isOwn) Alignment.End else Alignment.Start) {
-            Text(
-                message.sender,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(bottom = 4.dp)
-            )
+            ) {
+                message.avatar?.let {
+                    Text(
+                        it,
+                        modifier = Modifier.clearAndSetSemantics {},
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Text(
+                    message.sender,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) Color(0xFF26282D)
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Surface(
                 color = if (message.isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                 shape = CardShape

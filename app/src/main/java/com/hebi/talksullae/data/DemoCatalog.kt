@@ -23,7 +23,8 @@ data class GamePreview(
 data class MessagePreview(
     val sender: String,
     val text: String,
-    val isOwn: Boolean = false
+    val isOwn: Boolean = false,
+    val avatar: String? = null
 )
 
 data class RankingPreview(
@@ -53,11 +54,11 @@ object DemoCatalog {
     )
 
     val anonymousMessages = listOf(
-        MessagePreview("고양이", "무조건 난 살아남을 자신 있음."),
-        MessagePreview("토끼", "너 요리도 못 하잖아."),
-        MessagePreview("나 · 부엉이", "일단 나무부터 구해야 하는 거 아냐?", true),
-        MessagePreview("강아지", "난 물부터 확보할 거야."),
-        MessagePreview("여우", "도구부터 만들어야지.")
+        MessagePreview("고양이", "무조건 난 살아남을 자신 있음.", avatar = "🐱"),
+        MessagePreview("토끼", "너 요리도 못 하잖아.", avatar = "🐰"),
+        MessagePreview("나 · 부엉이", "일단 나무부터 구해야 하는 거 아냐?", isOwn = true, avatar = "🦉"),
+        MessagePreview("강아지", "난 물부터 확보할 거야.", avatar = "🐶"),
+        MessagePreview("여우", "도구부터 만들어야지.", avatar = "🦊")
     )
 
     val ranking = listOf(

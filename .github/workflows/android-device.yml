@@ -67,13 +67,15 @@ jobs:
             adb shell am force-stop com.hebi.talksullae
             adb shell am start -n com.hebi.talksullae/.MainActivity
             sleep 3
+            python3 scripts/dismiss_launcher_anr.py
             adb exec-out screencap -p > screenshots/home-default.png
             adb shell settings put system font_scale 2.0
             adb shell am force-stop com.hebi.talksullae
             adb shell am start -n com.hebi.talksullae/.MainActivity
             sleep 3
+            python3 scripts/dismiss_launcher_anr.py
             adb exec-out screencap -p > screenshots/home-font-200.png
-            python3 scripts/capture_2b_ui.py || echo "::warning::2-B preview captures incomplete; inspect screenshots/2b/capture-report.json"
+            python3 scripts/capture_2b_ui.py
       - name: Upload emulator reports and captures
         if: always()
         uses: actions/upload-artifact@v4

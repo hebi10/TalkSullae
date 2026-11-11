@@ -10,6 +10,7 @@ import subprocess
 import time
 from pathlib import Path
 import xml.etree.ElementTree as ET
+from dismiss_launcher_anr import dismiss_launcher_dialog
 
 OUT = Path("screenshots/2b")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -26,6 +27,7 @@ def adb(*args, data=False):
 
 
 def screenshot(name):
+    dismiss_launcher_dialog()
     (OUT / f"{name}.png").write_bytes(adb("exec-out", "screencap", "-p", data=True))
     report["screenshots"].append(f"{name}.png")
 
@@ -69,6 +71,7 @@ def tap_text(needle):
             report["steps"].append(needle)
             time.sleep(1.3)
             return
+        dismiss_launcher_dialog()
         time.sleep(1.0)
     raise RuntimeError(f"Cannot find Android UI label: {needle}")
 
