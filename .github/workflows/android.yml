@@ -35,8 +35,57 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Install Android SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Restore private Firebase configuration
+        env:
+          FIREBASE_ANDROID_CONFIG: ${{ secrets.FIREBASE_ANDROID_GOOGLE_SERVICES_JSON }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          raw = os.environ.get("FIREBASE_ANDROID_CONFIG", "")
+          if raw:
+              config = json.loads(raw)
+              assert config["project_info"]["project_id"] == "talksullae", "Unexpected Firebase project"
+              client = next(c for c in config["client"] if c["client_info"]["android_client_info"]["package_name"] == "com.hebi.talksullae")
+              assert any(o.get("client_type") == 3 and o.get("client_id") for o in client.get("oauth_client", [])), "Web OAuth client missing"
+              path = Path("app/google-services.json")
+              descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+              with os.fdopen(descriptor, "w") as output:
+                  output.write(raw)
+              print("Private Firebase configuration validated and restored")
+          else:
+              print("Firebase configuration absent; building the local demo")
+          PY
       - name: Verify debug build
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug --stacktrace
+      - name: Verify Firebase build evidence
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, re, xml.etree.ElementTree as ET
+          from pathlib import Path
+          apk = Path("app/build/outputs/apk/debug/app-debug.apk")
+          source = Path("app/google-services.json")
+          configured = source.exists()
+          if configured:
+              config = json.loads(source.read_text())
+              client = next(c for c in config["client"] if c["client_info"]["android_client_info"]["package_name"] == "com.hebi.talksullae")
+              app_id = client["client_info"]["mobilesdk_app_id"]
+              web_ids = {o["client_id"] for o in client["oauth_client"] if o["client_type"] == 3}
+              build_config = Path("app/build/generated/source/buildConfig/debug/com/hebi/talksullae/BuildConfig.java").read_text()
+              assert re.search(r"FIREBASE_CONFIGURED\s*=\s*true\s*;", build_config), "Firebase build flag is disabled"
+              values = {}
+              for resource in Path("app/build/generated/res/google-services").rglob("values.xml"):
+                  values.update({entry.attrib.get("name"): entry.text for entry in ET.parse(resource).getroot()})
+              assert values.get("google_app_id") == app_id, "Firebase app resource mismatch"
+              assert values.get("default_web_client_id") in web_ids, "Google login resource mismatch"
+          result = {"firebaseConfigured": configured, "projectId": "talksullae" if configured else None, "packageName": "com.hebi.talksullae", "apkSha256": hashlib.sha256(apk.read_bytes()).hexdigest()}
+          destination = Path("build-evidence")
+          destination.mkdir(exist_ok=True)
+          (destination / "firebase-build.json").write_text(json.dumps(result, indent=2) + "\n")
+          print(json.dumps(result))
+          PY
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk > build-evidence/signing-report.txt
+          sha256sum app/build/outputs/apk/debug/app-debug.apk > build-evidence/apk.sha256
       - name: Upload build reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,4 +102,7 @@ jobs:
         with:
           name: talksullae-debug-apk
           retention-days: 7
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            build-evidence/
+
