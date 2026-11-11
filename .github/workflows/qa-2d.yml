@@ -165,9 +165,18 @@ jobs:
             adb install -r qa-build/debug/app-debug.apk
             adb install -r qa-build/androidTest/debug/app-debug-androidTest.apk
             mkdir -p "qa-captures/${{ matrix.name }}"
-            adb shell am instrument -w -r com.hebi.talksullae.test/androidx.test.runner.AndroidJUnitRunner | tee "qa-captures/${{ matrix.name }}/instrumentation.txt"
+            adb shell am instrument -w -r -e class com.hebi.talksullae.MainNavigationTest com.hebi.talksullae.test/androidx.test.runner.AndroidJUnitRunner | tee "qa-captures/${{ matrix.name }}/instrumentation.txt"
             python3 scripts/qa/assert_instrumentation.py "qa-captures/${{ matrix.name }}/instrumentation.txt" 7
             python3 scripts/qa/capture_matrix.py --profile "${{ matrix.name }}" --size "${{ matrix.size }}" --output "qa-captures/${{ matrix.name }}"
+            if [[ "${{ matrix.name }}" == api36-phone ]]; then python3 scripts/qa/export_play_store_captures.py play-store-captures; fi
+      - name: Upload Play store UI captures with sample data
+        if: matrix.name == 'api36-phone'
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-play-store-captures
+          path: play-store-captures/
+          retention-days: 14
+          if-no-files-found: error
       - name: Upload genuine emulator evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -49,16 +49,18 @@ import com.hebi.talksullae.design.PrimaryAction
 import com.hebi.talksullae.design.SectionTitle
 import com.hebi.talksullae.firebase.CloudMember
 import com.hebi.talksullae.firebase.CloudRoomsRepository
+import com.hebi.talksullae.firebase.OnlineRoomsRepository
 import com.hebi.talksullae.firebase.OnlineRoomsViewModel
 
 @Composable
-fun OnlineRoomsHost(
+internal fun OnlineRoomsHost(
     uid: String,
     accountName: String,
     onClose: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    repository: OnlineRoomsRepository? = null
 ) {
-    val repo = remember { CloudRoomsRepository() }
+    val repo = remember(repository) { repository ?: CloudRoomsRepository() }
     val factory = remember(uid, repo) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -91,7 +93,7 @@ fun OnlineRoomsHost(
             .testTag("online-rooms-host"),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        PreviewNotice("실제 Firebase 계정 · 서버 권한 검증 모드. 채팅·게임·카카오 공유는 별도 개발 단계입니다.")
+        PreviewNotice("초대 코드로 친구를 모으고 가입 요청과 멤버를 관리할 수 있습니다.")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "온라인 방 관리",

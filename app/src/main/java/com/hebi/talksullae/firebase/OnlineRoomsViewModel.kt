@@ -19,8 +19,8 @@ data class OnlineRoomsState(
     val error: String? = null
 )
 
-class OnlineRoomsViewModel(
-    private val repository: CloudRoomsRepository,
+internal class OnlineRoomsViewModel(
+    private val repository: OnlineRoomsRepository,
     private val uid: String
 ) : ViewModel() {
     private val stateMutable = MutableStateFlow(OnlineRoomsState())
