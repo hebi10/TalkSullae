@@ -95,6 +95,23 @@ class TestPlaySafety(unittest.TestCase):
                 deploy(fake, "alpha", bundle, 2, "0.3.0", "테스트")
         self.assertEqual(len(fake.deleted), 1)
 
+    def test_committed_but_unconfirmed_result_retains_commit_flag(self):
+        class NoReadback(FakeClient):
+            def list_tracks(self, edit):
+                if self.created >= 2:
+                    return [{"track":"alpha","releases":[{"versionCodes":["1"],"status":"completed"}]}]
+                return super().list_tracks(edit)
+
+        fake = NoReadback()
+        report = {"api_committed": False}
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "test.aab"
+            bundle.write_bytes(b"0" * 15000)
+            with self.assertRaises(PlaySafetyError):
+                deploy(fake, "alpha", bundle, 2, "0.3.0", "비공개 테스트", report=report)
+        self.assertTrue(report["api_committed"])
+        self.assertEqual(report["verification"], "not_confirmed")
+
     def test_success_requires_commit_then_track_readback(self):
         fake = FakeClient()
         with tempfile.TemporaryDirectory() as tmp:
