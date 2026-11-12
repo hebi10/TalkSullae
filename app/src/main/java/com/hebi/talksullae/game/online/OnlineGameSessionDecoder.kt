@@ -66,6 +66,8 @@ object OnlineGameSessionDecoder {
         val rawPublic = data["publicState"] as? Map<*, *> ?: return null
         val allowed = setOf("prompt", "notice", "options", "publishedResult")
         if (rawPublic.keys.any { it !is String || it !in allowed }) return null
+        if (phase != GamePhase.REVEAL && phase != GamePhase.FINISHED &&
+            rawPublic.containsKey("publishedResult")) return null
         val publicState = rawPublic.entries.associate { (key, value) ->
             key as String to value
         }
