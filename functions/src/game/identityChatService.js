@@ -4,7 +4,6 @@ const {createHash}=require("node:crypto");
 const {FieldValue,Timestamp}=require("firebase-admin/firestore");
 const {HttpsError}=require("firebase-functions/v2/https");
 const {authUid,roomIdValue}=require("../policy");
-const {parseChatMessage}=require("../chatService");
 const {productionRules}=require("./engine");
 const SESSION_ID=/^[a-f0-9]{64}$/;
 const KEY=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
