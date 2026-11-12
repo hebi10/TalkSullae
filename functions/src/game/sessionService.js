@@ -10,7 +10,7 @@ const {
 const {
   SCHEMA_VERSION,TERMINAL_PHASES,LOBBY_PHASES,participantIds,
   requireParticipant,changeLobby,assertReadyToStart,assertTransition,
-  validateTimer,validatePublicState,productionRules,publicSnapshot
+  validateTimer,validatePublicState,validatePhasePublicState,productionRules,publicSnapshot
 } = require("./engine");
 
 const SESSION_ID_PATTERN=/^[a-f0-9]{64}$/;
@@ -254,7 +254,7 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
       phase=setup.phase;
       changes={
         phase,phaseEndsAt:Timestamp.fromMillis(timestamp+setup.durationMs),
-        publicState:validatePublicState(setup.publicState),
+        publicState:validatePhasePublicState(setup.publicState,phase),
         startedAt:Timestamp.fromMillis(timestamp),submissionCount:0
       };
       for(const [playerId,data] of Object.entries(privateByUid)){
@@ -318,7 +318,7 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
         throw new HttpsError("failed-precondition","게임 라운드 전이가 올바르지 않습니다.");
       }
       phase=moved.phase;
-      changes={phase,round:nextRound,publicState:validatePublicState(moved.publicState),
+      changes={phase,round:nextRound,publicState:validatePhasePublicState(moved.publicState,phase),
         submissionCount:0};
       if(phase==="finished"){
         const scores=requireScoreResult(moved,participants);
