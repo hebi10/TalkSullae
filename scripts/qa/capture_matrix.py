@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
+import zlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -45,9 +46,10 @@ def node_bounds(node):
     return tuple(int(part) for part in match.groups()) if match else None
 
 
-def click_bounds(bounds):
+def click_bounds(bounds, *, horizontal_position=0.5):
     x1, y1, x2, y2 = bounds
-    adb("shell", "input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
+    x = x1 + int((x2 - x1) * horizontal_position)
+    adb("shell", "input", "tap", str(x), str((y1 + y2) // 2))
     time.sleep(1)
 
 
@@ -101,19 +103,64 @@ def find_profile_theme_switch(root):
     return node
 
 
+def png_left_edge_luminance(png):
+    if png[:8] != b"\\x89PNG\\r\\n\\x1a\\n" or len(png) < 33:
+        raise RuntimeError("Invalid PNG for theme verification")
+    width, height, depth, color_type, compression, filter_method, interlace = struct.unpack(
+        ">IIBBBBB", png[16:29]
+    )
+    if depth != 8 or color_type not in (2, 6) or interlace != 0 or compression != 0 or filter_method != 0:
+        raise RuntimeError("Unsupported PNG format for theme verification")
+    offset = 8
+    idat = []
+    while offset + 12 <= len(png):
+        length = struct.unpack(">I", png[offset:offset + 4])[0]
+        if offset + length + 12 > len(png):
+            raise RuntimeError("Truncated screenshot PNG")
+        kind = png[offset + 4:offset + 8]
+        if kind == b"IDAT":
+            idat.append(png[offset + 8:offset + 8 + length])
+        offset += length + 12
+        if kind == b"IEND":
+            break
+    bpp = 4 if color_type == 6 else 3
+    raw = zlib.decompress(b"".join(idat))
+    stride = width * bpp + 1
+    if len(raw) != stride * height:
+        raise RuntimeError("Unexpected PNG scanline size")
+    previous = [0] * bpp
+    for y in range(height // 2 + 1):
+        start = y * stride
+        filter_type = raw[start]
+        channel = raw[start + 1:start + 1 + bpp]
+        if filter_type in (0, 1):
+            current = list(channel)
+        elif filter_type in (2, 4):
+            current = [(byte + prev) & 255 for byte, prev in zip(channel, previous)]
+        elif filter_type == 3:
+            current = [(byte + prev // 2) & 255 for byte, prev in zip(channel, previous)]
+        else:
+            raise RuntimeError("Unsupported PNG scanline filter")
+        previous = current
+    return sum(previous[:3]) / 3
+
+
 def toggle_dark_mode():
-    # Accessibility updates can lag behind navigation on slower tablet emulators.
+    # A labelled switch is stable on phones/tablets; its UIAutomator checked state may lag.
     for _ in range(8):
         switch = find_profile_theme_switch(hierarchy())
         if switch is not None:
-            old_state = switch.attrib["checked"]
-            click_bounds(node_bounds(switch))
-            for _ in range(8):
-                updated = find_profile_theme_switch(hierarchy())
-                if updated is not None and updated.attrib["checked"] != old_state:
+            before = png_left_edge_luminance(adb("exec-out", "screencap", "-p", binary=True))
+            click_bounds(node_bounds(switch), horizontal_position=0.85)
+            after = before
+            for _ in range(6):
+                after = png_left_edge_luminance(adb("exec-out", "screencap", "-p", binary=True))
+                if abs(after - before) >= 80:
                     return
                 time.sleep(0.5)
-            raise RuntimeError("Profile theme switch did not change checked state")
+            raise RuntimeError(
+                f"Profile theme background did not change: before={before:.0f}, after={after:.0f}"
+            )
         time.sleep(0.5)
     raise RuntimeError("Profile theme switch was not accessible after navigation")
 
