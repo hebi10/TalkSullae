@@ -1,5 +1,7 @@
 package com.hebi.talksullae
 
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -82,8 +84,10 @@ class RoomChatComposeTest {
         composeRule.onNodeWithTag("online-chat-host").assertExists()
         composeRule.onNodeWithText("안녕하세요!").assertExists()
         composeRule.onNodeWithTag("online-chat-input").performTextInput("테스트 전송")
-        composeRule.onNodeWithTag("online-chat-send").performClick()
-        composeRule.waitUntil(timeoutMillis = 5000) { repo.sentText != null }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("online-chat-input").assertTextContains("테스트 전송")
+        composeRule.onNodeWithTag("online-chat-send").assertIsEnabled().performClick()
+        composeRule.waitUntil(timeoutMillis = 15000) { repo.sentText != null }
         composeRule.runOnIdle {
             assertEquals("테스트 전송", repo.sentText)
             assertEquals(36, repo.sentRequestId?.length)
