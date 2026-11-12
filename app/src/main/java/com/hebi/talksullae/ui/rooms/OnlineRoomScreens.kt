@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,6 +87,23 @@ internal fun OnlineRoomsHost(
     val room = state.selectedRoom
     val selected = state.entries.firstOrNull { it.id == state.selectedId }
     val isOwner = room?.ownerId == uid
+    var chatVisible by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(state.selectedId, selected?.status) {
+        if (state.selectedId == null || selected?.status != "active") {
+            chatVisible = false
+        }
+    }
+
+    if (chatVisible && room != null && selected?.status == "active") {
+        OnlineRoomChatHost(
+            uid = uid,
+            roomId = room.id,
+            roomName = room.name,
+            onBack = { chatVisible = false }
+        )
+        return
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -219,6 +237,11 @@ internal fun OnlineRoomsHost(
             Text(room.description.ifBlank { "설명이 없습니다." })
             Text("참가 ${room.memberCount}명 · 승인 대기 ${room.pendingCount}명")
             Text(if (isOwner) "내 역할: 방장" else "내 역할: 멤버")
+            PrimaryAction(
+                "일반 채팅 열기",
+                onClick = { chatVisible = true },
+                modifier = Modifier.fillMaxWidth().testTag("online-chat-open")
+            )
 
             if (isOwner) {
                 PrimaryAction(
