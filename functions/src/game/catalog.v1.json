@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "games": [
+    {
+      "id": "identity",
+      "rulesVersion": 1,
+      "minPlayers": 4,
+      "maxPlayers": 10,
+      "modes": [
+        "realtime"
+      ],
+      "hasSecretAssignments": true,
+      "hasAnonymousMessages": true
+    },
+    {
+      "id": "liar",
+      "rulesVersion": 1,
+      "minPlayers": 4,
+      "maxPlayers": 10,
+      "modes": [
+        "realtime"
+      ],
+      "hasSecretAssignments": true,
+      "hasAnonymousMessages": false
+    },
+    {
+      "id": "forbidden",
+      "rulesVersion": 1,
+      "minPlayers": 3,
+      "maxPlayers": 10,
+      "modes": [
+        "realtime"
+      ],
+      "hasSecretAssignments": true,
+      "hasAnonymousMessages": false
+    },
+    {
+      "id": "balance",
+      "rulesVersion": 1,
+      "minPlayers": 2,
+      "maxPlayers": 10,
+      "modes": [
+        "realtime",
+        "async"
+      ],
+      "hasSecretAssignments": false,
+      "hasAnonymousMessages": false
+    }
+  ]
+}
