@@ -7,9 +7,9 @@
   },
   "main": "index.js",
   "scripts": {
-    "test": "node --test test/policy.test.js test/safetyReport.test.js test/gameContracts.test.js test/chatService.test.js test/gameEngine.test.js",
-    "check": "node --check index.js && node --check src/roomService.js && node --check src/policy.js && node --check src/safetyReport.js && node --check src/game/contracts.js && node --check src/chatService.js && node --check src/game/engine.js && node --check src/game/sessionService.js",
-    "test:emulator": "node --test --test-concurrency=1 test/roomService.test.js test/rules.test.js test/safetyReportEmulator.test.js test/chatServiceEmulator.test.js test/chatFinalEmulator.test.js test/gameSessionEmulator.test.js test/gameSessionRules.test.js"
+    "test": "node --test test/policy.test.js test/safetyReport.test.js test/gameContracts.test.js test/chatService.test.js test/gameEngine.test.js test/identityRules.test.js",
+    "check": "node --check index.js && node --check src/roomService.js && node --check src/policy.js && node --check src/safetyReport.js && node --check src/game/contracts.js && node --check src/chatService.js && node --check src/game/engine.js && node --check src/game/sessionService.js && node --check src/game/identityRules.js && node --check src/game/identityChatService.js",
+    "test:emulator": "node --test --test-concurrency=1 test/roomService.test.js test/rules.test.js test/safetyReportEmulator.test.js test/chatServiceEmulator.test.js test/chatFinalEmulator.test.js test/gameSessionEmulator.test.js test/gameSessionRules.test.js test/identityMultiplayerEmulator.test.js test/identityChatRules.test.js"
   },
   "dependencies": {
     "firebase-admin": "14.5.0",
