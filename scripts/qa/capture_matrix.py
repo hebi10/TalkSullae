@@ -104,7 +104,7 @@ def find_profile_theme_switch(root):
 
 
 def png_left_edge_luminance(png):
-    if png[:8] != b"\\x89PNG\\r\\n\\x1a\\n" or len(png) < 33:
+    if png[:8] != b"\x89PNG\r\n\x1a\n" or len(png) < 33:
         raise RuntimeError("Invalid PNG for theme verification")
     width, height, depth, color_type, compression, filter_method, interlace = struct.unpack(
         ">IIBBBBB", png[16:29]
