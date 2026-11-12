@@ -72,6 +72,13 @@ class InternalPlayTests(unittest.TestCase):
         self.assertTrue(result["requires_play_console_initialization"])
         self.assertFalse(result["api_committed"])
 
+    def test_deployment_preflight_requires_initialized_qa_track(self):
+        fake = FakeClient(prior=2, has_qa=False)
+        with self.assertRaisesRegex(PlaySafetyError, "Play Console must initialize"):
+            check_preflight(fake, "qa", 3, require_existing_qa=True)
+        self.assertEqual(fake.calls, [])
+        self.assertEqual(len(fake.deleted), 1)
+
     def test_duplicate_code_preflight_fails(self):
         fake = FakeClient(prior=2)
         with self.assertRaisesRegex(PlaySafetyError, "versionCode"):
