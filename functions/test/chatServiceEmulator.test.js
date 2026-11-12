@@ -3,7 +3,7 @@
 const {before, after, test} = require("node:test");
 const assert = require("node:assert/strict");
 const {initializeApp, deleteApp} = require("firebase-admin/app");
-const {getFirestore} = require("firebase-admin/firestore");
+const {getFirestore, Timestamp} = require("firebase-admin/firestore");
 const {sendRoomMessage} = require("../src/chatService");
 const {createRoom, requestJoin, createInvitation, changeMember} = require("../src/roomService");
 
@@ -88,6 +88,8 @@ test("revoked member loses permission and owner cannot forge another sender", as
 test("rate guard refuses bursts with new request IDs", async () => {
   const roomId = await roomWithOwner();
   await sendRoomMessage(db, message(roomId, 7));
+  await db.collection("rooms").doc(roomId).collection("chatRateLimits").doc("owner")
+    .set({lastSentAt: Timestamp.fromMillis(Date.now() + 5000)});
   await assert.rejects(sendRoomMessage(db, message(roomId, 8, "연속 메시지")), error =>
     error?.code === "resource-exhausted");
   const list = await db.collection("rooms").doc(roomId).collection("messages").get();
