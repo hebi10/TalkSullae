@@ -165,7 +165,7 @@ function publicSnapshot(doc){
     revision:doc.revision,
     round:doc.round,
     participants:doc.participants,
-    phaseEndsAt:doc.phaseEndsAt||null,
+    deadlineEpochMillis:doc.phaseEndsAt?.toMillis?.()||null,
     publicState:validatePublicState(doc.publicState)
   };
 }
