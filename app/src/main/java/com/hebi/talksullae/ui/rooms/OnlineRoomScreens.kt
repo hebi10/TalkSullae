@@ -88,11 +88,25 @@ internal fun OnlineRoomsHost(
     val selected = state.entries.firstOrNull { it.id == state.selectedId }
     val isOwner = room?.ownerId == uid
     var chatVisible by rememberSaveable { mutableStateOf(false) }
+    var identityVisible by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state.selectedId, selected?.status) {
         if (state.selectedId == null || selected?.status != "active") {
             chatVisible = false
+            identityVisible = false
         }
+    }
+
+    if (identityVisible && room != null && selected?.status == "active") {
+        OnlineIdentityGameHost(
+            uid = uid,
+            roomId = room.id,
+            roomName = room.name,
+            ownerId = room.ownerId,
+            members = state.members.filter { it.status == "active" },
+            onBack = { identityVisible = false }
+        )
+        return
     }
 
     if (chatVisible && room != null && selected?.status == "active") {
@@ -239,8 +253,13 @@ internal fun OnlineRoomsHost(
             Text(if (isOwner) "내 역할: 방장" else "내 역할: 멤버")
             PrimaryAction(
                 "일반 채팅 열기",
-                onClick = { chatVisible = true },
+                onClick = { identityVisible = false; chatVisible = true },
                 modifier = Modifier.fillMaxWidth().testTag("online-chat-open")
+            )
+            PrimaryAction(
+                "너 누구야? 온라인 게임",
+                onClick = { chatVisible = false; identityVisible = true },
+                modifier = Modifier.fillMaxWidth().testTag("identity-game-open")
             )
 
             if (isOwner) {
