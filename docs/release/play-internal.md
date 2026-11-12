@@ -2,7 +2,7 @@
 
 ## 기본 원칙
 - 배포 대상: **내부 테스트만**, Google Play Android Publisher API 트랙 \`qa\`.
-- 소스 패키지: \`com.hebi.talksullae\` · 현재 릴리스 버전 \`0.3.0\` / 코드 \`2\`.
+- 소스 패키지: `com.hebi.talksullae` · 최신 `main` 기준 `0.3.1` / `versionCode=3`.
 - 비공개 \`alpha\`, 공개 \`beta\`, \`production\` 및 기기별 테스트 트랙은 내부 배포 스크립트에서 **거부**합니다.
 - 기존 \`.github/workflows/play-closed.yml\` 및 비공개 트랙 설정은 변경하지 않습니다.
 - 서명 및 Play API 인증을 갖추지 못했다면 **AAB를 업로드하지 않고**, 무엇이 부족한지 안전한 보고서로 남깁니다.
@@ -24,12 +24,64 @@
 - 모든 비밀값은 Secrets에 등록하고 공개 GitHub/문서/로그에 표시하지 않습니다. GalliPick 등 다른 앱의 업로드키를 승인 없이 복사하지 않습니다.
 
 ## 현재 검증 상태 및 남은 작업
-- 현재 \`main\`의 마지막 2-F 설정 보고는 **blocked**였습니다. 사용자 계정에서 최근 Secrets 추가 여부는 이 워크플로의 보호 설정 진단이 실행되어야 확인할 수 있습니다.
+- 최신 내부 테스트 감사 아티팩트(2026-11-11, run #43038827532): `config_status=blocked`, `auth_method=none`, `can_attempt_signed_aab=true`, `can_check_play_api=false`, `versionCode=3`. GitHub WIF/Play API 자격 설정만 주요 배포 인증 차단으로 보고됐습니다.
 - Play Console 앱 생성 및 이전 Alpha 초안 기록은 있으나, 초기 업로드키와 \`qa\` 트랙 접근 권한·최초 AAB 등록 성공 여부는 직접 조회되지 않았습니다.
-- \`versionCode=2\`는 모든 기존 트랙 및 업로드된 AAB의 최고 코드보다 커야 합니다. 이미 업로드한 버전코드라면 릴리스 버전을 올리고 QA를 다시 실행해야 합니다.
-- \`feat/play-privacy-policy\` PR #16은 미병합이고 2-D 태블릿 QA 실패 상태로 확인됐으므로, QA 통과 전 릴리스에 포함하지 않습니다.
+- `versionCode=3`은 모든 기존 Play 업로드/트랙에서 사용된 최대 코드보다 커야 합니다. API `check`로 실조회 전에는 업로드 가능하다고 단정하지 않습니다.
+- 개인정보처리방침의 이전 PR #16은 충돌·중복으로 종료했고, 최신 정책·안전 신고를 보존한 RELEASE-01 PR #20을 `main`(`5133a470`)에 병합했습니다. Android API 29/35/36 휴대전화·API36 태블릿 QA가 통과했습니다.
 - 내부 테스트는 완전한 스토어 설정 이전에 시작할 수 있으며 최대 100명의 테스터에게 배포 가능합니다. 다만 첫 배포가 승인되지 않았거나 테스트 링크가 활성화되지 않으면 실제 설치 성공으로 표시하지 않습니다.
 
 공식 자료:
 https://developers.google.com/android-publisher/tracks
 https://support.google.com/googleplay/android-developer/answer/9845334
+
+## RELEASE-02 — Google Cloud WIF 및 Play Publisher 인증 복구 (2026-11-12)
+
+**판정: 외부 IAM/Play/GitHub 인증 설정 대기. 코드·서명 파일 준비와 Play API 인증 성공을 혼동하지 않습니다.**
+
+- 기준: `main=5133a4706b7d11ce487e3ccda42ef3a3544faaff`, Android `0.3.1 (3)`.
+- 2026-11-11 최신 비밀값 비출력 감사: [Actions #43038827532](https://github.com/hebi10/TalkSullae/actions/runs/43038827532) → `auth_method=none`, `config_status=blocked`, 서명 설정은 준비됨.
+- [WIF 인증 실패 #42997998369](https://github.com/hebi10/TalkSullae/actions/runs/42997998369): `unauthorized_client` / `The given credential is rejected by the attribute condition.`. GalliPick의 성공한 제공자가 톡술래 저장소를 받아들이지 않아 **Google Cloud 토큰 발급 이전**에 차단됨.
+- [GalliPick 정상 인증/배포 #42947356135](https://github.com/hebi10/GalliPick/actions/runs/42947356135): WIF 경로 작동 확인. 기존 GalliPick의 배포 설정을 훼손하거나 무제한으로 넓히지 않습니다.
+- 현재 연결 도구에서 Google Cloud IAM/Play Console 권한과 GitHub Actions Variables를 직접 변경하거나 Play API 호출을 수행할 수 없으므로 인증 **완료로 표기하지 않음**.
+
+### A. Google Cloud IAM (관리자 권한 필요)
+
+1. Google Cloud Console → IAM 및 관리자 → Workload Identity Federation에서 GalliPick이 사용 중인 Provider의 `Attribute conditions`를 읽기 전용으로 확인합니다. 정확한 기존 식을 검토하지 않고 덮어쓰지 않습니다.
+2. 권장: GalliPick과 별도의 최소 권한 TalkSullae 전용 Pool/Provider 및 서비스 계정(또는 명확히 격리된 신뢰 구간)을 마련합니다. 기존 Provider 조건 수정이 꼭 필요한 경우에도 GalliPick 접근을 유지하면서 추가 저장소·브랜치만 명시적으로 허용합니다.
+3. 톡술래 전용 Provider는 GitHub OIDC issuer `https://token.actions.githubusercontent.com/`를 사용하고, Repository ID `1452186114`, Owner ID `80847404`, `main`만 허용하도록 구성합니다. 예시 CEL 조건:
+
+```cel
+assertion.repository_id == '1452186114' &&
+assertion.repository_owner_id == '80847404' &&
+assertion.ref == 'refs/heads/main'
+```
+
+4. WIF의 attribute mapping은 최소 `google.subject=assertion.sub`, 필요 시 `attribute.repository_id=assertion.repository_id`를 포함합니다. Cloud 서비스 계정의 권한에는 정확히 해당 저장소 신원(예: `principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/attribute.repository_id/1452186114`)에만 `roles/iam.workloadIdentityUser`를 부여합니다. GitHub 저장소 전체나 Pool 전체에 무제한 권한을 주지 않습니다.
+5. Android Publisher API가 서비스 계정이 속한 Google Cloud 프로젝트에서 활성화되어 있는지 확인합니다.
+
+### B. Google Play Console (소유자 권한 필요)
+
+1. Play Console → 사용자 및 권한에서 승인한 서비스 계정 이메일을 등록/확인합니다. GalliPick 앱의 기존 권한이 톡술래에 자동 적용되었다고 가정하지 않습니다.
+2. 앱 `com.hebi.talksullae`에 대한 앱 정보 조회 권한과 **테스트 트랙 앱 출시(Release apps to testing tracks)** 권한을 최소 범위로 부여합니다. 공개/프로덕션 출시 권한은 부여하지 않습니다.
+3. 내부 테스트 트랙 `qa`가 앱에 존재하는지와 기존 업로드된 최고 `versionCode`를 확인합니다. 앱의 초기 등록/심사 제한은 Play Console에서 별도 확인합니다.
+
+### C. GitHub Actions 인증 연결
+
+1. 톡술래 저장소 Settings → Secrets and variables → Actions → **Repository variables**에 다음 두 값을 설정합니다. 키 문자열 원문을 PR/이슈/로그에 출력하지 않습니다.
+   - `PLAY_WORKLOAD_IDENTITY_PROVIDER`: 톡술래에 허용된 Provider의 전체 리소스 이름(`projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/providers/PROVIDER_ID`).
+   - `PLAY_SERVICE_ACCOUNT`: Play Console에서 해당 앱 권한을 부여한 서비스 계정 이메일.
+2. `play-preflight`와 메인 Push `audit`은 GitHub Environment를 사용하지 않으므로 **Repository variables**로 등록해야 합니다. `play-internal` Environment에만 변수를 두면 사전 검사에서 읽지 못합니다.
+3. 서비스 계정 JSON Secret `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`은 승인된 별도 경로이지만, 가능한 한 장기 키를 만들지 않는 WIF를 우선합니다. 기존 톡술래 업로드키 Secrets와 지문 변수는 변경하지 않습니다.
+4. `PLAY_CLOSED_TRACK`은 내부 테스트에 필요하지 않으며, 내부 트랙은 `qa`로 고정되어 있습니다.
+
+### D. 무배포 인증 재검증 및 성공 기준
+
+1. [Play internal-testing guarded publisher](https://github.com/hebi10/TalkSullae/actions/workflows/play-internal.yml) → `Run workflow` → Branch `main` → Mode `check`를 실행합니다. **AAB 업로드 없음**.
+2. WIF 인증 성공, Android Publisher API 앱 `com.hebi.talksullae` 접근 성공, `qa` 트랙 조회, 기존 업로드 최고 코드 대비 신규 `versionCode=3` 사용 가능성 확인이 모두 필요합니다.
+3. 해당 run의 `play-preflight.json`에서 인증·앱·트랙 접근 성공을 확인하고 이슈 #18에 **비밀값 없이** 증빙을 남긴 경우에만 RELEASE-02 완료 처리합니다. 이 단계에서 빌드/배포를 임의 실행하지 않습니다.
+4. 이후 RELEASE-03은 기존 고정 업로드키로 최신 AAB를 생성하여 `build` 검증하고, 별도 승인 범위에서 `deploy` → Android Publisher API commit/readback → Play Console 테스터 설치 검증 순서로 진행합니다.
+
+공식 자료:
+- https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines
+- https://developers.google.com/android-publisher/getting_started
+- https://support.google.com/googleplay/android-developer/answer/9859348
