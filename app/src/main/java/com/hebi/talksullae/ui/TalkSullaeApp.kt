@@ -797,7 +797,11 @@ private fun ProfileScreen(
         ContentCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("다크 모드", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                Switch(checked = darkTheme, onCheckedChange = onThemeChange)
+                Switch(
+                    checked = darkTheme,
+                    onCheckedChange = onThemeChange,
+                    modifier = Modifier.semantics { contentDescription = "프로필 다크 모드 전환" }
+                )
             }
         }
         PrimaryAction("설정 화면", onClick = onSettings, modifier = Modifier.fillMaxWidth())
@@ -812,12 +816,21 @@ private fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
+    val privacyPolicyUrl = "https://github.com/hebi10/TalkSullae/blob/main/docs/privacy-policy.md"
     var privacyLinkFailed by remember { mutableStateOf(false) }
+    val openPolicyLink: (String) -> Unit = { url ->
+        privacyLinkFailed = try {
+            uriHandler.openUri(url)
+            false
+        } catch (_: IllegalArgumentException) {
+            true
+        }
+    }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PreviewNotice("계정·알림·개인정보 실제 변경은 아직 사용할 수 없습니다.")
+        PreviewNotice("알림 설정과 계정 자동 삭제·차단은 준비 중입니다. 삭제 요청은 아래 링크를 이용할 수 있습니다.")
         ContentCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("다크 모드", modifier = Modifier.weight(1f))
@@ -832,15 +845,8 @@ private fun SettingsScreen(
             Text("안전 신고")
         }
         TextButton(
-            onClick = {
-                privacyLinkFailed = try {
-                    uriHandler.openUri("https://github.com/hebi10/TalkSullae/blob/main/docs/privacy-policy.md")
-                    false
-                } catch (_: IllegalArgumentException) {
-                    true
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
+            onClick = { openPolicyLink(privacyPolicyUrl) },
+            modifier = Modifier.fillMaxWidth().testTag("privacy-policy-open")
         ) {
             Text("개인정보처리방침 보기")
         }
@@ -849,7 +855,13 @@ private fun SettingsScreen(
         }
         ContentCard {
             Text("계정 삭제·차단", style = MaterialTheme.typography.titleMedium)
-            Text("1-C에서 상태별 UI를 설계했습니다. 서버 연동 후 구현합니다.")
+            Text("계정 삭제는 요청 링크로 접수하며, 앱 내 자동 삭제와 사용자 차단은 준비 중입니다.")
+            TextButton(
+                onClick = { openPolicyLink("$privacyPolicyUrl#account-deletion") },
+                modifier = Modifier.fillMaxWidth().testTag("account-deletion-request-open")
+            ) {
+                Text("계정 및 데이터 삭제 요청")
+            }
         }
         PrimaryAction("내 방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
     }

@@ -3,6 +3,7 @@ package com.hebi.talksullae
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -91,6 +92,17 @@ class MainNavigationTest {
         composeRule.onNodeWithTag("rooms-state-EMPTY").performClick()
         composeRule.onNodeWithText("아직 참여한 방이 없습니다").assertExists()
         composeRule.onNodeWithTag("rooms-create").assertExists()
+    }
+
+    @Test
+    fun profileThemeAndSettingsExposePrivacyAndDeletionRequest() {
+        openDemo()
+        composeRule.onNodeWithTag("main-tab-profile").performClick()
+        composeRule.onNodeWithContentDescription("프로필 다크 모드 전환").assertExists()
+        composeRule.onNodeWithText("설정 화면").performScrollTo().performClick()
+        composeRule.onNodeWithTag("privacy-policy-open").assertExists()
+        composeRule.onNodeWithTag("account-deletion-request-open").assertExists()
+        composeRule.onNodeWithTag("safety-report-open").assertExists()
     }
 
     @Test
