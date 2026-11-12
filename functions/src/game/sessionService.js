@@ -278,8 +278,10 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
         throw new HttpsError("already-exists","이미 이 단계에 제출했습니다.");
       }
       const rule=rules.require(session.gameId,session.rulesVersion);
+      const privateDoc=await tx.get(sessionRef.collection("privateAssignments").doc(uid));
+      const personalData=privateDoc.exists?privateDoc.get("data"):null;
       const clean=requireServerState(rule.validateSubmission({
-        session,actorUid:uid,choice:env.payload.choice
+        session,actorUid:uid,choice:env.payload.choice,personalData
       }));
       changes={submissionCount:(session.submissionCount||0)+1};
       extraWrites.push(()=>tx.create(submissionRef,{
@@ -292,10 +294,11 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
         throw new HttpsError("failed-precondition","마감 가능한 단계가 아닙니다.");
       }
       const submissions={};
-      if(["playing","voting"].includes(session.phase)){
+      const submissionPhase=session.phase==="reveal"?"voting":session.phase;
+      if(["playing","voting"].includes(submissionPhase)){
         const docs=await Promise.all(participants.map(playerId=>
           tx.get(sessionRef.collection("privateSubmissions")
-            .doc(submissionId(playerId,session.round,session.phase)))));
+            .doc(submissionId(playerId,session.round,submissionPhase)))));
         docs.forEach((snap,index)=>{
           if(snap.exists)submissions[participants[index]]=snap.get("data");
         });
@@ -305,8 +308,24 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
       if(session.phaseEndsAt.toMillis()>timestamp && !allSubmitted){
         throw new HttpsError("failed-precondition","게임 단계의 제한 시간이 남아 있습니다.");
       }
+      const assignments={};
+      const memberNames={};
+      if(session.gameId==="identity" && ["voting","reveal"].includes(session.phase)){
+        const [secrets,members]=await Promise.all([
+          Promise.all(participants.map(playerId=>
+            tx.get(sessionRef.collection("privateAssignments").doc(playerId)))),
+          Promise.all(participants.map(playerId=>
+            tx.get(roomRef.collection("members").doc(playerId))))
+        ]);
+        secrets.forEach((secret,index)=>{
+          if(secret.exists)assignments[participants[index]]=secret.get("data");
+        });
+        members.forEach((member,index)=>{
+          memberNames[participants[index]]=member.exists?member.get("displayName"):"멤버";
+        });
+      }
       const rule=rules.require(session.gameId,session.rulesVersion);
-      const moved=rule.advance({session,submissions,nowMillis:timestamp});
+      const moved=rule.advance({session,submissions,assignments,memberNames,nowMillis:timestamp});
       if(!nonemptyObject(moved)||typeof moved.phase!=="string"){
         throw new HttpsError("failed-precondition","게임 전이 응답이 잘못되었습니다.");
       }
@@ -377,6 +396,11 @@ async function getMyGameSession(db,request,rules=productionRules){
     personal=rule.projectForPlayer({session,actorUid:uid,personalData});
     if(personal!==null&&!nonemptyObject(personal)){
       throw new HttpsError("internal","게임 개인 상태가 잘못되었습니다.");
+    }
+    if(personal!==null && session.phase==="voting"){
+      const vote=await sessionRef.collection("privateSubmissions")
+        .doc(submissionId(uid,session.round,"voting")).get();
+      personal={...personal,submitted:vote.exists};
     }
   }
   return {public:publicSnapshot(session),personal};
