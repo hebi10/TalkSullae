@@ -25,6 +25,19 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Public room chat is read-only to active members.
+      // Every write is server-authoritative via sendRoomMessage.
+      match /messages/{messageId} {
+        allow get: if activeMember(roomId);
+        allow list: if activeMember(roomId)
+          && request.query.limit != null && request.query.limit <= 30;
+        allow create, update, delete: if false;
+      }
+
+      match /chatRateLimits/{userId} {
+        allow read, write: if false;
+      }
+
       match /{other=**} {
         allow read, write: if false;
       }
