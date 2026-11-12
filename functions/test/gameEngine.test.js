@@ -4,7 +4,7 @@ const {test} = require("node:test");
 const assert = require("node:assert/strict");
 const {
   changeLobby, lobbySnapshot,assertTransition,assertReadyToStart,
-  validateTimer,validatePublicState,makeRuleRegistry,productionRules,publicSnapshot
+  validateTimer,validatePublicState,validatePhasePublicState,makeRuleRegistry,productionRules,publicSnapshot
 } = require("../src/game/engine");
 const {parseCreate,parseAction,validateSessionRef,submissionId} = require("../src/game/sessionService");
 
@@ -67,6 +67,9 @@ test("public session projection is an allowlist excluding identities and role se
   assert.equal(projection.createdBy,undefined);
   assert.throws(()=>validatePublicState({privateAssignments:{owner:"secret"}}),/비공개/);
   assert.throws(()=>validatePublicState({options:["x".repeat(101)]}),/선택지/);
+  assert.throws(()=>validatePhasePublicState({publishedResult:"비밀"}, "playing"),/결과 공개 전/);
+  assert.deepEqual(validatePhasePublicState({publishedResult:"공개"}, "reveal"),
+    {publishedResult:"공개"});
 });
 
 test("registry is fail closed for planned but not-yet-implemented games",()=>{
