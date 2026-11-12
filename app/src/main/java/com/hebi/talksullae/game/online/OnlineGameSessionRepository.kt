@@ -1,9 +1,24 @@
 package com.hebi.talksullae.game.online
 
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
+
+internal data class IdentityChatMessage(
+    val id: String,
+    val alias: String,
+    val text: String,
+    val createdAtMillis: Long?
+)
+
+internal data class IdentityChatPage(
+    val messages: List<IdentityChatMessage>,
+    val cursor: DocumentSnapshot?,
+    val hasMore: Boolean
+)
 
 internal interface OnlineGameSessionRepository {
     fun watchSession(
@@ -12,6 +27,21 @@ internal interface OnlineGameSessionRepository {
         onResult: (OnlineGameSnapshot?) -> Unit,
         onError: (String) -> Unit
     ): ListenerRegistration
+
+    fun watchIdentityMessages(
+        roomId: String,
+        sessionId: String,
+        onPage: (IdentityChatPage) -> Unit,
+        onError: (String) -> Unit
+    ): ListenerRegistration
+
+    suspend fun loadOlderIdentityMessages(
+        roomId: String, sessionId: String, cursor: DocumentSnapshot
+    ): IdentityChatPage
+
+    suspend fun sendIdentityMessage(
+        roomId: String, sessionId: String, requestId: String, text: String
+    ): String
 
     suspend fun findActiveSession(roomId: String): String?
 
@@ -75,6 +105,57 @@ internal class FirestoreOnlineGameSessionRepository(
     private suspend fun invoke(functionName: String, body: Map<String, Any>): Map<*, *> {
         val result = functions.getHttpsCallable(functionName).call(body).await().data
         return result as? Map<*, *> ?: error("게임 서버 응답 형식이 올바르지 않습니다.")
+    }
+
+    private fun identityQuery(roomId: String, sessionId: String) =
+        db.collection("rooms").document(roomId)
+            .collection("gameSessions").document(sessionId)
+            .collection("publicMessages")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(30L)
+
+    private fun identityPage(docs: List<DocumentSnapshot>): IdentityChatPage =
+        IdentityChatPage(
+            messages = docs.mapNotNull { snapshot ->
+                val alias = snapshot.getString("alias") ?: return@mapNotNull null
+                val text = snapshot.getString("text") ?: return@mapNotNull null
+                IdentityChatMessage(
+                    id = snapshot.id, alias = alias, text = text,
+                    createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time
+                )
+            },
+            cursor = docs.lastOrNull(),
+            hasMore = docs.size == 30
+        )
+
+    override fun watchIdentityMessages(
+        roomId: String,
+        sessionId: String,
+        onPage: (IdentityChatPage) -> Unit,
+        onError: (String) -> Unit
+    ): ListenerRegistration = identityQuery(roomId, sessionId)
+        .addSnapshotListener { snapshot, error ->
+            if (error != null) onError("익명 채팅 기록을 불러올 수 없습니다.")
+            else if (snapshot != null) onPage(identityPage(snapshot.documents))
+        }
+
+    override suspend fun loadOlderIdentityMessages(
+        roomId: String,
+        sessionId: String,
+        cursor: DocumentSnapshot
+    ): IdentityChatPage {
+        val result = identityQuery(roomId, sessionId).startAfter(cursor).get().await()
+        return identityPage(result.documents)
+    }
+
+    override suspend fun sendIdentityMessage(
+        roomId: String, sessionId: String, requestId: String, text: String
+    ): String {
+        val result = invoke("sendIdentityMessage", mapOf(
+            "roomId" to roomId, "sessionId" to sessionId,
+            "requestId" to requestId, "text" to text
+        ))
+        return result["messageId"] as? String ?: error("익명 메시지 저장 결과가 없습니다.")
     }
 
     override suspend fun findActiveSession(roomId: String): String? {
