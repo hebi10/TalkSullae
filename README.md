@@ -21,6 +21,7 @@
 
 ## 문서
 - [톡술래 Google Drive 프로젝트](https://drive.google.com/drive/folders/1XskLt9niOOPdtVxVUO5eXmFMXX9S8qNI)
+- [GAME-00 다중 게임 공통 아키텍처 확정](docs/architecture/GAME-00-multi-game-platform.md) — 카탈로그 v1·세션 계약·보안·서버 판정/버전 정책 (실제 게임 미구현)
 - [서비스 기획서 v1.0](https://docs.google.com/document/d/13BMHPicBwI1kN1XrPsjHYfR4wkXmBz4lUDzcPecptvg/edit)
 - [디자인 설계 PR #1](https://github.com/hebi10/TalkSullae/pull/1) — 1-A~1-C 디자인 문서
 - [Google Drive 화면 설계 v1.0](https://docs.google.com/document/d/1d7A0zC76o42YfEy2HtHzU9IK4HYRJeQEIFr8x1zc9Ps/edit)
