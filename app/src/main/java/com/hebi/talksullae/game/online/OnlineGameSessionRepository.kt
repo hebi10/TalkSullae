@@ -59,10 +59,13 @@ internal class FirestoreOnlineGameSessionRepository(
             } else if (snapshot == null || !snapshot.exists()) {
                 onResult(null)
             } else {
-                val safe = snapshot.data?.toMutableMap()?.apply {
-                    put("deadlineEpochMillis", snapshot.getTimestamp("phaseEndsAt")?.toDate()?.time)
-                }?.let {
-                    OnlineGameSessionDecoder.decode(roomId, sessionId, it, snapshot.metadata.isFromCache)
+                val safe = snapshot.data?.let { raw ->
+                    val fields = mutableMapOf<String, Any?>()
+                    fields.putAll(raw)
+                    fields["deadlineEpochMillis"] = snapshot.getTimestamp("phaseEndsAt")?.toDate()?.time
+                    OnlineGameSessionDecoder.decode(
+                        roomId, sessionId, fields, snapshot.metadata.isFromCache
+                    )
                 }
                 if (safe == null) onError("게임 세션 버전을 해석할 수 없습니다. 앱 업데이트가 필요합니다.")
                 else onResult(safe)
