@@ -47,6 +47,11 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
         mutable.value = RoomChatState()
         listener = repository.watchRecent(roomId, { page ->
             if (activeRoomId == roomId) {
+                val incomingIds = page.messages.map { it.id }.toSet()
+                if (firstPageReceived) {
+                    older = (older + recent.filterNot { it.id in incomingIds })
+                        .associateBy { it.id }.values.toList()
+                }
                 recent = page.messages
                 val firstPage = !firstPageReceived
                 firstPageReceived = true
@@ -66,6 +71,7 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
                 recent = emptyList()
                 older = emptyList()
                 oldestCursor = null
+                firstPageReceived = false
                 mutable.update {
                     it.copy(
                         messages = emptyList(),
