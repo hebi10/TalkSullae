@@ -98,6 +98,14 @@ internal fun OnlineRoomChatHost(
             )
         }
 
+        state.historyError?.let { error ->
+            Text(
+                error,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
         if (state.initialLoading) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
