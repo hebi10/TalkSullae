@@ -149,6 +149,37 @@ test("anonymous chat rate-limits bursts without losing idempotent retry",async()
   assert.equal(docs.size,2);
 });
 
+test("ten distinct members can start while an eleventh participant is rejected",async()=>{
+  const {roomId,members}=await makeRoom();
+  const inv=await rooms.createInvitation(db,{...auth("owner"),data:{roomId}});
+  for(let i=5;i<=11;i++){
+    const uid="player"+i;
+    await rooms.requestJoin(db,{...auth(uid,"친구"+i),data:{code:inv.code}});
+  }
+  const {sessionId}=await game.createGameSession(db,{...auth("owner"),data:{
+    roomId,gameId:"identity",mode:"realtime",requestId:reqId(96)
+  }});
+  let rev=0;
+  const ten=[...members.map(x=>x[0]),...Array.from({length:6},(_,i)=>"player"+(i+5))];
+  for(const uid of ten.slice(1)){
+    const joined=await action(roomId,sessionId,uid,rev,"join",{},100+rev);
+    rev=joined.revision;
+  }
+  await assert.rejects(action(roomId,sessionId,"player11",rev,
+    "join",{},150),e=>e.code==="resource-exhausted");
+  for(const uid of ten){
+    const ready=await action(roomId,sessionId,uid,rev,"set_ready",{ready:true},200+rev);
+    rev=ready.revision;
+  }
+  const begun=await action(roomId,sessionId,"owner",rev,"start",{},250);
+  assert.equal(begun.phase,"playing");
+  const snap=await db.collection("rooms").doc(roomId).collection("gameSessions").doc(sessionId).get();
+  assert.equal(snap.get("publicState.options").length,10);
+  const assignments=await snap.ref.collection("privateAssignments").get();
+  assert.equal(assignments.size,10);
+  assert.equal(new Set(assignments.docs.map(d=>d.get("data.alias"))).size,10);
+});
+
 test("server clock blocks late anonymous chat and conflicting identity votes",async()=>{
   const {roomId,members}=await makeRoom();
   const {sessionId,revision}=await startRoom(roomId,members);
