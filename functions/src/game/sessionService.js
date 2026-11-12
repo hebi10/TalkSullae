@@ -246,6 +246,11 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
       assertTransition(session.phase,setup.phase);
       validateTimer(setup.durationMs);
       const privateByUid=validatePrivateAssignments(setup.privateByUid||{},participants);
+      const descriptor=getGameDescriptor(session.gameId,session.rulesVersion);
+      if(descriptor.hasSecretAssignments &&
+         Object.keys(privateByUid).length!==participants.length){
+        throw new HttpsError("failed-precondition","모든 참가자의 비밀 역할이 배정되지 않았습니다.");
+      }
       phase=setup.phase;
       changes={
         phase,phaseEndsAt:Timestamp.fromMillis(timestamp+setup.durationMs),
