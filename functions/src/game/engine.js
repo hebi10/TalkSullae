@@ -116,6 +116,15 @@ function validatePublicState(state){
   return state;
 }
 
+function validatePhasePublicState(value,phase){
+  const state=validatePublicState(value);
+  if(!["reveal","finished"].includes(phase) &&
+     Object.hasOwn(state,"publishedResult")){
+    throw new HttpsError("failed-precondition","결과 공개 전 비밀 정보를 표시할 수 없습니다.");
+  }
+  return state;
+}
+
 function ruleKey(id,version){return id+"@"+version;}
 
 function makeRuleRegistry(definitions=[]){
@@ -166,13 +175,13 @@ function publicSnapshot(doc){
     round:doc.round,
     participants:doc.participants,
     deadlineEpochMillis:doc.phaseEndsAt?.toMillis?.()||null,
-    publicState:validatePublicState(doc.publicState)
+    publicState:validatePhasePublicState(doc.publicState,doc.phase)
   };
 }
 
 module.exports={
   SCHEMA_VERSION, LOBBY_PHASES, TERMINAL_PHASES, ALLOWED_TRANSITIONS,
   assertTransition, requireParticipant, participantIds, lobbySnapshot,
-  changeLobby, assertReadyToStart, validateTimer, validatePublicState,
+  changeLobby, assertReadyToStart, validateTimer, validatePublicState,validatePhasePublicState,
   makeRuleRegistry,productionRules,publicSnapshot
 };
