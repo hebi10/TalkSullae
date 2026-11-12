@@ -99,6 +99,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      # 'alpha' is the default closed test ID; the Play API must still confirm it exists.
       - name: Validate exact closed track and authentication method
         id: auth-method
         shell: bash
@@ -106,7 +107,7 @@ jobs:
           WIF_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
           WIF_SA: ${{ vars.PLAY_SERVICE_ACCOUNT }}
           PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK || 'alpha' }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -144,7 +145,7 @@ jobs:
           create_credentials_file: false
       - name: Check completed internal release and existing closed track (no upload)
         env:
-          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK || 'alpha' }}
           PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
         run: |
           python3 scripts/release/promote_internal.py check \
@@ -179,7 +180,7 @@ jobs:
           WIF_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
           WIF_SA: ${{ vars.PLAY_SERVICE_ACCOUNT }}
           PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK || 'alpha' }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -217,7 +218,7 @@ jobs:
           create_credentials_file: false
       - name: Promote existing Play AAB versionCode 3 to the approved closed track
         env:
-          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK || 'alpha' }}
           PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
         run: |
           python3 scripts/release/promote_internal.py promote \
