@@ -49,6 +49,14 @@ class PromotionTests(unittest.TestCase):
         gradle = Path(__file__).resolve().parents[2] / "app/build.gradle.kts"
         self.assertEqual(version_from_source(gradle), (3, "0.3.1"))
 
+    def test_missing_track_variable_uses_only_verified_alpha_fallback(self):
+        workflow = (Path(__file__).resolve().parents[2]
+                    / ".github/workflows/play-promote-closed.yml").read_text(encoding="utf-8")
+        fallback = "PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK || 'alpha' }}"
+        self.assertEqual(workflow.count(fallback), 4)
+        self.assertNotIn("PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}", workflow)
+        self.assertIn("--track \"$PLAY_CLOSED_TRACK\"", workflow)
+
     def test_check_only_reads(self):
         fake = FakeClient()
         result = inspect(fake, "alpha")
