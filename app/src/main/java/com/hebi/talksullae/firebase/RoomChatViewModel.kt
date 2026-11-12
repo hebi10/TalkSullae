@@ -25,6 +25,7 @@ internal data class RoomChatState(
     val sending: Boolean = false,
     val fromCache: Boolean = false,
     val readError: String? = null,
+    val historyError: String? = null,
     val sendError: String? = null,
     val info: String? = null
 )
@@ -104,7 +105,7 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
         val roomId = activeRoomId ?: return
         val cursor = oldestCursor ?: return
         if (!mutable.value.canLoadOlder || mutable.value.loadingOlder) return
-        mutable.update { it.copy(loadingOlder = true, readError = null) }
+        mutable.update { it.copy(loadingOlder = true, historyError = null) }
         viewModelScope.launch {
             try {
                 val page = repository.loadOlder(roomId, cursor)
@@ -116,12 +117,12 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
                         messages = merge(),
                         canLoadOlder = page.hasMore && page.oldestSnapshot != null,
                         fromCache = page.fromCache,
-                        readError = null
+                        historyError = null
                     )
                 }
             } catch (_: Exception) {
                 if (activeRoomId == roomId) {
-                    mutable.update { it.copy(readError = "이전 메시지를 불러오지 못했습니다. 다시 시도해 주세요.") }
+                    mutable.update { it.copy(historyError = "이전 메시지를 불러오지 못했습니다. 다시 시도해 주세요.") }
                 }
             } finally {
                 if (activeRoomId == roomId) mutable.update { it.copy(loadingOlder = false) }
