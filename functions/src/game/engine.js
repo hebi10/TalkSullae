@@ -157,9 +157,10 @@ function makeRuleRegistry(definitions=[]){
   });
 }
 
-// Intentional fail-closed production registry. GAME-03/04 will explicitly register audited
-// identity/liar/forbidden/balance modules; arbitrary JavaScript is never loaded remotely.
-const productionRules=makeRuleRegistry();
+// Only audited identity@1 is activated. The remaining planned games stay fail-closed.
+// Arbitrary client-supplied or remotely downloaded game modules are never executable.
+const identityRules=require("./identityRules");
+const productionRules=makeRuleRegistry([identityRules]);
 
 function publicSnapshot(doc){
   requirePhase(doc.phase);
