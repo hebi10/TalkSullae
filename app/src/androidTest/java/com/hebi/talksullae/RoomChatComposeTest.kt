@@ -21,8 +21,8 @@ class RoomChatComposeTest {
     @get:Rule val composeRule = createComposeRule()
 
     private class FakeChatRepository : RoomChatRepository {
-        var sentText: String? = null
-        var sentRequestId: String? = null
+        @Volatile var sentText: String? = null
+        @Volatile var sentRequestId: String? = null
 
         override fun watchRecent(
             roomId: String,
@@ -60,8 +60,8 @@ class RoomChatComposeTest {
             requestId: String,
             text: String
         ): String {
-            sentText = text
             sentRequestId = requestId
+            sentText = text
             return "stored-message-id"
         }
     }
