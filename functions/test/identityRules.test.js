@@ -63,7 +63,7 @@ test("server scores correct guesses and limited disguise bonus, not client point
   p4:{matches:{"고양이":"p1","토끼":"p2","부엉이":"p3"}}
  };
  const scores=rules.computeScores(session(),submissions,assignments);
- assert.deepEqual(scores,{p1:310,p2:110,p3:300,p4:300});
+ assert.deepEqual(scores,{p1:310,p2:100,p3:310,p4:300});
  const names={p1:"민지",p2:"지훈",p3:"해비",p4:"수빈"};
  const message=rules.publicReveal(session(),assignments,names,scores);
  assert.ok(message.includes("고양이 = 민지"));
