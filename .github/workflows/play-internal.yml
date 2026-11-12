@@ -132,7 +132,7 @@ jobs:
           fi
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             MODE=deploy
-            git show -1 --format=%B | grep -Fq '[deploy-internal]' ||
+            [[ "$(git log -1 --format=%B)" == *'[deploy-internal]'* ]] ||
               { echo 'Release intent was not explicit.' >&2; exit 1; }
           else
             MODE="$REQUESTED_MODE"
