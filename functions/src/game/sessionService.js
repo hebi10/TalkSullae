@@ -377,7 +377,38 @@ async function getMyGameSession(db,request,rules=productionRules){
   return {public:publicSnapshot(session),personal};
 }
 
+async function findActiveGameSession(db,request){
+  const uid=authUid(request);
+  if(!allowed(request.data,new Set(["roomId"])) ||
+     Object.keys(request.data).length!==1){
+    throw new HttpsError("invalid-argument","방 ID만 전달해야 합니다.");
+  }
+  const roomId=roomIdValue(request.data.roomId);
+  const roomRef=db.collection("rooms").doc(roomId);
+  const [room,member]=await Promise.all([
+    roomRef.get(),roomRef.collection("members").doc(uid).get()
+  ]);
+  requireActive(room,member);
+  const sessionId=room.get("activeGameSessionId");
+  if(typeof sessionId!=="string" || !SESSION_ID_PATTERN.test(sessionId)){
+    return {sessionId:null};
+  }
+  const doc=await roomRef.collection("gameSessions").doc(sessionId).get();
+  if(!doc.exists){
+    throw new HttpsError("failed-precondition","활성 게임 정보를 확인할 수 없습니다.");
+  }
+  const session=doc.data();
+  if(session.roomId!==roomId || TERMINAL_PHASES.has(session.phase)){
+    return {sessionId:null};
+  }
+  if(session.schemaVersion!==SCHEMA_VERSION){
+    throw new HttpsError("failed-precondition","게임 데이터 버전을 갱신해 주세요.");
+  }
+  return {sessionId,gameId:session.gameId,phase:session.phase,
+    revision:session.revision,joined:Object.hasOwn(session.participants||{},uid)};
+}
+
 module.exports={
   parseCreate,parseAction,validateSessionRef,submissionId,
-  createGameSession,gameSessionAction,getMyGameSession
+  createGameSession,gameSessionAction,getMyGameSession,findActiveGameSession
 };
