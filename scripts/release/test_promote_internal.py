@@ -145,3 +145,6 @@ class PromotionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# RELEASE-04 explicit one-time deployment request: internal 0.3.1 (3) -> existing closed alpha.
+# Production, internal writes, and AAB reuploads remain forbidden by the guarded workflow.
