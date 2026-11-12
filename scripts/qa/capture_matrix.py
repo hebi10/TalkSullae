@@ -83,14 +83,39 @@ def tap_label(label, *, scroll=True):
     raise RuntimeError("Required visible UI label was not found: " + label)
 
 
+THEME_SWITCH_DESCRIPTION = "프로필 다크 모드 전환"
+
+
+def find_profile_theme_switch(root):
+    nodes = [
+        node for node in root.iter()
+        if node.attrib.get("content-desc") == THEME_SWITCH_DESCRIPTION
+    ]
+    if len(nodes) > 1:
+        raise RuntimeError("Multiple profile theme switches found")
+    if not nodes:
+        return None
+    node = nodes[0]
+    if not node_bounds(node) or node.attrib.get("checked") not in ("true", "false"):
+        raise RuntimeError("Profile theme switch is missing bounds or checked state")
+    return node
+
+
 def toggle_dark_mode():
-    root = hierarchy()
-    candidates = [n for n in root.iter() if n.attrib.get("checkable") == "true"]
-    switches = [n for n in candidates if "Switch" in n.attrib.get("class", "")]
-    nodes = switches or candidates
-    if len(nodes) != 1 or not node_bounds(nodes[0]):
-        raise RuntimeError("Expected exactly one visible theme switch")
-    click_bounds(node_bounds(nodes[0]))
+    # Accessibility updates can lag behind navigation on slower tablet emulators.
+    for _ in range(8):
+        switch = find_profile_theme_switch(hierarchy())
+        if switch is not None:
+            old_state = switch.attrib["checked"]
+            click_bounds(node_bounds(switch))
+            for _ in range(8):
+                updated = find_profile_theme_switch(hierarchy())
+                if updated is not None and updated.attrib["checked"] != old_state:
+                    return
+                time.sleep(0.5)
+            raise RuntimeError("Profile theme switch did not change checked state")
+        time.sleep(0.5)
+    raise RuntimeError("Profile theme switch was not accessible after navigation")
 
 
 def size_from_png(png):
