@@ -28,6 +28,6 @@ exports.findActiveGameSession = onCall(config, request=>gameSession.findActiveGa
 
 exports.sendIdentityMessage = onCall(config, request=>identityChat.sendIdentityMessage(db,request));
 exports.expireGameSessionDeadlines = onSchedule({
-  schedule:"every 1 minutes",region:"asia-northeast3",maxInstances:1,
+  schedule:"* * * * *",region:"asia-northeast3",maxInstances:1,
   timeZone:"Asia/Seoul"
 }, async()=>{ await gameSession.expireDueGameSessions(db); });
