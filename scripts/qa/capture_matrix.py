@@ -145,6 +145,21 @@ def png_left_edge_luminance(png):
     return sum(previous[:3]) / 3
 
 
+def ensure_profile_screen():
+    """Verify the actual profile before capturing; retry only the bottom-tab navigation."""
+    for attempt in range(6):
+        dismiss_launcher_dialog()
+        root = hierarchy()
+        if find_profile_theme_switch(root) is not None:
+            return
+        bounds = find_by_text(root, "마이")
+        if bounds is not None:
+            click_bounds(bounds)
+        else:
+            time.sleep(0.8)
+    raise RuntimeError("Profile screen did not expose the labelled theme switch after navigation retries")
+
+
 def toggle_dark_mode():
     # A labelled switch is stable on phones/tablets; its UIAutomator checked state may lag.
     for _ in range(8):
@@ -201,6 +216,7 @@ def capture_profile(folder, prefix, scale, records, size):
     tap_label("데모로 시작")
     screenshot(folder, prefix + "_dark_rooms", records, size)
     tap_label("마이", scroll=False)
+    ensure_profile_screen()
     screenshot(folder, prefix + "_dark_profile", records, size)
     toggle_dark_mode()
     screenshot(folder, prefix + "_light_profile", records, size)
