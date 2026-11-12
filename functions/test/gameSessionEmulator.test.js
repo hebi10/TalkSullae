@@ -131,6 +131,32 @@ test("join/ready requires versioned revision and authoritative active membership
     "start",{},34),e=>e.code==="failed-precondition");
 });
 
+test("authenticated members recover active session after restart; outsiders are denied",async()=>{
+  const roomId=await twoMembers();
+  const createdSession=await created(roomId,70);
+  const forOwner=await game.findActiveGameSession(db,{
+    ...auth("owner"),data:{roomId}
+  });
+  const forMember=await game.findActiveGameSession(db,{
+    ...auth("member"),data:{roomId}
+  });
+  assert.equal(forOwner.sessionId,createdSession.sessionId);
+  assert.equal(forOwner.joined,true);
+  assert.equal(forMember.sessionId,createdSession.sessionId);
+  assert.equal(forMember.joined,false);
+  await assert.rejects(game.findActiveGameSession(db,{
+    ...auth("attacker"),data:{roomId}
+  }),e=>e.code==="permission-denied");
+  await assert.rejects(game.getMyGameSession(db,{
+    ...auth("member"),data:{roomId,sessionId:createdSession.sessionId}
+  }),e=>e.code==="permission-denied");
+  const cancelled=await action(roomId,createdSession.sessionId,"owner",0,
+    "cancel",{},71);
+  assert.equal(cancelled.phase,"cancelled");
+  const after=await game.findActiveGameSession(db,{...auth("owner"),data:{roomId}});
+  assert.equal(after.sessionId,null);
+});
+
 test("start refuses unimplemented production game rules without leaking role secrets",async()=>{
   const roomId=await twoMembers();
   const start=await created(roomId,8);
