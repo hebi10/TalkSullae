@@ -104,6 +104,10 @@ class OnlineGameSessionDecoderTest {
         ))
         assertNull(OnlineGameSessionDecoder.decode(
             roomId, sessionId,
+            valid() + ("publicState" to mapOf("publishedResult" to "너가 라이어"))
+        ))
+        assertNull(OnlineGameSessionDecoder.decode(
+            roomId, sessionId,
             valid() + ("participants" to mapOf("owner" to mapOf("ready" to "true")))
         ))
         assertNull(OnlineGameSessionDecoder.decode(
