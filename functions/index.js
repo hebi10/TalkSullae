@@ -4,6 +4,7 @@ const { onCall } = require("firebase-functions/v2/https");
 const room = require("./src/roomService");
 const { submitSafetyReport } = require("./src/safetyReport");
 const { sendRoomMessage } = require("./src/chatService");
+const gameSession = require("./src/game/sessionService");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -17,3 +18,8 @@ exports.leaveRoom = onCall(config, request=>room.leaveRoom(db,request));
 exports.submitSafetyReport = onCall(config, request=>submitSafetyReport(db,request));
 
 exports.sendRoomMessage = onCall(config, request=>sendRoomMessage(db,request));
+
+exports.createGameSession = onCall(config, request=>gameSession.createGameSession(db,request));
+exports.gameSessionAction = onCall(config, request=>gameSession.gameSessionAction(db,request));
+exports.getMyGameSession = onCall(config, request=>gameSession.getMyGameSession(db,request));
+exports.findActiveGameSession = onCall(config, request=>gameSession.findActiveGameSession(db,request));
