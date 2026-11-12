@@ -24,6 +24,7 @@
 - [GAME-00 다중 게임 공통 아키텍처 확정](docs/architecture/GAME-00-multi-game-platform.md) — 카탈로그 v1·세션 계약·보안·서버 판정/버전 정책 (실제 게임 미구현)
 - [GAME-01 실시간 일반 채팅 기반](docs/development/GAME-01-realtime-room-chat.md) — 활성 온라인 방 채팅·읽기 권한·30건 페이징·중복 전송 방지 (운영 Firebase 미배포)
 - [GAME-02 다중 게임 공통 세션 엔진](docs/architecture/GAME-02-server-game-session-engine.md) — 서버 로비·단계 전이·권한/마감·개인 비밀 분리·1회 정산 계약 (게임별 규칙은 후속)
+- [GAME-03 너 누구야? 실제 멀티플레이](docs/development/GAME-03-identity-multiplayer.md) — 4~10명 익명 채팅·정체 추리·서버 점수·재접속·자동 마감 (실제 Firebase/Play 배포 전)
 - [서비스 기획서 v1.0](https://docs.google.com/document/d/13BMHPicBwI1kN1XrPsjHYfR4wkXmBz4lUDzcPecptvg/edit)
 - [디자인 설계 PR #1](https://github.com/hebi10/TalkSullae/pull/1) — 1-A~1-C 디자인 문서
 - [Google Drive 화면 설계 v1.0](https://docs.google.com/document/d/1d7A0zC76o42YfEy2HtHzU9IK4HYRJeQEIFr8x1zc9Ps/edit)
