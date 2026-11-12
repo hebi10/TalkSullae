@@ -25,12 +25,13 @@ def check_preflight(client, track, requested_code=None):
     try:
         tracks = client.list_tracks(edit)
         current_max = max(client.list_codes(edit, tracks), default=0)
+        internal_exists = any(t.get("track") == TRACK for t in tracks)
         if requested_code is not None and release_code(requested_code) <= current_max:
             raise PlaySafetyError("Source versionCode must exceed every uploaded or published Play versionCode")
         return {
-            "package": PACKAGE, "track": track, "internal_track_exists": any(
-                t.get("track") == TRACK for t in tracks
-            ),
+            "package": PACKAGE, "track": track, "internal_track_exists": internal_exists,
+            "ready_for_deploy": internal_exists,
+            "requires_play_console_initialization": not internal_exists,
             "current_max_code": current_max, "requested_version_code": requested_code,
             "check": "passed", "api_committed": False,
             "note": "Read-only app access and version check; no upload or review approval"
@@ -62,6 +63,14 @@ def deploy(client, track, bundle, code, version, notes, report=None):
     committed = False
     try:
         tracks = client.list_tracks(edit)
+        if not any(t.get("track") == TRACK for t in tracks):
+            report["upload_stage"] = "internal_track_missing"
+            raise PlaySafetyError(
+                "The Google Play internal testing track 'qa' is absent. "
+                "Initialize the first internal testing release in Play Console, "
+                "then run the API check again before retrying the release. "
+                "No bundle was uploaded by this attempt."
+            )
         used = client.list_codes(edit, tracks)
         if used and code <= max(used):
             raise PlaySafetyError("Internal AAB versionCode must exceed all existing Play releases and uploaded bundles")
@@ -72,6 +81,7 @@ def deploy(client, track, bundle, code, version, notes, report=None):
         report["upload_stage"] = "acknowledged"
         if release_code(uploaded.get("versionCode")) != code:
             raise PlaySafetyError("Internal Play bundle versionCode does not match the signed artifact")
+        report["upload_stage"] = "track_update_requested"
         client.request("PUT", edit + "/tracks/qa", {
             "track": TRACK,
             "releases": [{
@@ -81,10 +91,14 @@ def deploy(client, track, bundle, code, version, notes, report=None):
                 "releaseNotes": [{"language": "ko-KR", "text": notes}]
             }]
         })
+        report["upload_stage"] = "track_update_acknowledged"
+        report["upload_stage"] = "edit_validation_requested"
         client.request("POST", edit + ":validate")
+        report["upload_stage"] = "edit_commit_requested"
         client.request("POST", edit + ":commit")
         committed = True
         report["api_committed"] = True
+        report["upload_stage"] = "edit_committed"
     finally:
         if not committed:
             client.delete_edit(edit)
@@ -98,6 +112,7 @@ def deploy(client, track, bundle, code, version, notes, report=None):
         ):
             raise PlaySafetyError("Internal edit committed but 'qa' readback not confirmed")
         report["verification"] = "internal_qa_track_assigned"
+        report["upload_stage"] = "readback_confirmed"
     finally:
         client.delete_edit(readback)
     return report
