@@ -5,7 +5,7 @@ const {resolve} = require("node:path");
 const {
   initializeTestEnvironment,assertSucceeds,assertFails
 } = require("@firebase/rules-unit-testing");
-const {doc,collection,getDoc,getDocs,setDoc,updateDoc,deleteDoc} = require("firebase/firestore");
+const {doc,collection,query,orderBy,limit,getDoc,getDocs,setDoc,updateDoc,deleteDoc} = require("firebase/firestore");
 
 let testEnv;
 const roomId = "room-rules-1";
@@ -105,4 +105,58 @@ test("all app clients are denied reads and writes to safety reports and cooldown
       await assertFails(deleteDoc(ref));
     }
   }
+});
+
+
+test("active members may only read bounded message pages, never write", async () => {
+  await testEnv.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, "rooms", roomId, "messages", "msg1"), {
+      senderUid:"owner", senderName:"방장", text:"안녕하세요",
+      createdAt:new Date("2026-11-12T00:00:00.000Z")
+    });
+    await setDoc(doc(db, "rooms", roomId, "chatRateLimits", "owner"), {
+      lastSentAt:new Date("2026-11-12T00:00:00.000Z")
+    });
+  });
+
+  const owner=testEnv.authenticatedContext("owner").firestore();
+  const pending=testEnv.authenticatedContext("pending").firestore();
+  const outsider=testEnv.authenticatedContext("stranger").firestore();
+  const anonymous=testEnv.unauthenticatedContext().firestore();
+  const messageRef=doc(owner,"rooms",roomId,"messages","msg1");
+  const msgColl=collection(owner,"rooms",roomId,"messages");
+
+  await assertSucceeds(getDoc(messageRef));
+  await assertSucceeds(getDocs(query(msgColl,orderBy("createdAt","desc"),limit(30))));
+  await assertSucceeds(getDocs(query(msgColl,orderBy("createdAt","desc"),limit(10))));
+  await assertFails(getDocs(query(msgColl,orderBy("createdAt","desc"),limit(31))));
+  await assertFails(getDocs(msgColl));
+  await assertFails(setDoc(doc(msgColl,"new"),{senderUid:"owner",text:"위조"}));
+  await assertFails(updateDoc(messageRef,{text:"수정"}));
+  await assertFails(deleteDoc(messageRef));
+
+  await assertFails(getDoc(doc(pending,"rooms",roomId,"messages","msg1")));
+  await assertFails(getDocs(query(collection(pending,"rooms",roomId,"messages"),limit(30))));
+  await assertFails(getDoc(doc(outsider,"rooms",roomId,"messages","msg1")));
+  await assertFails(getDocs(query(collection(outsider,"rooms",roomId,"messages"),limit(30))));
+  await assertFails(getDocs(query(collection(anonymous,"rooms",roomId,"messages"),limit(30))));
+  await assertFails(getDoc(doc(owner,"rooms",roomId,"chatRateLimits","owner")));
+  await assertFails(setDoc(doc(owner,"rooms",roomId,"chatRateLimits","owner"),{lastSentAt:new Date()}));
+});
+
+test("a removed member loses message reads even after earlier membership", async () => {
+  await testEnv.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(),"rooms",roomId,"messages","old"),{
+      senderUid:"owner", senderName:"방장", text:"이전 메시지",
+      createdAt:new Date("2026-11-12T00:00:00.000Z")
+    });
+  });
+  const before=testEnv.authenticatedContext("owner").firestore();
+  await assertSucceeds(getDocs(query(collection(before,"rooms",roomId,"messages"),limit(30))));
+  await testEnv.withSecurityRulesDisabled(async context => {
+    await updateDoc(doc(context.firestore(),"rooms",roomId,"members","owner"),{status:"removed"});
+  });
+  await assertFails(getDocs(query(collection(before,"rooms",roomId,"messages"),limit(30))));
+  await assertFails(getDoc(doc(before,"rooms",roomId,"messages","old")));
 });
