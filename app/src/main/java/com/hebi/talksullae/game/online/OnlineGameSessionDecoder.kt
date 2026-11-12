@@ -44,6 +44,9 @@ object OnlineGameSessionDecoder {
         val mode = GameMode.fromWire(data["mode"] as? String ?: return null) ?: return null
         val phase = GamePhase.fromWire(data["phase"] as? String ?: return null) ?: return null
         val version = number(data["rulesVersion"]) ?: return null
+        val supportedGameIds = setOf("identity", "liar", "forbidden", "balance")
+        if (gameId !in supportedGameIds || version != 1L ||
+            (mode == GameMode.ASYNC && gameId != "balance")) return null
         val revision = number(data["revision"]) ?: return null
         val round = number(data["round"]) ?: return null
 
