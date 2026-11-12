@@ -130,6 +130,25 @@ test("four players complete real anonymous chat, unique guesses, reveal and sett
   assert.equal((await db.collection("rooms").doc(roomId).get()).get("activeGameSessionId"),null);
 });
 
+test("anonymous chat rate-limits bursts without losing idempotent retry",async()=>{
+  const {roomId,members}=await makeRoom();
+  const {sessionId}=await startRoom(roomId,members);
+  const call=(n,time)=>identityChat.sendIdentityMessage(db,{...auth("owner"),data:{
+    roomId,sessionId,requestId:messageReqId(n),text:"메시지 "+n
+  }},()=>time);
+  const first=await call(50,1762935601000);
+  assert.equal(first.deduplicated,false);
+  await assert.rejects(call(51,1762935601100),e=>e.code==="resource-exhausted");
+  const again=await call(50,1762935601101);
+  assert.equal(again.deduplicated,true);
+  const next=await call(52,1762935601750);
+  assert.equal(next.deduplicated,false);
+  const docs=await db.collection("rooms").doc(roomId)
+    .collection("gameSessions").doc(sessionId)
+    .collection("publicMessages").get();
+  assert.equal(docs.size,2);
+});
+
 test("server clock blocks late anonymous chat and conflicting identity votes",async()=>{
   const {roomId,members}=await makeRoom();
   const {sessionId,revision}=await startRoom(roomId,members);
