@@ -13,6 +13,8 @@ internal interface OnlineGameSessionRepository {
         onError: (String) -> Unit
     ): ListenerRegistration
 
+    suspend fun findActiveSession(roomId: String): String?
+
     suspend fun createSession(
         roomId: String,
         gameId: String,
@@ -70,6 +72,11 @@ internal class FirestoreOnlineGameSessionRepository(
     private suspend fun invoke(functionName: String, body: Map<String, Any>): Map<*, *> {
         val result = functions.getHttpsCallable(functionName).call(body).await().data
         return result as? Map<*, *> ?: error("게임 서버 응답 형식이 올바르지 않습니다.")
+    }
+
+    override suspend fun findActiveSession(roomId: String): String? {
+        val result = invoke("findActiveGameSession", mapOf("roomId" to roomId))
+        return result["sessionId"] as? String
     }
 
     override suspend fun createSession(
