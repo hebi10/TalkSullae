@@ -437,7 +437,82 @@ async function findActiveGameSession(db,request){
     revision:session.revision,joined:Object.hasOwn(session.participants||{},uid)};
 }
 
+async function cancelRevokedDueSession(db,roomRef,sessionRef,nowMillis){
+  return db.runTransaction(async tx=>{
+    const [room,doc]=await Promise.all([tx.get(roomRef),tx.get(sessionRef)]);
+    if(!room.exists||room.get("status")!=="active" || !doc.exists ||
+       room.get("activeGameSessionId")!==sessionRef.id ||
+       TERMINAL_PHASES.has(doc.get("phase")) ||
+       !doc.get("phaseEndsAt") || doc.get("phaseEndsAt").toMillis()>nowMillis){
+      return {status:"skipped"};
+    }
+    const session=doc.data();
+    const ids=participantIds(session);
+    const members=await Promise.all(ids.map(uid=>tx.get(roomRef.collection("members").doc(uid))));
+    if(members.every(member=>member.exists&&member.get("status")==="active")){
+      return {status:"still-active"};
+    }
+    tx.update(sessionRef,{
+      phase:"cancelled",phaseEndsAt:null,revision:session.revision+1,
+      updatedAt:FieldValue.serverTimestamp()
+    });
+    tx.update(roomRef,{activeGameSessionId:null});
+    return {status:"cancelled"};
+  });
+}
+
+/**
+ * Server-only scheduled sweep. A synthetic authenticated action is constructed
+ * exclusively from Firestore-verified active participants, never from client input.
+ * One stage is advanced per due session. Firestore transactions protect duplicate runs.
+ */
+async function expireDueGameSessions(db,rules=productionRules,now=Date.now){
+  const timestamp=now();
+  const due=await db.collectionGroup("gameSessions")
+    .where("phaseEndsAt","<=",Timestamp.fromMillis(timestamp))
+    .orderBy("phaseEndsAt")
+    .limit(40).get();
+  const counts={advanced:0,cancelled:0,skipped:0};
+  for(const document of due.docs){
+    const session=document.data();
+    const path=document.ref.path.split("/");
+    if(path.length!==4 || path[0]!=="rooms" || path[2]!=="gameSessions" ||
+       !SESSION_ID_PATTERN.test(path[3]) || session.sessionId!==path[3] ||
+       session.roomId!==path[1] || TERMINAL_PHASES.has(session.phase)){
+      counts.skipped++;
+      continue;
+    }
+    const roomRef=db.collection("rooms").doc(path[1]);
+    const ids=participantIds(session);
+    const members=await Promise.all(ids.map(uid=>roomRef.collection("members").doc(uid).get()));
+    if(members.some(member=>!member.exists||member.get("status")!=="active")){
+      const outcome=await cancelRevokedDueSession(db,roomRef,document.ref,timestamp);
+      counts[outcome.status==="cancelled"?"cancelled":"skipped"]++;
+      continue;
+    }
+    if(!ids.length){counts.skipped++;continue;}
+    const actorUid=ids[0];
+    const requestId=sha(["deadline-sweep",path[3],session.revision,session.phase]);
+    try{
+      const moved=await gameSessionAction(db,{auth:{uid:actorUid},data:{
+        roomId:path[1],sessionId:path[3],gameId:session.gameId,
+        rulesVersion:session.rulesVersion,expectedRevision:session.revision,
+        requestId,payload:{kind:"advance"}
+      }},rules,()=>timestamp);
+      counts[moved.deduplicated?"skipped":"advanced"]++;
+    }catch(error){
+      if(["aborted","failed-precondition","permission-denied"].includes(error?.code)){
+        counts.skipped++;
+      }else{
+        throw error;
+      }
+    }
+  }
+  return counts;
+}
+
 module.exports={
   parseCreate,parseAction,validateSessionRef,submissionId,
-  createGameSession,gameSessionAction,getMyGameSession,findActiveGameSession
+  createGameSession,gameSessionAction,getMyGameSession,findActiveGameSession,
+  expireDueGameSessions,cancelRevokedDueSession
 };
