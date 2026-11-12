@@ -19,13 +19,18 @@ def track_name(value):
     return TRACK
 
 
-def check_preflight(client, track, requested_code=None):
+def check_preflight(client, track, requested_code=None, require_existing_qa=False):
     track = track_name(track)
     edit = client.create_edit()
     try:
         tracks = client.list_tracks(edit)
         current_max = max(client.list_codes(edit, tracks), default=0)
         internal_exists = any(t.get("track") == TRACK for t in tracks)
+        if require_existing_qa and not internal_exists:
+            raise PlaySafetyError(
+                "Play Console must initialize the internal testing track 'qa' before automated deployment; "
+                "no bundle upload was attempted."
+            )
         if requested_code is not None and release_code(requested_code) <= current_max:
             raise PlaySafetyError("Source versionCode must exceed every uploaded or published Play versionCode")
         return {
@@ -122,6 +127,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=["check", "deploy"])
     parser.add_argument("--track", default=TRACK)
+    parser.add_argument("--require-existing-qa", action="store_true")
     parser.add_argument("--bundle", type=Path)
     parser.add_argument("--version-code", type=int)
     parser.add_argument("--version", default="0.3.0")
@@ -133,7 +139,10 @@ def main():
         track_name(args.track)
         client = PlayClient(os.environ.get("PLAY_ACCESS_TOKEN"))
         if args.mode == "check":
-            report = check_preflight(client, args.track, args.version_code)
+            report = check_preflight(
+                client, args.track, args.version_code,
+                require_existing_qa=args.require_existing_qa
+            )
         else:
             if args.bundle is None or args.version_code is None or args.notes_file is None:
                 raise PlaySafetyError("Verified AAB, version and internal release notes are mandatory")
