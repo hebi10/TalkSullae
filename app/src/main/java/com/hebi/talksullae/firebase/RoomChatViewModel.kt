@@ -55,14 +55,15 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
                 recent = page.messages
                 val firstPage = !firstPageReceived
                 firstPageReceived = true
-                if (firstPage) oldestCursor = page.oldestSnapshot
+                val canRefreshCursor = firstPage || older.isEmpty()
+                if (canRefreshCursor) oldestCursor = page.oldestSnapshot
                 mutable.update {
                     it.copy(
                         messages = merge(),
                         initialLoading = false,
                         readError = null,
                         fromCache = page.fromCache,
-                        canLoadOlder = if (firstPage) page.hasMore else it.canLoadOlder
+                        canLoadOlder = if (canRefreshCursor) page.hasMore else it.canLoadOlder
                     )
                 }
             }
