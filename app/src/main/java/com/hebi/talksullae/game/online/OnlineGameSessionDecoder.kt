@@ -25,6 +25,9 @@ object OnlineGameSessionDecoder {
     private fun number(value: Any?): Long? = when (value) {
         is Long -> value
         is Int -> value.toLong()
+        is Double -> if (value.isFinite() && value % 1.0 == 0.0 &&
+            value >= -9_007_199_254_740_991.0 && value <= 9_007_199_254_740_991.0
+        ) value.toLong() else null
         else -> null
     }
 
