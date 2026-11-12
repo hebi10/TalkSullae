@@ -40,6 +40,29 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Public game session metadata only. Role/alias/ballot information
+      // never belongs in these documents and cannot be read via Client SDK.
+      match /gameSessions/{sessionId} {
+        allow get: if activeMember(roomId)
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active";
+        allow list: if activeMember(roomId)
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active"
+          && request.query.limit != null && request.query.limit <= 10;
+        allow create, update, delete: if false;
+
+        match /results/{resultId} {
+          allow get: if activeMember(roomId)
+            && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active"
+            && get(/databases/$(database)/documents/rooms/$(roomId)/gameSessions/$(sessionId)).data.phase == "finished";
+          allow list: if false;
+          allow create, update, delete: if false;
+        }
+
+        match /{privatePath=**} {
+          allow read, write: if false;
+        }
+      }
+
       match /{other=**} {
         allow read, write: if false;
       }
