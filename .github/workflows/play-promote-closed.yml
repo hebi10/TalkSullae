@@ -1,0 +1,233 @@
+name: Play closed-testing promotion (existing internal AAB)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/play-promote-closed.yml'
+      - 'scripts/release/promote_internal.py'
+      - 'scripts/release/test_promote_internal.py'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Read-only check or promote existing internal 0.3.1 (3) to closed'
+        required: true
+        default: check
+        type: choice
+        options: [check, promote]
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/play-promote-closed.yml'
+      - 'scripts/release/promote_internal.py'
+      - 'scripts/release/test_promote_internal.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: talksullae-play-closed-publisher
+  cancel-in-progress: false
+
+jobs:
+  guard-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Play release safety rules without credentials
+        run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+
+  source:
+    if: >-
+      github.repository == 'hebi10/TalkSullae' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[promote-closed]')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.verify.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require exact main and pinned release
+        id: verify
+        shell: bash
+        env:
+          REQUESTED_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo 'Closed promotion may only run from main.' >&2; exit 1;
+          }
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            MODE=promote
+            [[ "$(git log -1 --format=%B)" == *'[promote-closed]'* ]] || {
+              echo 'Explicit promotion intent missing.' >&2; exit 1;
+            }
+          else
+            MODE="$REQUESTED_MODE"
+          fi
+          case "$MODE" in check|promote) ;; *)
+            echo 'Mode must be check or promote.' >&2; exit 1;; esac
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'scripts/release')
+          from promote_internal import EXPECTED_CODE, EXPECTED_VERSION
+          from verify_aab import version_from_source
+          code, version = version_from_source('app/build.gradle.kts')
+          assert (code, version) == (EXPECTED_CODE, EXPECTED_VERSION), (
+              'Only signed internal TalkSullae 0.3.1 (3) may be promoted'
+          )
+          print('Pinned source:', version, code)
+          PY
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+      - name: Run promotion safety tests
+        run: python3 -m unittest discover -s scripts/release -p 'test_promote_internal.py' -v
+
+  play-preflight:
+    needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exact closed track and authentication method
+        id: auth-method
+        shell: bash
+        env:
+          WIF_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          WIF_SA: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,sys
+          sys.path.insert(0, 'scripts/release')
+          from play_closed import track_name
+          track_name(os.environ.get('PLAY_CLOSED_TRACK', ''))
+          PY
+          if [[ -n "$WIF_PROVIDER" && -n "$WIF_SA" ]]; then
+            echo 'method=wif' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$PLAY_JSON" ]]; then
+            echo 'method=json' >> "$GITHUB_OUTPUT"
+          else
+            echo 'No configured Play Publisher identity.' >&2
+            exit 1
+          fi
+      - name: Authenticate approved Workload Identity
+        if: steps.auth-method.outputs.method == 'wif'
+        id: wif
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Authenticate approved private service account
+        if: steps.auth-method.outputs.method == 'json'
+        id: json
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Check completed internal release and existing closed track (no upload)
+        env:
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+          PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
+        run: |
+          python3 scripts/release/promote_internal.py check \
+            --track "$PLAY_CLOSED_TRACK" \
+            --report play-closed-promotion-check.json
+      - name: Archive read-only preflight report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-play-closed-promotion-check
+          path: play-closed-promotion-check.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+  closed-publish:
+    needs: [source, play-preflight]
+    if: needs.source.outputs.mode == 'promote' && needs.play-preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    environment: play-closed
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Recheck closed-track configuration
+        id: auth-method
+        shell: bash
+        env:
+          WIF_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          WIF_SA: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,sys
+          sys.path.insert(0, 'scripts/release')
+          from play_closed import track_name
+          track_name(os.environ.get('PLAY_CLOSED_TRACK', ''))
+          PY
+          if [[ -n "$WIF_PROVIDER" && -n "$WIF_SA" ]]; then
+            echo 'method=wif' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$PLAY_JSON" ]]; then
+            echo 'method=json' >> "$GITHUB_OUTPUT"
+          else
+            echo 'No approved Play Publisher identity.' >&2
+            exit 1
+          fi
+      - name: Authenticate approved Workload Identity for closed testing
+        if: steps.auth-method.outputs.method == 'wif'
+        id: wif
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Authenticate approved private service account for closed testing
+        if: steps.auth-method.outputs.method == 'json'
+        id: json
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Promote existing Play AAB versionCode 3 to the approved closed track
+        env:
+          PLAY_CLOSED_TRACK: ${{ vars.PLAY_CLOSED_TRACK }}
+          PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
+        run: |
+          python3 scripts/release/promote_internal.py promote \
+            --track "$PLAY_CLOSED_TRACK" \
+            --report play-closed-promotion-result.json
+      - name: Archive Play API commit and closed-track readback
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-play-closed-promotion-result
+          path: play-closed-promotion-result.json
+          retention-days: 14
+          if-no-files-found: ignore
