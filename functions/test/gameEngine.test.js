@@ -62,7 +62,7 @@ test("server timer has bounded durations and cannot accept zero or unbounded",()
 test("public session projection is an allowlist excluding identities and role secrets",()=>{
   const projection=publicSnapshot(session());
   assert.equal(projection.gameId,"balance");
-  assert.equal(projection.phaseEndsAt,null);
+  assert.equal(projection.deadlineEpochMillis,null);
   assert.equal(projection.privateAssignments,undefined);
   assert.equal(projection.createdBy,undefined);
   assert.throws(()=>validatePublicState({privateAssignments:{owner:"secret"}}),/비공개/);
