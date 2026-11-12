@@ -306,8 +306,14 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
         throw new HttpsError("failed-precondition","게임 전이 응답이 잘못되었습니다.");
       }
       assertTransition(session.phase,moved.phase);
+      const nextRound=moved.round===undefined?session.round:moved.round;
+      if(!Number.isSafeInteger(nextRound)||nextRound<session.round||
+         nextRound>99||nextRound>session.round+1||
+         (moved.phase===session.phase && nextRound===session.round)){
+        throw new HttpsError("failed-precondition","게임 라운드 전이가 올바르지 않습니다.");
+      }
       phase=moved.phase;
-      changes={phase,publicState:validatePublicState(moved.publicState),
+      changes={phase,round:nextRound,publicState:validatePublicState(moved.publicState),
         submissionCount:0};
       if(phase==="finished"){
         const scores=requireScoreResult(moved,participants);
