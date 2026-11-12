@@ -62,6 +62,26 @@ class OnlineGameSessionDecoderTest {
     }
 
     @Test
+    fun acceptsWholeNumberDoublesFromCallableButRejectsFractionalRevisions() {
+        val fromCallable = OnlineGameSessionDecoder.decode(
+            roomId, sessionId,
+            valid() + mapOf(
+                "schemaVersion" to 1.0,
+                "rulesVersion" to 1.0,
+                "revision" to 4.0,
+                "round" to 1.0,
+                "deadlineEpochMillis" to 1762935600000.0
+            )
+        )
+        requireNotNull(fromCallable)
+        assertEquals(4L, fromCallable.session.revision)
+        assertNull(OnlineGameSessionDecoder.decode(
+            roomId, sessionId,
+            valid() + ("revision" to 1.5)
+        ))
+    }
+
+    @Test
     fun unknownProtocolOrPhaseIsNotDowngradedToPlaying() {
         assertNull(OnlineGameSessionDecoder.decode(roomId, sessionId, valid() + ("schemaVersion" to 2L)))
         assertNull(OnlineGameSessionDecoder.decode(roomId, sessionId, valid() + ("phase" to "admin")))
