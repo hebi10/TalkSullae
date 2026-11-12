@@ -22,3 +22,4 @@ exports.sendRoomMessage = onCall(config, request=>sendRoomMessage(db,request));
 exports.createGameSession = onCall(config, request=>gameSession.createGameSession(db,request));
 exports.gameSessionAction = onCall(config, request=>gameSession.gameSessionAction(db,request));
 exports.getMyGameSession = onCall(config, request=>gameSession.getMyGameSession(db,request));
+exports.findActiveGameSession = onCall(config, request=>gameSession.findActiveGameSession(db,request));
