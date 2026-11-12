@@ -87,6 +87,12 @@ class OnlineGameSessionDecoderTest {
         assertNull(OnlineGameSessionDecoder.decode(roomId, sessionId, valid() + ("phase" to "admin")))
         assertNull(OnlineGameSessionDecoder.decode(roomId, sessionId, valid() + ("mode" to "unknown")))
         assertNull(OnlineGameSessionDecoder.decode(roomId, sessionId, valid() + ("rulesVersion" to 0L)))
+        assertNull(OnlineGameSessionDecoder.decode(roomId, sessionId, valid() + ("rulesVersion" to 2L)))
+        assertNull(OnlineGameSessionDecoder.decode(roomId, sessionId, valid() + ("gameId" to "unknown")))
+        assertNull(OnlineGameSessionDecoder.decode(
+            roomId, sessionId,
+            valid() + mapOf("gameId" to "identity", "mode" to "async")
+        ))
         assertNull(OnlineGameSessionDecoder.decode(roomId, sessionId, valid() + ("round" to 0L)))
     }
 
