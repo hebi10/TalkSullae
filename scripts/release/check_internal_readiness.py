@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Assess internal Play release configuration without exposing any credential values."""
+"""Assess internal Play release configuration without exposing any credential values.
+
+Release intent is carried by a guarded main-branch [deploy-internal] commit.
+"""
 import argparse
 import json
 import os
