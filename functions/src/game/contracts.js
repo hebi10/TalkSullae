@@ -103,6 +103,9 @@ function validateActionEnvelope(value) {
       typeof value.requestId !== "string" || !REQUEST_ID_PATTERN.test(value.requestId)) {
     fail("Invalid session identity or request revision");
   }
+  if (!Number.isSafeInteger(value.rulesVersion) || value.rulesVersion < 1) {
+    fail("Missing or invalid rules version");
+  }
   getGameDescriptor(value.gameId, value.rulesVersion);
   if (!isPlainObject(value.payload)) fail("Game-specific payload must be an object");
   return Object.freeze({
