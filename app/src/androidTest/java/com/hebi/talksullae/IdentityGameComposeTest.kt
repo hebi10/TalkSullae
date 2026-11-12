@@ -147,7 +147,7 @@ class IdentityGameComposeTest {
             }
         }
         compose.waitUntil(6000) {
-            compose.onAllNodesWithTag("identity-chat-input").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("내 동물 별칭: 고양이").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("토끼").assertExists()
         compose.onNodeWithText("안녕하세요").assertExists()
