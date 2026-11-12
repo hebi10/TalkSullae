@@ -57,6 +57,30 @@ class ProfileThemeCaptureTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Invalid PNG"):
             capture_matrix.png_left_edge_luminance(b"not-a-png")
 
+    def test_profile_navigation_retries_only_until_real_switch_is_visible(self):
+        tab = ET.fromstring(
+            '<hierarchy><node text="마이" clickable="true" bounds="[10,50][100,120]" /></hierarchy>'
+        )
+        with (
+            patch.object(capture_matrix, "hierarchy", side_effect=[tab, theme_tree()]),
+            patch.object(capture_matrix, "click_bounds") as click,
+            patch.object(capture_matrix, "dismiss_launcher_dialog"),
+            patch.object(capture_matrix.time, "sleep"),
+        ):
+            capture_matrix.ensure_profile_screen()
+        click.assert_called_once_with((10, 50, 100, 120))
+
+    def test_profile_capture_rejects_missing_switch_even_after_navigation_retries(self):
+        with (
+            patch.object(capture_matrix, "hierarchy", return_value=ET.fromstring("<hierarchy />")),
+            patch.object(capture_matrix, "click_bounds") as click,
+            patch.object(capture_matrix, "dismiss_launcher_dialog"),
+            patch.object(capture_matrix.time, "sleep"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Profile screen did not expose"):
+                capture_matrix.ensure_profile_screen()
+        click.assert_not_called()
+
     def test_toggle_checks_visual_theme_even_when_accessibility_state_stays_stale(self):
         with (
             patch.object(capture_matrix, "hierarchy", return_value=theme_tree(checked="false", extra_checkbox=True)),
