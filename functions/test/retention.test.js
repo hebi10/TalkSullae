@@ -13,9 +13,9 @@ test("message cleanup targets only due indexed documents, not other collections"
     assert.equal(operator,"<=");
     assert.equal(value.toMillis(),1762935600000);
     return {limit(n){
-     assert.equal(n,100);
+     assert.equal(n,200);
      return {async get(){
-      return {empty:false,docs:[{ref:{path:name+"/due"}}]};
+      return {empty:false,size:1,docs:[{ref:{path:name+"/due"}}]};
      }};
     }};
    }};

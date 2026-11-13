@@ -14,16 +14,21 @@ async function expireDueMessages(db,now=Date.now){
   const counts={roomChat:0,gameChat:0};
   const groups=[["messages","roomChat"],["publicMessages","gameChat"]];
   for(const [collection,field] of groups){
-    const due=await db.collectionGroup(collection)
-      .where("expiresAt","<=",Timestamp.fromMillis(now()))
-      .limit(100).get();
-    if(due.empty)continue;
-    const batch=db.batch();
-    for(const message of due.docs){
-      batch.delete(message.ref);
-      counts[field]++;
+    // Drain a bounded number of pages per hourly run, so a normal traffic spike
+    // does not leave all but the first batch waiting for another full day.
+    for(let page=0;page<50;page++){
+      const due=await db.collectionGroup(collection)
+        .where("expiresAt","<=",Timestamp.fromMillis(now()))
+        .limit(200).get();
+      if(due.empty)break;
+      const batch=db.batch();
+      for(const message of due.docs){
+        batch.delete(message.ref);
+        counts[field]++;
+      }
+      await batch.commit();
+      if(due.size<200)break;
     }
-    await batch.commit();
   }
   return counts;
 }

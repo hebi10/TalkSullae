@@ -63,14 +63,14 @@ test("reporting requires real member and real stored message; retry is idempoten
 test("recently authenticated non-owner may request deletion; owner must transfer ownership",async()=>{
  const {owner,member,roomId}=await sharedRoom();
  await assert.rejects(safety.requestAccountDeletion(db,{
-   ...auth(owner),data:{confirm:"DELETE"}
+   ...auth(owner),data:{confirm:"DELETE",expectedUid:owner}
  },()=>nowMillis),e=>e.code==="failed-precondition");
  const result=await safety.requestAccountDeletion(db,{
-   ...auth(member),data:{confirm:"DELETE"}
+   ...auth(member),data:{confirm:"DELETE",expectedUid:member}
  },()=>nowMillis);
  assert.equal(result.status,"queued");
  const repeat=await safety.requestAccountDeletion(db,{
-   ...auth(member),data:{confirm:"DELETE"}
+   ...auth(member),data:{confirm:"DELETE",expectedUid:member}
  },()=>nowMillis);
  assert.equal(repeat.status,"queued");
  const job=await db.collection("accountDeletionJobs").doc(member).get();
@@ -87,7 +87,22 @@ test("server deletion worker removes user chat, membership, preference and auth 
  const own=await chat.sendRoomMessage(db,{...auth(member),data:{
    roomId,requestId:UUID(41),text:"탈퇴자의 메시지"
  }});
- await safety.requestAccountDeletion(db,{...auth(member),data:{confirm:"DELETE"}},()=>nowMillis);
+ await safety.requestAccountDeletion(db,{...auth(member),data:{confirm:"DELETE",expectedUid:member}},()=>nowMillis);
+ const identityRef=db.collection("rooms").doc(roomId)
+   .collection("gameSessions").doc("f".repeat(64));
+ await identityRef.set({
+   roomId,sessionId:identityRef.id,gameId:"identity",
+   phase:"finished",participants:{[member]:{ready:true}},revision:1
+ });
+ await identityRef.collection("privateAssignments").doc(member).set({
+   data:{alias:"고양이"}
+ });
+ await identityRef.collection("publicMessages").doc("anonymous-message").set({
+   alias:"고양이",text:"삭제할 익명 메시지"
+ });
+ await identityRef.collection("publicMessages").doc("other-message").set({
+   alias:"토끼",text:"다른 사람의 메시지"
+ });
  const deleted=[];
  const result=await safety.processOneAccountDeletion(db,member,{
    async deleteUser(uid){deleted.push(uid);}
@@ -97,9 +112,31 @@ test("server deletion worker removes user chat, membership, preference and auth 
  const base=db.collection("rooms").doc(roomId);
  assert.equal((await base.collection("messages").doc(own.messageId).get()).exists,false);
  assert.equal((await base.collection("messages").doc(original.messageId).get()).exists,true);
+ assert.equal((await identityRef.collection("publicMessages").doc("anonymous-message").get()).exists,false);
+ assert.equal((await identityRef.collection("publicMessages").doc("other-message").get()).exists,true);
  assert.equal((await base.collection("members").doc(member).get()).exists,false);
  assert.equal((await base.collection("members").doc(owner).get()).exists,true);
  assert.equal((await base.get()).get("memberCount"),1);
  assert.equal((await db.collection("userSafety").doc(member).get()).exists,false);
  assert.equal((await db.collection("accountDeletionJobs").doc(member).get()).exists,false);
+});
+
+test("a queued deletion blocks new game participation even when the user signs in again",async()=>{
+ const {owner,member,roomId}=await sharedRoom();
+ await safety.requestAccountDeletion(db,{
+   ...auth(member),data:{confirm:"DELETE",expectedUid:member}
+ },()=>nowMillis);
+ const game=require("../src/game/sessionService");
+ const result=await game.createGameSession(db,{
+   ...auth(owner),data:{
+     roomId,gameId:"identity",mode:"realtime",requestId:"safety-test-"+UUID(70)
+   }
+ });
+ await assert.rejects(game.gameSessionAction(db,{
+   ...auth(member),data:{
+     roomId,sessionId:result.sessionId,gameId:"identity",rulesVersion:1,
+     expectedRevision:result.revision,requestId:"safety-join-"+UUID(71),
+     payload:{kind:"join"}
+   }
+ }),e=>e.code==="permission-denied");
 });

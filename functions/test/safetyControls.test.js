@@ -44,10 +44,10 @@ test("account deletion refuses unauthenticated, stale sessions, and missing conf
      error=>error.code==="invalid-argument");
  }
  await assert.rejects(controls.requestAccountDeletion({},{
-   auth:{uid,token:{auth_time:1}},data:{confirm:"DELETE"}
+   auth:{uid,token:{auth_time:1}},data:{confirm:"DELETE",expectedUid:uid}
  }),error=>error.code==="failed-precondition");
  await assert.rejects(controls.requestAccountDeletion({},{
-   auth:{uid,token:{}},data:{confirm:"DELETE"}
+   auth:{uid,token:{}},data:{confirm:"DELETE",expectedUid:uid}
  }),error=>error.code==="failed-precondition");
 });
 test("retention windows are deterministic and server owned",()=>{

@@ -52,6 +52,33 @@ class GoogleLogin(private val activity: Activity) {
         }
     }
 
+    suspend fun reauthenticateCurrentUser(): FirebaseUser {
+        check(FirebaseBridge.isReady(activity)) { "Firebase 로그인 설정을 먼저 확인해 주세요." }
+        val user=FirebaseAuth.getInstance().currentUser
+            ?: error("삭제할 계정으로 로그인해 주세요.")
+        val clientIdResource=activity.resources.getIdentifier(
+            "default_web_client_id", "string", activity.packageName
+        )
+        check(clientIdResource!=0) { "Google 로그인 공급자가 준비되지 않았습니다." }
+        val option=GetGoogleIdOption.Builder()
+            .setServerClientId(activity.getString(clientIdResource))
+            .setFilterByAuthorizedAccounts(false)
+            .build()
+        val result=CredentialManager.create(activity).getCredential(
+            context=activity,
+            request=GetCredentialRequest.Builder().addCredentialOption(option).build()
+        )
+        val credential=result.credential
+        check(credential is CustomCredential) { "Google 인증 정보가 잘못되었습니다." }
+        val token=GoogleIdTokenCredential.createFrom(credential.data).idToken
+        user.reauthenticate(GoogleAuthProvider.getCredential(token,null)).await()
+        check(FirebaseAuth.getInstance().currentUser?.uid==user.uid) {
+            "확인한 계정과 삭제 대상 계정이 다릅니다."
+        }
+        user.getIdToken(true).await()
+        return user
+    }
+
     suspend fun signOut() {
         if (FirebaseBridge.isReady(activity)) FirebaseAuth.getInstance().signOut()
         runCatching {

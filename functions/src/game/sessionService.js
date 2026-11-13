@@ -140,12 +140,14 @@ async function createGameSession(db,request){
   const {roomId,game,mode,requestId}=parseCreate(request.data);
   const roomRef=db.collection("rooms").doc(roomId);
   const memberRef=roomRef.collection("members").doc(uid);
+  const deletionRef=db.collection("accountDeletionJobs").doc(uid);
   const sessionId=sha([roomId,uid,requestId]);
   const sessionRef=roomRef.collection("gameSessions").doc(sessionId);
   return db.runTransaction(async tx=>{
-    const [room,member,existing]=await Promise.all([
-      tx.get(roomRef),tx.get(memberRef),tx.get(sessionRef)
+    const [room,member,existing,deletion]=await Promise.all([
+      tx.get(roomRef),tx.get(memberRef),tx.get(sessionRef),tx.get(deletionRef)
     ]);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 새 게임에 참여할 수 없습니다.");
     requireActive(room,member);
     requireRoomOwner(room,uid);
     if(existing.exists){
@@ -184,13 +186,16 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
   const env=parseAction(request.data);
   const roomRef=db.collection("rooms").doc(env.roomId);
   const memberRef=roomRef.collection("members").doc(uid);
+  const deletionRef=db.collection("accountDeletionJobs").doc(uid);
   const sessionRef=roomRef.collection("gameSessions").doc(env.sessionId);
   const receiptRef=sessionRef.collection("processedActions").doc(sha([uid,env.requestId]));
   const fingerprint=sha(env);
   return db.runTransaction(async tx=>{
-    const [room,member,doc,receipt]=await Promise.all([
-      tx.get(roomRef),tx.get(memberRef),tx.get(sessionRef),tx.get(receiptRef)
+    const [room,member,doc,receipt,deletion]=await Promise.all([
+      tx.get(roomRef),tx.get(memberRef),tx.get(sessionRef),
+      tx.get(receiptRef),tx.get(deletionRef)
     ]);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청이 처리 중입니다.");
     requireActive(room,member);
     const session=ensureValidSession(doc,env);
     if(receipt.exists){

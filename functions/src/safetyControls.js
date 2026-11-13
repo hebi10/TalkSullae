@@ -92,7 +92,8 @@ async function reportChatMessage(db,request,now=Date.now){
 
 async function requestAccountDeletion(db,request,now=Date.now){
   const uid=authUid(request);
-  if(!object(request.data,["confirm"])||request.data.confirm!=="DELETE"){
+  if(!object(request.data,["confirm","expectedUid"])||
+     request.data.confirm!=="DELETE"||request.data.expectedUid!==uid){
     throw new HttpsError("invalid-argument","계정 삭제를 다시 확인해 주세요.");
   }
   const authTime=Number(request.auth?.token?.auth_time);
@@ -125,10 +126,10 @@ async function requestAccountDeletion(db,request,now=Date.now){
   return {status:"queued"};
 }
 
-async function removeMessages(db,ref,uid){
+async function removeMessages(db,ref,uid,field="senderUid"){
   let count=0;
   while(true){
-    const snapshots=await ref.where("senderUid","==",uid).limit(100).get();
+    const snapshots=await ref.where(field,"==",uid).limit(100).get();
     if(snapshots.empty)break;
     const batch=db.batch();
     for(const row of snapshots.docs)batch.delete(row.ref);
@@ -159,16 +160,32 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
     }
     const sessions=await roomRef.collection("gameSessions").limit(MAX_SESSIONS+1).get();
     if(sessions.size>MAX_SESSIONS)throw new Error("Manual review: too many sessions");
+    // Recheck at deletion time, not only when the user requested removal.
+    // A game may have begun between queuing and scheduled processing.
+    if(sessions.docs.some(s=>
+       s.get("participants")?.[uid] &&
+       !["finished","cancelled"].includes(s.get("phase")))){
+      throw new Error("Account still participates in an active game");
+    }
     refs.push({roomRef,room,sessions});
   }
   for(const {roomRef,sessions} of refs){
     await removeMessages(db,roomRef.collection("messages"),uid);
     for(const session of sessions.docs){
       const sessionRef=session.ref;
-      await removeMessages(db,sessionRef.collection("publicMessages"),uid);
-      // Sensitive role and submissions are not externally readable. Remove the user's own
-      // assignment and submissions; finished game results remain as shared records.
-      await sessionRef.collection("privateAssignments").doc(uid).delete();
+      const assignmentRef=sessionRef.collection("privateAssignments").doc(uid);
+      const assignment=await assignmentRef.get();
+      const alias=assignment.exists?assignment.get("data")?.alias:null;
+      if(session.get("gameId")==="identity" && typeof alias==="string"){
+        // Identity messages deliberately contain no sender UID. Resolve their
+        // server-only alias before deleting the assignment, within that session only.
+        await removeMessages(db,sessionRef.collection("publicMessages"),alias,"alias");
+      }else{
+        await removeMessages(db,sessionRef.collection("publicMessages"),uid);
+      }
+      // Sensitive role/submission documents are server-only; shared results
+      // remain immutable until the separate shared-history privacy review.
+      await assignmentRef.delete();
       const ballots=await sessionRef.collection("privateSubmissions").where("actorUid","==",uid).get();
       for(let i=0;i<ballots.docs.length;i+=100){
         const batch=db.batch();

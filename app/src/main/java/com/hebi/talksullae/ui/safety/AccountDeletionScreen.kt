@@ -43,6 +43,7 @@ internal fun AccountDeletionScreen(onBack: () -> Unit, onSignedOut: () -> Unit) 
     var confirmVisible by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
     var requested by remember { mutableStateOf(false) }
+    var verifiedUid by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
@@ -71,10 +72,11 @@ internal fun AccountDeletionScreen(onBack: () -> Unit, onSignedOut: () -> Unit) 
                         try {
                             val existing = FirebaseAuth.getInstance().currentUser?.uid
                                 ?: error("Google 로그인 후 요청해 주세요.")
-                            val refreshed = GoogleLogin(activity).signIn()
+                            val refreshed = GoogleLogin(activity).reauthenticateCurrentUser()
                             check(refreshed.uid == existing) {
                                 "같은 Google 계정으로 다시 로그인해 주세요."
                             }
+                            verifiedUid = existing
                             confirmVisible = true
                         } catch (error: Exception) {
                             failure = error.localizedMessage ?: "다시 로그인할 수 없습니다."
@@ -88,8 +90,13 @@ internal fun AccountDeletionScreen(onBack: () -> Unit, onSignedOut: () -> Unit) 
             ) { Text("같은 Google 계정으로 본인 확인") }
             PrimaryAction(
                 "계정 삭제 요청",
-                onClick = { confirmVisible = true },
-                enabled = !busy && currentUser != null,
+                onClick = {
+                    if (verifiedUid != null &&
+                        FirebaseAuth.getInstance().currentUser?.uid == verifiedUid) {
+                        confirmVisible = true
+                    }
+                },
+                enabled = !busy && currentUser != null && verifiedUid == currentUser.uid,
                 modifier = Modifier.fillMaxWidth().testTag("account-deletion-open-confirm")
             )
         }
@@ -109,9 +116,14 @@ internal fun AccountDeletionScreen(onBack: () -> Unit, onSignedOut: () -> Unit) 
                         failure = null
                         scope.launch {
                             try {
+                                val target = verifiedUid
+                                    ?: error("같은 Google 계정으로 본인 확인을 먼저 진행해 주세요.")
+                                check(FirebaseAuth.getInstance().currentUser?.uid == target) {
+                                    "계정이 변경됐습니다. 다시 본인 확인해 주세요."
+                                }
                                 val response = FirebaseFunctions.getInstance("asia-northeast3")
                                     .getHttpsCallable("requestAccountDeletion")
-                                    .call(mapOf("confirm" to "DELETE")).await()
+                                    .call(mapOf("confirm" to "DELETE", "expectedUid" to target)).await()
                                     .data as? Map<*, *>
                                 check(response?.get("status") == "queued") {
                                     "계정 삭제 요청의 접수를 확인할 수 없습니다."
