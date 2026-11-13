@@ -45,12 +45,14 @@ async function sendRoomMessage(db, request) {
   const rateRef = roomRef.collection("chatRateLimits").doc(uid);
 
   return db.runTransaction(async transaction => {
-    const [room, member, existing, rate] = await Promise.all([
+    const [room, member, existing, rate, deletion] = await Promise.all([
       transaction.get(roomRef),
       transaction.get(memberRef),
       transaction.get(messageRef),
-      transaction.get(rateRef)
+      transaction.get(rateRef),
+      transaction.get(db.collection("accountDeletionJobs").doc(uid))
     ]);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 채팅할 수 없습니다.");
     if (!room.exists || room.get("status") !== "active" ||
         !member.exists || member.get("status") !== "active") {
       throw new HttpsError("permission-denied", "활성 멤버만 이 방에서 채팅할 수 있습니다.");

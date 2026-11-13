@@ -35,10 +35,26 @@ async function setUserBlock(db,request){
   if(targetUid===uid||typeof blocked!=="boolean"){
     throw new HttpsError("invalid-argument","본인 차단 또는 상태가 올바르지 않습니다.");
   }
-  const ref=db.collection("userSafety").doc(uid).collection("blocks").doc(targetUid);
-  if(blocked)await ref.set({createdAt:FieldValue.serverTimestamp()});
-  else await ref.delete();
-  return {targetUid,blocked};
+  const ownerRef=db.collection("userSafety").doc(uid);
+  const ref=ownerRef.collection("blocks").doc(targetUid);
+  return db.runTransaction(async tx=>{
+    const [owner,existing,deletion]=await Promise.all([
+      tx.get(ownerRef),tx.get(ref),tx.get(db.collection("accountDeletionJobs").doc(uid))
+    ]);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청이 진행 중입니다.");
+    const count=owner.exists?(owner.get("blockCount")||0):0;
+    if(!Number.isSafeInteger(count)||count<0||count>100){
+      throw new HttpsError("failed-precondition","차단 목록을 확인할 수 없습니다.");
+    }
+    if(blocked && !existing.exists && count>=100){
+      throw new HttpsError("resource-exhausted","차단 목록은 최대 100명입니다.");
+    }
+    if(blocked===existing.exists)return {targetUid,blocked};
+    tx.set(ownerRef,{blockCount:FieldValue.increment(blocked?1:-1)},{merge:true});
+    if(blocked)tx.create(ref,{createdAt:FieldValue.serverTimestamp()});
+    else tx.delete(ref);
+    return {targetUid,blocked};
+  });
 }
 
 async function reportChatMessage(db,request,now=Date.now){
@@ -236,8 +252,12 @@ async function processAccountDeletionQueue(db,auth=getAuth()){
       if(result.status==="completed")summary.completed++;
     }catch(error){
       summary.failed++;
+      const attempts=(doc.get("attempts")||0)+1;
+      const manual=/Manual review|Account still participates/.test(String(error.message||""));
       await doc.ref.update({
-        status:"queued",lastError:"retry-required",updatedAt:FieldValue.serverTimestamp()
+        status:manual?"manual-review":attempts>=3?"needs-attention":"queued",
+        lastError:manual?"manual-review-required":"retry-required",
+        updatedAt:FieldValue.serverTimestamp()
       });
     }
   }

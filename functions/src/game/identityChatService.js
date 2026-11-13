@@ -42,10 +42,12 @@ async function sendIdentityMessage(db,request,now=Date.now){
   const messageRef=sessionRef.collection("publicMessages").doc(messageId);
   const rateRef=sessionRef.collection("gameChatRateLimits").doc(uid);
   return db.runTransaction(async tx=>{
-    const [room,member,session,personal,existing,rate]=await Promise.all([
+    const [room,member,session,personal,existing,rate,deletion]=await Promise.all([
       tx.get(roomRef),tx.get(memberRef),tx.get(sessionRef),
-      tx.get(privateRef),tx.get(messageRef),tx.get(rateRef)
+      tx.get(privateRef),tx.get(messageRef),tx.get(rateRef),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))
     ]);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 채팅할 수 없습니다.");
     if(!room.exists||room.get("status")!=="active"||
        !member.exists||member.get("status")!=="active"||
        !session.exists||room.get("activeGameSessionId")!==input.sessionId ||

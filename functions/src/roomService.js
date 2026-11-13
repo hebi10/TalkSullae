@@ -33,14 +33,18 @@ async function createRoom(db, request) {
   const roomRef = db.collection("rooms").doc();
   const memberRef = roomRef.collection("members").doc(uid);
   const indexRef = userIndex(db,uid,roomRef.id);
-  const batch = db.batch();
-  batch.create(roomRef,{
-    ...draft,ownerId:uid,status:"active",
-    memberCount:1,pendingCount:0,activeInviteHash:null,createdAt:now()
+  await db.runTransaction(async tx=>{
+    const deletion=await tx.get(db.collection("accountDeletionJobs").doc(uid));
+    if(deletion.exists){
+      throw new HttpsError("permission-denied","계정 삭제 요청 중에는 방을 만들 수 없습니다.");
+    }
+    tx.create(roomRef,{
+      ...draft,ownerId:uid,status:"active",
+      memberCount:1,pendingCount:0,activeInviteHash:null,createdAt:now()
+    });
+    tx.create(memberRef,{displayName:memberName(request.auth),status:"active",joinedAt:now()});
+    tx.create(indexRef,{roomName:draft.name,status:"active",updatedAt:now()});
   });
-  batch.create(memberRef,{displayName:memberName(request.auth),status:"active",joinedAt:now()});
-  batch.create(indexRef,{roomName:draft.name,status:"active",updatedAt:now()});
-  await batch.commit();
   return {roomId:roomRef.id};
 }
 
@@ -69,9 +73,13 @@ async function requestJoin(db, request) {
   const memberRef = roomRef.collection("members").doc(uid);
   const indexRef = userIndex(db,uid,roomId);
   return db.runTransaction(async tx=>{
-    const [room,invite,member] = await Promise.all([
-      tx.get(roomRef),tx.get(inviteRef),tx.get(memberRef)
+    const [room,invite,member,deletion] = await Promise.all([
+      tx.get(roomRef),tx.get(inviteRef),tx.get(memberRef),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))
     ]);
+    if(deletion.exists){
+      throw new HttpsError("permission-denied","계정 삭제 요청 중에는 방에 가입할 수 없습니다.");
+    }
     if (!room.exists || room.data().status !== "active" ||
         room.data().activeInviteHash !== inviteRef.id ||
         !invite.exists || invite.data().expiresAt.toMillis() <= Date.now()) {
@@ -125,6 +133,12 @@ async function changeMember(db, request) {
     const current = target.data().status;
     if (action==="approve" || action==="reject") {
       if (current!=="pending") throw new HttpsError("failed-precondition", "승인 대기 상태가 아닙니다.");
+      if(action==="approve"){
+        const deletion=await tx.get(db.collection("accountDeletionJobs").doc(targetUid));
+        if(deletion.exists){
+          throw new HttpsError("failed-precondition","계정 삭제 요청 중인 멤버는 승인할 수 없습니다.");
+        }
+      }
       if (action==="approve" && room.data().memberCount>=ROOM_CAPACITY) {
         throw new HttpsError("resource-exhausted", "방 정원이 가득 찼습니다.");
       }

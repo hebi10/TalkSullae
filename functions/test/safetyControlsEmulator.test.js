@@ -140,3 +140,44 @@ test("a queued deletion blocks new game participation even when the user signs i
    }
  }),e=>e.code==="permission-denied");
 });
+
+test("block list stops at 100 while existing blocked users remain idempotent",async()=>{
+ const {owner,member}=await sharedRoom();
+ const profile=db.collection("userSafety").doc(owner);
+ await profile.set({blockCount:100});
+ await profile.collection("blocks").doc("already").set({createdAt:new Date()});
+ await assert.rejects(safety.setUserBlock(db,{
+   ...auth(owner),data:{targetUid:member,blocked:true}
+ }),e=>e.code==="resource-exhausted");
+ assert.equal((await profile.collection("blocks").doc(member).get()).exists,false);
+ const retry=await safety.setUserBlock(db,{
+   ...auth(owner),data:{targetUid:"already",blocked:true}
+ });
+ assert.equal(retry.blocked,true);
+});
+test("an account queued for deletion cannot create or join new rooms",async()=>{
+ const {owner,member,roomId}=await sharedRoom();
+ await safety.requestAccountDeletion(db,{
+  ...auth(member),data:{confirm:"DELETE",expectedUid:member}
+ },()=>nowMillis);
+ await assert.rejects(rooms.createRoom(db,{...auth(member),data:{
+   name:"새 방 생성",description:"",requiresApproval:false
+ }}),e=>e.code==="permission-denied");
+ const invite=await rooms.createInvitation(db,{...auth(owner),data:{roomId}});
+ await assert.rejects(rooms.requestJoin(db,{...auth(member),data:{code:invite.code}}),
+   e=>e.code==="permission-denied");
+});
+test("worker rechecks active participation and never deletes an active player's role",async()=>{
+ const {owner,member,roomId}=await sharedRoom();
+ await safety.requestAccountDeletion(db,{
+   ...auth(member),data:{confirm:"DELETE",expectedUid:member}
+ },()=>nowMillis);
+ const active=db.collection("rooms").doc(roomId).collection("gameSessions").doc("d".repeat(64));
+ await active.set({phase:"playing",participants:{[member]:{ready:true}},
+   sessionId:active.id,roomId,gameId:"identity",revision:1});
+ await active.collection("privateAssignments").doc(member).set({data:{alias:"고양이"}});
+ await assert.rejects(safety.processOneAccountDeletion(db,member,{
+   async deleteUser(){throw Error("Deletion must not be reached")}
+ }),/active game/);
+ assert.equal((await active.collection("privateAssignments").doc(member).get()).exists,true);
+});
