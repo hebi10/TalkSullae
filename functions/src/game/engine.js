@@ -167,7 +167,8 @@ function makeRuleRegistry(definitions=[]){
 const identityRules=require("./identityRules");
 const liarRules=require("./liarRules");
 const forbiddenRules=require("./forbiddenRules");
-const productionRules=makeRuleRegistry([identityRules,liarRules,forbiddenRules]);
+const balanceRules=require("./balanceRules");
+const productionRules=makeRuleRegistry([identityRules,liarRules,forbiddenRules,balanceRules]);
 
 function publicSnapshot(doc){
   requirePhase(doc.phase);

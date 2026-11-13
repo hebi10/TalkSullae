@@ -91,6 +91,7 @@ internal fun OnlineRoomsHost(
     var identityVisible by rememberSaveable { mutableStateOf(false) }
     var liarVisible by rememberSaveable { mutableStateOf(false) }
     var forbiddenVisible by rememberSaveable { mutableStateOf(false) }
+    var balanceVisible by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state.selectedId, selected?.status) {
         if (state.selectedId == null || selected?.status != "active") {
@@ -98,7 +99,17 @@ internal fun OnlineRoomsHost(
             identityVisible = false
             liarVisible = false
             forbiddenVisible = false
+            balanceVisible = false
         }
+    }
+
+    if (balanceVisible && room != null && selected?.status == "active") {
+        OnlineBalanceGameHost(
+            uid = uid,roomId = room.id,roomName = room.name,ownerId = room.ownerId,
+            members = state.members.filter { it.status == "active" },
+            onBack = { balanceVisible = false }
+        )
+        return
     }
 
     if (forbiddenVisible && room != null && selected?.status == "active") {
@@ -288,7 +299,7 @@ internal fun OnlineRoomsHost(
             )
             PrimaryAction(
                 "라이어 채팅 온라인 게임",
-                onClick = { forbiddenVisible = false; chatVisible = false; identityVisible = false; liarVisible = true },
+                onClick = { balanceVisible = false; forbiddenVisible = false; chatVisible = false; identityVisible = false; liarVisible = true },
                 modifier = Modifier.fillMaxWidth().testTag("liar-game-open")
             )
             PrimaryAction(
@@ -296,6 +307,14 @@ internal fun OnlineRoomsHost(
                 onClick = {chatVisible = false; identityVisible = false;
                     liarVisible = false; forbiddenVisible = true},
                 modifier = Modifier.fillMaxWidth().testTag("forbidden-game-open")
+            )
+            PrimaryAction(
+                "밸런스 예측 온라인 게임",
+                onClick = {
+                    chatVisible = false; identityVisible = false
+                    liarVisible = false; forbiddenVisible = false; balanceVisible = true
+                },
+                modifier = Modifier.fillMaxWidth().testTag("balance-game-open")
             )
 
             if (isOwner) {

@@ -157,17 +157,17 @@ test("authenticated members recover active session after restart; outsiders are 
   assert.equal(after.sessionId,null);
 });
 
-test("start refuses unimplemented production game rules without leaking role secrets",async()=>{
+test("audited balance server rule starts with no role secrets",async()=>{
   const roomId=await twoMembers();
   const start=await created(roomId,8);
   const revision=await readyRoom(roomId,start.sessionId);
-  await assert.rejects(game.gameSessionAction(db,{...auth("owner"),data:{
+  const begun=await game.gameSessionAction(db,{...auth("owner"),data:{
     roomId,sessionId:start.sessionId,gameId:"balance",rulesVersion:1,
     expectedRevision:revision,requestId:reqId(41),payload:{kind:"start"}
-  }}),e=>e.code==="failed-precondition");
+  }},undefined,now);
+  assert.equal(begun.phase,"playing");
   const snap=await db.collection("rooms").doc(roomId)
     .collection("gameSessions").doc(start.sessionId).get();
-  assert.equal(snap.get("phase"),"ready");
   assert.equal((await snap.ref.collection("privateAssignments").get()).size,0);
   assert.equal(snap.get("settlementId"),null);
 });

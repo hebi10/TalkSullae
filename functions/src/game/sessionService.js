@@ -300,6 +300,7 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
       }
       const submissions={};
       const submissionsByRound={};
+      const submissionsByPhase={};
       const submissionPhase=session.phase==="reveal"?"voting":session.phase;
       if(session.gameId==="liar" && ["voting","reveal"].includes(session.phase)){
         const keys=[];
@@ -317,6 +318,19 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
           }
         });
         Object.assign(submissions,submissionsByRound[session.round]);
+      }else if(session.gameId==="balance" &&
+         ["playing","voting","reveal"].includes(session.phase)){
+        const phases=session.phase==="playing"?["playing"]:["playing","voting"];
+        for(const subPhase of phases){
+          submissionsByPhase[subPhase]={};
+          const docs=await Promise.all(participants.map(playerId=>
+            tx.get(sessionRef.collection("privateSubmissions")
+              .doc(submissionId(playerId,session.round,subPhase)))));
+          docs.forEach((snap,index)=>{
+            if(snap.exists)submissionsByPhase[subPhase][participants[index]]=snap.get("data");
+          });
+        }
+        Object.assign(submissions,submissionsByPhase[submissionPhase]||{});
       }else if(["playing","voting"].includes(submissionPhase)){
         const docs=await Promise.all(participants.map(playerId=>
           tx.get(sessionRef.collection("privateSubmissions")
@@ -336,7 +350,7 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
       }
       const assignments={};
       const memberNames={};
-      if((["identity","liar"].includes(session.gameId) &&
+      if((["identity","liar","balance"].includes(session.gameId) &&
          ["voting","reveal"].includes(session.phase)) ||
          (session.gameId==="forbidden" &&
           ["playing","reveal"].includes(session.phase))){
@@ -355,7 +369,8 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
       }
       const rule=rules.require(session.gameId,session.rulesVersion);
       const moved=rule.advance({
-        session,submissions,submissionsByRound,assignments,memberNames,nowMillis:timestamp
+        session,submissions,submissionsByRound,submissionsByPhase,
+        assignments,memberNames,nowMillis:timestamp
       });
       if(!nonemptyObject(moved)||typeof moved.phase!=="string"){
         throw new HttpsError("failed-precondition","게임 전이 응답이 잘못되었습니다.");
@@ -438,10 +453,16 @@ async function getMyGameSession(db,request,rules=productionRules){
     if(personal!==null&&!nonemptyObject(personal)){
       throw new HttpsError("internal","게임 개인 상태가 잘못되었습니다.");
     }
-    if(personal!==null && session.phase==="voting"){
+    if(personal!==null && (session.phase==="voting" ||
+       (session.gameId==="balance"&&session.phase==="playing"))){
       const vote=await sessionRef.collection("privateSubmissions")
-        .doc(submissionId(uid,session.round,"voting")).get();
+        .doc(submissionId(uid,session.round,session.phase)).get();
       personal={...personal,submitted:vote.exists};
+      if(session.gameId==="balance"){
+        const own=await sessionRef.collection("privateSubmissions")
+          .doc(submissionId(uid,session.round,"playing")).get();
+        personal={...personal,ownChoice:own.exists?own.get("data.ownChoice"):null};
+      }
     }
   }
   return {public:publicSnapshot(session),personal};
