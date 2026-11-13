@@ -54,6 +54,7 @@ test("reporting requires real member and real stored message; retry is idempoten
  assert.equal(record.get("reportedUid"),owner);
  assert.equal(record.get("actorUid"),member);
  assert.equal(record.get("messageId"),message.messageId);
+ assert.equal(record.get("evidence.text"),"검증을 위한 신고 대상 메시지");
  await assert.rejects(safety.reportChatMessage(db,{...auth("outsider"),data},()=>nowMillis),
    e=>e.code==="permission-denied");
  await assert.rejects(safety.reportChatMessage(db,{...auth(member),data:{
@@ -180,4 +181,16 @@ test("worker rechecks active participation and never deletes an active player's 
    async deleteUser(){throw Error("Deletion must not be reached")}
  }),/active game/);
  assert.equal((await active.collection("privateAssignments").doc(member).get()).exists,true);
+});
+
+test("room ownership cannot move to a user queued for deletion",async()=>{
+ const {owner,member,roomId}=await sharedRoom();
+ await safety.requestAccountDeletion(db,{
+   ...auth(member),data:{confirm:"DELETE",expectedUid:member}
+ },()=>nowMillis);
+ await assert.rejects(rooms.changeMember(db,{...auth(owner),data:{
+   roomId,targetUid:member,action:"transfer"
+ }}),e=>e.code==="failed-precondition");
+ const room=await db.collection("rooms").doc(roomId).get();
+ assert.equal(room.get("ownerId"),owner);
 });

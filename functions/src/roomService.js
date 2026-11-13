@@ -152,6 +152,10 @@ async function changeMember(db, request) {
     }
     if (current!=="active") throw new HttpsError("failed-precondition", "활성 멤버가 아닙니다.");
     if (action==="transfer") {
+      const deletion=await tx.get(db.collection("accountDeletionJobs").doc(targetUid));
+      if(deletion.exists){
+        throw new HttpsError("failed-precondition","삭제 요청 중인 계정에 방장 권한을 위임할 수 없습니다.");
+      }
       tx.update(roomRef,{ownerId:targetUid});
       return {status:"owner-transferred"};
     }

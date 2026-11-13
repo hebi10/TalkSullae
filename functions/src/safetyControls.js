@@ -98,6 +98,13 @@ async function reportChatMessage(db,request,now=Date.now){
     tx.create(reportRef,{
       actorUid:uid,requestId,roomId,messageId:data.messageId,
       reportedUid:message.get("senderUid"),
+      evidence:{
+        senderName:typeof message.get("senderName")==="string"
+          ?message.get("senderName").slice(0,30):"멤버",
+        text:typeof message.get("text")==="string"
+          ?message.get("text").slice(0,1000):"",
+        createdAt:message.get("createdAt")||null
+      },
       category:data.category,details:data.details.trim(),
       status:"received",createdAt:FieldValue.serverTimestamp()
     });
@@ -220,6 +227,9 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
         tx.get(roomRef),tx.get(roomRef.collection("members").doc(uid))
       ]);
       if(!room.exists||!member.exists)return;
+      if(room.get("status")==="active"&&room.get("ownerId")===uid){
+        throw new Error("Manual review: user became owner during deletion");
+      }
       const current=member.get("status");
       if(current==="active"||current==="pending"){
         const prop=current==="active"?"memberCount":"pendingCount";
