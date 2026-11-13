@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ListenerRegistration
@@ -131,6 +132,7 @@ class BalanceGameComposeTest {
         }
         compose.onNodeWithText("A: 평생 여름 (1명)",substring=true).assertExists()
         compose.onNodeWithTag("balance-create-next").assertExists()
+        compose.onNodeWithTag("balance-next-refresh").assertExists()
     }
 
 }
