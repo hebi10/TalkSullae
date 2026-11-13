@@ -125,8 +125,9 @@ test("real four-player game has private role/topic, timed chat, votes, guess and
  assert.equal(finished.phase,"finished");
  const settled=await s.ref.collection("results").doc("final").get();
  assert.equal(settled.exists,true);
- assert.equal(settled.get("scoresByUid."+liar),100);
- for(const citizen of citizens)assert.equal(settled.get("scoresByUid."+citizen),20);
+ const scores=settled.get("scoresByUid");
+ assert.equal(scores[liar],100);
+ for(const citizen of citizens)assert.equal(scores[citizen],20);
  assert.equal((await db.collection("rooms").doc(s.roomId).get()).get("activeGameSessionId"),null);
  assert.equal((await s.ref.collection("results").get()).size,1);
 });
