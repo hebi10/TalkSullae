@@ -85,3 +85,20 @@ assertion.ref == 'refs/heads/main'
 - https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines
 - https://developers.google.com/android-publisher/getting_started
 - https://support.google.com/googleplay/android-developer/answer/9859348
+
+## RELEASE-03 — 최초 내부 테스트 트랙 초기화와 HTTP 404 대응 (2026-11-12)
+
+- 실제 서명 AAB 빌드 및 4환경 QA: [배포 시도 #43145896908](https://github.com/hebi10/TalkSullae/actions/runs/43145896908)에서 모두 성공.
+- 실패 진단 아티팩트 `talksullae-play-internal-api-result`: `version_code=3`, `upload_stage=acknowledged`, `api_committed=false`, `HTTP 404`. Play API는 AAB 업로드를 인정했지만 **릴리스 커밋은 되지 않았습니다.**
+- 직전 `check` 결과: `internal_track_exists=false`, `current_max_code=2`. 가장 유력한 404 지점은 최초 릴리스가 없는 내부 `qa` 트랙 업데이트입니다. 기존 API 오류 문자열만으로 실패한 HTTP 메서드를 100% 증명한 것은 아닙니다.
+- Google의 `edits.tracks.create` API는 현재 새 비공개 테스트(CLOSED_TESTING) 트랙 생성만 지원합니다. `qa`는 내부 테스트 전용 이름이므로 임의로 새 비공개 트랙을 만들거나 `alpha`/프로덕션으로 우회하지 않습니다.
+- 이번 코드 보강: `mode=check`는 `ready_for_deploy` 및 `requires_play_console_initialization`을 반환합니다. `mode=deploy`의 사전 검사에는 `--require-existing-qa`를 전달하여 `qa` 부재 시 **AAB API 업로드 전** 실패하도록 합니다. 배포 스크립트도 동일한 검사를 반복하고, 트랙 업데이트·검증·커밋 단계별 진행 상태를 보고서에 남깁니다.
+
+### 최초 릴리스 생성(Play Console 관리자 작업, 1회)
+
+1. [톡술래 Google Play 내부 테스트](https://play.google.com/console/u/0/developers/5537932067090246638/app/4973870328500093781/tracks/internal-testing?releaseType=defaultReleases)에서 테스트 대상과 내부 테스트 **출시** 탭을 확인합니다.
+2. 기존 `0.3.0 (2)` 임시 출시가 정상인지 확인하고, 필요한 경우 Play Console이 안내하는 초기 설정을 완료한 뒤 **내부 테스트**로 첫 출시를 활성화합니다. `0.3.1 (3)`을 수동 업로드하면 코드 3을 다시 자동 업로드할 수 없으므로 중복을 피합니다.
+3. 내부 테스트를 출시한 뒤 [Play 내부 배포 워크플로](https://github.com/hebi10/TalkSullae/actions/workflows/play-internal.yml)의 `main`에서 `mode=check`를 실행합니다. API 응답 `internal_track_exists=true`, `ready_for_deploy=true` 및 사용 가능한 `versionCode=3`을 확인합니다.
+4. 그 다음에만 `mode=deploy`를 실행합니다. Firebase/Android 전체 QA → 고정 업로드 키 서명 → `qa` 업로드 → Play API commit/readback 순으로 수행됩니다. 성공하더라도 Play Console 게시·테스터 설치 여부는 별도 확인합니다.
+
+참고: https://developers.google.com/android-publisher/api-ref/rest/v3/edits.tracks/create

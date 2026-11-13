@@ -16,6 +16,7 @@ class FakeClient:
         self.calls = []
         self.assigned = False
         self.readback_ok = True
+        self.fail_track_update = False
 
     def create_edit(self):
         self.created += 1
@@ -39,6 +40,8 @@ class FakeClient:
         if path.endswith("/bundles?uploadType=media"):
             return {"versionCode": self.upload_code}
         if method == "PUT" and path.endswith("/tracks/qa"):
+            if self.fail_track_update:
+                raise PlaySafetyError("Google Play API HTTP 404; no release success assumed")
             self.assigned = True
         return {}
 
@@ -56,6 +59,8 @@ class InternalPlayTests(unittest.TestCase):
         result = check_preflight(fake, "qa", 2)
         self.assertEqual(result["track"], "qa")
         self.assertEqual(result["current_max_code"], 1)
+        self.assertTrue(result["ready_for_deploy"])
+        self.assertFalse(result["requires_play_console_initialization"])
         self.assertEqual(fake.calls, [])
         self.assertEqual(len(fake.deleted), 1)
 
@@ -63,7 +68,16 @@ class InternalPlayTests(unittest.TestCase):
         fake = FakeClient(prior=0, has_qa=False)
         result = check_preflight(fake, "qa", 2)
         self.assertFalse(result["internal_track_exists"])
+        self.assertFalse(result["ready_for_deploy"])
+        self.assertTrue(result["requires_play_console_initialization"])
         self.assertFalse(result["api_committed"])
+
+    def test_deployment_preflight_requires_initialized_qa_track(self):
+        fake = FakeClient(prior=2, has_qa=False)
+        with self.assertRaisesRegex(PlaySafetyError, "Play Console must initialize"):
+            check_preflight(fake, "qa", 3, require_existing_qa=True)
+        self.assertEqual(fake.calls, [])
+        self.assertEqual(len(fake.deleted), 1)
 
     def test_duplicate_code_preflight_fails(self):
         fake = FakeClient(prior=2)
@@ -80,6 +94,33 @@ class InternalPlayTests(unittest.TestCase):
                 with self.assertRaises(PlaySafetyError):
                     deploy(fake, target, path, 2, "0.3.0", "내부 테스트")
         self.assertEqual(fake.calls, [])
+
+    def test_missing_internal_track_stops_before_bundle_upload(self):
+        fake = FakeClient(prior=2, has_qa=False, upload_code=3)
+        report = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "app.aab"
+            path.write_bytes(b"x" * 15000)
+            with self.assertRaisesRegex(PlaySafetyError, "Initialize the first internal testing release"):
+                deploy(fake, "qa", path, 3, "0.3.1", "내부 테스트", report=report)
+        self.assertEqual(fake.calls, [])
+        self.assertEqual(len(fake.deleted), 1)
+        self.assertEqual(report["upload_stage"], "internal_track_missing")
+        self.assertFalse(report["api_committed"])
+
+    def test_http_404_on_track_update_has_precise_stage_and_no_commit(self):
+        fake = FakeClient(prior=2, has_qa=True, upload_code=3)
+        fake.fail_track_update = True
+        report = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "app.aab"
+            path.write_bytes(b"x" * 15000)
+            with self.assertRaisesRegex(PlaySafetyError, "HTTP 404"):
+                deploy(fake, "qa", path, 3, "0.3.1", "내부 테스트", report=report)
+        self.assertEqual(report["upload_stage"], "track_update_requested")
+        self.assertFalse(report["api_committed"])
+        self.assertEqual(len(fake.deleted), 1)
+        self.assertFalse(any(":commit" in request[1] for request in fake.calls))
 
     def test_deploy_duplicate_code_never_uploads(self):
         fake = FakeClient(prior=2)

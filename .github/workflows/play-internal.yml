@@ -213,7 +213,7 @@ jobs:
         env:
           PLAY_INTERNAL_TRACK: qa
           PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
-        run: python3 scripts/release/play_internal.py check --track "$PLAY_INTERNAL_TRACK" --version-code "${{ needs.source.outputs.code }}" --report play-preflight.json
+        run: python3 scripts/release/play_internal.py check --track "$PLAY_INTERNAL_TRACK" --version-code "${{ needs.source.outputs.code }}" --require-existing-qa --report play-preflight.json
       - name: Archive safe preflight result
         if: always()
         uses: actions/upload-artifact@v4
