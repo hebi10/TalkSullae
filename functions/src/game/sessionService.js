@@ -294,8 +294,25 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
         throw new HttpsError("failed-precondition","마감 가능한 단계가 아닙니다.");
       }
       const submissions={};
+      const submissionsByRound={};
       const submissionPhase=session.phase==="reveal"?"voting":session.phase;
-      if(["playing","voting"].includes(submissionPhase)){
+      if(session.gameId==="liar" && ["voting","reveal"].includes(session.phase)){
+        const keys=[];
+        for(let round=1;round<=session.round;round++){
+          submissionsByRound[round]={};
+          for(const playerId of participants)keys.push([round,playerId]);
+        }
+        const docs=await Promise.all(keys.map(([round,playerId])=>
+          tx.get(sessionRef.collection("privateSubmissions")
+            .doc(submissionId(playerId,round,"voting")))));
+        docs.forEach((snap,index)=>{
+          if(snap.exists){
+            const [round,playerId]=keys[index];
+            submissionsByRound[round][playerId]=snap.get("data");
+          }
+        });
+        Object.assign(submissions,submissionsByRound[session.round]);
+      }else if(["playing","voting"].includes(submissionPhase)){
         const docs=await Promise.all(participants.map(playerId=>
           tx.get(sessionRef.collection("privateSubmissions")
             .doc(submissionId(playerId,session.round,submissionPhase)))));
@@ -303,14 +320,19 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
           if(snap.exists)submissions[participants[index]]=snap.get("data");
         });
       }
-      const allSubmitted=["playing","voting"].includes(session.phase) &&
-        participants.length>0 && Object.keys(submissions).length===participants.length;
+      const guessSubmitted=session.gameId==="liar" && session.phase==="voting" &&
+        session.publicState?.notice==="guess" &&
+        Object.values(submissions).some(value=>typeof value?.topicChoice==="string");
+      const allSubmitted=(["playing","voting"].includes(session.phase) &&
+        participants.length>0 && Object.keys(submissions).length===participants.length) ||
+        guessSubmitted;
       if(session.phaseEndsAt.toMillis()>timestamp && !allSubmitted){
         throw new HttpsError("failed-precondition","게임 단계의 제한 시간이 남아 있습니다.");
       }
       const assignments={};
       const memberNames={};
-      if(session.gameId==="identity" && ["voting","reveal"].includes(session.phase)){
+      if(["identity","liar"].includes(session.gameId) &&
+         ["voting","reveal"].includes(session.phase)){
         const [secrets,members]=await Promise.all([
           Promise.all(participants.map(playerId=>
             tx.get(sessionRef.collection("privateAssignments").doc(playerId)))),
@@ -325,7 +347,9 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
         });
       }
       const rule=rules.require(session.gameId,session.rulesVersion);
-      const moved=rule.advance({session,submissions,assignments,memberNames,nowMillis:timestamp});
+      const moved=rule.advance({
+        session,submissions,submissionsByRound,assignments,memberNames,nowMillis:timestamp
+      });
       if(!nonemptyObject(moved)||typeof moved.phase!=="string"){
         throw new HttpsError("failed-precondition","게임 전이 응답이 잘못되었습니다.");
       }

@@ -55,11 +55,11 @@ service cloud.firestore {
         match /publicMessages/{messageId} {
           allow get: if activeMember(roomId)
             && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active"
-            && get(/databases/$(database)/documents/rooms/$(roomId)/gameSessions/$(sessionId)).data.gameId == "identity"
+            && get(/databases/$(database)/documents/rooms/$(roomId)/gameSessions/$(sessionId)).data.gameId in ["identity", "liar"]
             && get(/databases/$(database)/documents/rooms/$(roomId)/gameSessions/$(sessionId)).data.participants.keys().hasAny([request.auth.uid]);
           allow list: if activeMember(roomId)
             && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active"
-            && get(/databases/$(database)/documents/rooms/$(roomId)/gameSessions/$(sessionId)).data.gameId == "identity"
+            && get(/databases/$(database)/documents/rooms/$(roomId)/gameSessions/$(sessionId)).data.gameId in ["identity", "liar"]
             && get(/databases/$(database)/documents/rooms/$(roomId)/gameSessions/$(sessionId)).data.participants.keys().hasAny([request.auth.uid])
             && request.query.limit != null && request.query.limit <= 30;
           allow create, update, delete: if false;

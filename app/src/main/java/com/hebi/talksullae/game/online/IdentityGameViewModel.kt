@@ -29,6 +29,7 @@ internal data class IdentityGameState(
     val personal: Map<*, *>? = null,
     val personalLoading: Boolean = false,
     val personalError: String? = null,
+    val otherGameActive: Boolean = false,
     val messages: List<IdentityChatMessage> = emptyList(),
     val loading: Boolean = true,
     val busy: Boolean = false,
@@ -95,7 +96,10 @@ internal class IdentityGameViewModel(private val repository: OnlineGameSessionRe
                 if(generation != sessionGeneration || roomId != room) return@launch
                 if(active == null){
                     unbind()
-                    mutable.update { it.copy(loading = false, session = null, personal = null) }
+                    mutable.update { it.copy(
+                        loading = false, session = null, personal = null,
+                        otherGameActive = false
+                    ) }
                 }else bind(room,active)
             }catch(e: Exception){
                 if(generation == sessionGeneration && roomId == room){
@@ -136,11 +140,19 @@ internal class IdentityGameViewModel(private val repository: OnlineGameSessionRe
                 unbind()
                 mutable.update { it.copy(loading = false, error = "게임 세션이 없어졌습니다.") }
             }else{
+                if(snapshot.session.gameId != "identity"){
+                    mutable.update { it.copy(
+                        session = null, personal = null, loading = false,
+                        otherGameActive = true, messages = emptyList()
+                    ) }
+                    return@watchSession
+                }
                 val member = snapshot.participants.any { it.uid == uid }
                 mutable.update {
                     it.copy(
                         session = snapshot,
                         loading = false,
+                        otherGameActive = false,
                         error = null,
                         personal = if(member) it.personal else null,
                         personalLoading = if(member) it.personalLoading else false,
@@ -288,7 +300,8 @@ internal class IdentityGameViewModel(private val repository: OnlineGameSessionRe
 
     fun create() {
         val room = roomId ?: return
-        if(mutable.value.busy || mutable.value.session != null) return
+        if(mutable.value.busy || mutable.value.session != null ||
+            mutable.value.otherGameActive) return
         val generation = sessionGeneration
         mutable.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
