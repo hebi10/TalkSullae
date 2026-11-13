@@ -134,5 +134,15 @@ class BalanceGameComposeTest {
         compose.onNodeWithTag("balance-create-next").assertExists()
         compose.onNodeWithTag("balance-next-refresh").assertExists()
     }
+    @Test fun cancelledGameCanBeRestartedOrRefreshed(){
+        val repo=Fake(GamePhase.CANCELLED)
+        mount(repo)
+        compose.waitUntil(8000){
+            compose.onAllNodesWithTag("balance-cancelled-refresh")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("balance-cancelled-create").assertExists()
+        compose.onNodeWithTag("balance-cancelled-refresh").assertExists()
+    }
 
 }

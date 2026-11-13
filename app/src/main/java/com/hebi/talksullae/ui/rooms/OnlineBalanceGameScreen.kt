@@ -226,7 +226,18 @@ internal fun OnlineBalanceGameHost(
                     }
                 }
             }
-            if(phase==GamePhase.CANCELLED)Text("게임이 취소됐습니다.")
+            if(phase==GamePhase.CANCELLED){
+                Text("게임이 취소됐습니다.")
+                OutlinedButton(onClick=vm::refresh,enabled=!state.busy,
+                    modifier=Modifier.fillMaxWidth().testTag("balance-cancelled-refresh")){
+                    Text("새 게임 다시 확인")
+                }
+                if(uid==ownerId){
+                    PrimaryAction("새 밸런스 게임 만들기",onClick={vm.create(asyncMode)},
+                        enabled=!state.busy&&state.pending==null,
+                        modifier=Modifier.fillMaxWidth().testTag("balance-cancelled-create"))
+                }
+            }
             if(uid==ownerId&&phase!=GamePhase.FINISHED&&phase!=GamePhase.CANCELLED){
                 OutlinedButton(onClick={vm.action("cancel")},
                     enabled=!state.busy&&state.pending==null,
