@@ -3,17 +3,17 @@ name: Play closed-testing guarded publisher
 on:
   workflow_dispatch:
     inputs:
+      ops01_release_approved:
+        description: 'Approve Play changes only after final planned work and QA'
+        type: boolean
+        required: true
+        default: false
       mode:
         description: 'check Play app/track, build signed AAB, or deploy after full QA'
         required: true
         default: check
         type: choice
         options: [check, build, deploy]
-  push:
-    branches: [main]
-    paths:
-      - 'app/build.gradle.kts'
-
 permissions:
   contents: read
 
@@ -204,10 +204,13 @@ jobs:
   closed-publish:
     needs: [source, qa, signed-aab, play-preflight]
     if: >-
+      github.event_name == 'workflow_dispatch' && inputs.ops01_release_approved == true &&
+      (
       needs.source.outputs.mode == 'deploy' &&
       needs.qa.result == 'success' &&
       needs.signed-aab.result == 'success' &&
       needs.play-preflight.result == 'success'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
