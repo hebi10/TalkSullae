@@ -36,13 +36,15 @@ function prepare({participants},random=randomInt){
      new Set(participants).size!==participants.length){
     throw new HttpsError("failed-precondition","너 누구야?는 중복 없는 4~10명이 필요합니다.");
   }
-  const aliases=shuffle(ALIASES,random).slice(0,participants.length);
+  const assignedAliases=shuffle(ALIASES,random).slice(0,participants.length);
   const privateByUid=Object.fromEntries(participants.map((uid,i)=>
-    [uid,{alias:aliases[i]}]));
+    [uid,{alias:assignedAliases[i]}]));
+  // Public order is canonical and never based on the secret participant assignments.
+  const publicOptions=ALIASES.filter(alias=>assignedAliases.includes(alias));
   const prompt=PROMPTS[random(PROMPTS.length)];
   return {
     phase:"playing",durationMs:CHAT_MS,
-    publicState:{prompt,options:aliases},
+    publicState:{prompt,options:publicOptions},
     privateByUid
   };
 }

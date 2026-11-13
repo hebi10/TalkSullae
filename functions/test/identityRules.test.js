@@ -31,6 +31,24 @@ test("secure 4-10 participant assignments are unique and only public aliases lea
  assert.throws(()=>rules.prepare({participants:Array(11).fill("x")}));
 });
 
+test("public alias ordering is independent of secret participant assignments",()=>{
+ const ids=Array.from({length:10},(_,i)=>"player-"+i);
+ const left=rules.prepare({participants:ids},()=>0);
+ const right=rules.prepare({participants:ids},n=>n-1);
+ assert.deepEqual(left.publicState.options,rules.ALIASES);
+ assert.deepEqual(right.publicState.options,rules.ALIASES);
+ assert.notDeepEqual(ids.map(uid=>left.privateByUid[uid].alias),
+   ids.map(uid=>right.privateByUid[uid].alias));
+ assert.notDeepEqual(ids.map(uid=>left.privateByUid[uid].alias),
+   left.publicState.options);
+ for(const count of [4,5,7,10]){
+   const setup=rules.prepare({participants:ids.slice(0,count)},()=>0);
+   assert.deepEqual(setup.publicState.options,
+     rules.ALIASES.filter(alias=>Object.values(setup.privateByUid)
+       .some(secret=>secret.alias===alias)));
+ }
+});
+
 test("identity matching excludes own alias and own real UID and enforces bijection",()=>{
  const valid={"토끼":"p2","부엉이":"p3","여우":"p4"};
  const saved=rules.validateSubmission({

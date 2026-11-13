@@ -3,7 +3,7 @@
 const {before,after,test}=require("node:test");
 const assert=require("node:assert/strict");
 const {initializeApp,deleteApp}=require("firebase-admin/app");
-const {getFirestore}=require("firebase-admin/firestore");
+const {getFirestore,Timestamp}=require("firebase-admin/firestore");
 const rooms=require("../src/roomService");
 const game=require("../src/game/sessionService");
 const identityChat=require("../src/game/identityChatService");
@@ -225,4 +225,33 @@ test("membership removal prevents scheduled stage execution and cancels session"
   const doc=await db.collection("rooms").doc(roomId).collection("gameSessions").doc(sessionId).get();
   assert.equal(doc.get("phase"),"cancelled");
   assert.equal((await db.collection("rooms").doc(roomId).get()).get("activeGameSessionId"),null);
+});
+
+test("forty orphaned archived deadlines are cancelled and cannot starve live games",async()=>{
+  const {roomId,members}=await makeRoom();
+  const {sessionId}=await startRoom(roomId,members);
+  const archived=db.collection("rooms").doc("archived-queue-regression");
+  const batch=db.batch();
+  const firstId="0".repeat(64);
+  batch.set(archived,{status:"archived",activeGameSessionId:firstId});
+  for(let i=0;i<40;i++){
+    const staleId=i.toString(16).padStart(64,"0");
+    batch.set(archived.collection("gameSessions").doc(staleId),{
+      roomId:archived.id,sessionId:staleId,gameId:"identity",rulesVersion:1,
+      phase:"playing",revision:1,phaseEndsAt:Timestamp.fromMillis(1762935700000),
+      participants:{ghost:{ready:true}}
+    });
+  }
+  await batch.commit();
+  const cleaned=await game.expireDueGameSessions(db,productionRules,()=>1762935780001);
+  assert.equal(cleaned.cancelled,40);
+  const stale=await archived.collection("gameSessions").doc(firstId).get();
+  assert.equal(stale.get("phase"),"cancelled");
+  assert.equal(stale.get("phaseEndsAt"),null);
+  assert.equal((await archived.get()).get("activeGameSessionId"),null);
+  const progressed=await game.expireDueGameSessions(db,productionRules,()=>1762935780001);
+  assert.ok(progressed.advanced>=1);
+  const active=await db.collection("rooms").doc(roomId)
+    .collection("gameSessions").doc(sessionId).get();
+  assert.equal(active.get("phase"),"voting");
 });

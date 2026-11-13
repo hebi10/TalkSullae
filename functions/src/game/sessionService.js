@@ -440,23 +440,28 @@ async function findActiveGameSession(db,request){
 async function cancelRevokedDueSession(db,roomRef,sessionRef,nowMillis){
   return db.runTransaction(async tx=>{
     const [room,doc]=await Promise.all([tx.get(roomRef),tx.get(sessionRef)]);
-    if(!room.exists||room.get("status")!=="active" || !doc.exists ||
-       room.get("activeGameSessionId")!==sessionRef.id ||
-       TERMINAL_PHASES.has(doc.get("phase")) ||
+    if(!doc.exists || TERMINAL_PHASES.has(doc.get("phase")) ||
        !doc.get("phaseEndsAt") || doc.get("phaseEndsAt").toMillis()>nowMillis){
       return {status:"skipped"};
     }
-    const session=doc.data();
-    const ids=participantIds(session);
-    const members=await Promise.all(ids.map(uid=>tx.get(roomRef.collection("members").doc(uid))));
-    if(members.every(member=>member.exists&&member.get("status")==="active")){
-      return {status:"still-active"};
+    const currentActiveRoom=room.exists && room.get("status")==="active" &&
+      room.get("activeGameSessionId")===sessionRef.id;
+    if(currentActiveRoom){
+      const ids=participantIds(doc.data());
+      const members=await Promise.all(ids.map(uid=>
+        tx.get(roomRef.collection("members").doc(uid))));
+      if(ids.length>0 && members.every(member=>
+        member.exists && member.get("status")==="active")){
+        return {status:"still-active"};
+      }
     }
     tx.update(sessionRef,{
-      phase:"cancelled",phaseEndsAt:null,revision:session.revision+1,
+      phase:"cancelled",phaseEndsAt:null,revision:doc.get("revision")+1,
       updatedAt:FieldValue.serverTimestamp()
     });
-    tx.update(roomRef,{activeGameSessionId:null});
+    if(room.exists && room.get("activeGameSessionId")===sessionRef.id){
+      tx.update(roomRef,{activeGameSessionId:null});
+    }
     return {status:"cancelled"};
   });
 }
@@ -484,13 +489,20 @@ async function expireDueGameSessions(db,rules=productionRules,now=Date.now){
     }
     const roomRef=db.collection("rooms").doc(path[1]);
     const ids=participantIds(session);
-    const members=await Promise.all(ids.map(uid=>roomRef.collection("members").doc(uid).get()));
+    const room=await roomRef.get();
+    if(!room.exists || room.get("status")!=="active" ||
+       room.get("activeGameSessionId")!==path[3] || !ids.length){
+      const outcome=await cancelRevokedDueSession(db,roomRef,document.ref,timestamp);
+      counts[outcome.status==="cancelled"?"cancelled":"skipped"]++;
+      continue;
+    }
+    const members=await Promise.all(ids.map(uid=>
+      roomRef.collection("members").doc(uid).get()));
     if(members.some(member=>!member.exists||member.get("status")!=="active")){
       const outcome=await cancelRevokedDueSession(db,roomRef,document.ref,timestamp);
       counts[outcome.status==="cancelled"?"cancelled":"skipped"]++;
       continue;
     }
-    if(!ids.length){counts.skipped++;continue;}
     const actorUid=ids[0];
     const requestId=sha(["deadline-sweep",path[3],session.revision,session.phase]);
     try{

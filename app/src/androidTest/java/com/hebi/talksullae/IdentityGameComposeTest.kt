@@ -5,6 +5,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import com.google.firebase.firestore.DocumentSnapshot
@@ -35,7 +38,10 @@ class IdentityGameComposeTest {
         CloudMember("player4","도윤","active")
     )
 
-    private inner class FakeGameRepo(private val phase: GamePhase) : OnlineGameSessionRepository {
+    private inner class FakeGameRepo(
+        private val phase: GamePhase, private val failFirstRestore: Boolean = false
+    ) : OnlineGameSessionRepository {
+        @Volatile var restoreAttempts = 0
         @Volatile var lastAction: Map<String, Any>? = null
         @Volatile var lastMessage: String? = null
 
@@ -108,8 +114,11 @@ class IdentityGameComposeTest {
 
         override suspend fun restoreMySession(
             roomId: String, sessionId: String
-        ): Pair<OnlineGameSnapshot, Map<*, *>?> =
-            snapshot() to mapOf("alias" to "고양이", "submitted" to false)
+        ): Pair<OnlineGameSnapshot, Map<*, *>?> {
+            restoreAttempts++
+            if (failFirstRestore && restoreAttempts == 1) error("Temporary restore failure")
+            return snapshot() to mapOf("alias" to "고양이", "submitted" to false)
+        }
     }
 
     @Test
@@ -158,4 +167,60 @@ class IdentityGameComposeTest {
         compose.waitUntil(6000) { repo.lastMessage != null }
         compose.runOnIdle { assertEquals("비밀 대화", repo.lastMessage) }
     }
+    @Test
+    fun finishedGuessPermutationCanBeSwappedBeforeSubmission() {
+        val repo = FakeGameRepo(GamePhase.VOTING)
+        compose.setContent {
+            TalkSullaeTheme(darkTheme = true) {
+                OnlineIdentityGameHost(
+                    uid = "owner",roomId = roomId,roomName = "실제 친구방",
+                    ownerId = "owner",members = users,onBack = {},
+                    repository = repo
+                )
+            }
+        }
+        compose.waitUntil(6000) {
+            compose.onAllNodesWithTag("identity-guess-select-토끼")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        fun select(alias: String, candidate: String) {
+            compose.onNodeWithTag("identity-guess-select-$alias").performClick()
+            compose.onNodeWithTag("identity-guess-option-$alias-$candidate").performClick()
+        }
+        select("토끼", "player2")
+        select("부엉이", "player3")
+        select("여우", "player4")
+        compose.onNodeWithTag("identity-guess-send").assertIsEnabled()
+        select("토끼", "player3")
+        compose.onNodeWithTag("identity-guess-select-토끼").assertTextContains("수빈")
+        compose.onNodeWithTag("identity-guess-select-부엉이").assertTextContains("지훈")
+        compose.onNodeWithTag("identity-guess-send").assertIsEnabled()
+    }
+
+    @Test
+    fun failedPersonalRestoreCanBeRetriedWithoutReenteringTheGame() {
+        val repo = FakeGameRepo(GamePhase.PLAYING, failFirstRestore = true)
+        compose.setContent {
+            TalkSullaeTheme(darkTheme = true) {
+                OnlineIdentityGameHost(
+                    uid = "owner",roomId = roomId,roomName = "실제 친구방",
+                    ownerId = "owner",members = users,onBack = {},
+                    repository = repo
+                )
+            }
+        }
+        compose.waitUntil(6000) {
+            compose.onAllNodesWithTag("identity-personal-retry")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("identity-chat-input").assertIsNotEnabled()
+        compose.onNodeWithTag("identity-personal-retry").performClick()
+        compose.waitUntil(6000) {
+            compose.onAllNodesWithText("내 동물 별칭: 고양이")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("identity-chat-input").assertIsEnabled()
+        compose.runOnIdle { assertEquals(2,repo.restoreAttempts) }
+    }
+
 }

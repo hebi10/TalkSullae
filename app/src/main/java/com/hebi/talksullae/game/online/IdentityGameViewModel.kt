@@ -27,6 +27,8 @@ internal data class PendingIdentityMessage(
 internal data class IdentityGameState(
     val session: OnlineGameSnapshot? = null,
     val personal: Map<*, *>? = null,
+    val personalLoading: Boolean = false,
+    val personalError: String? = null,
     val messages: List<IdentityChatMessage> = emptyList(),
     val loading: Boolean = true,
     val busy: Boolean = false,
@@ -108,7 +110,10 @@ internal class IdentityGameViewModel(private val repository: OnlineGameSessionRe
         recent = emptyList()
         older = emptyList()
         oldestCursor = null
-        mutable.update { it.copy(session = null, personal = null, messages = emptyList()) }
+        mutable.update { it.copy(
+            session = null, personal = null, personalLoading = false,
+            personalError = null, messages = emptyList()
+        ) }
     }
 
     private fun bind(room: String, id: String) {
@@ -132,6 +137,8 @@ internal class IdentityGameViewModel(private val repository: OnlineGameSessionRe
                         loading = false,
                         error = null,
                         personal = if(member) it.personal else null,
+                        personalLoading = if(member) it.personalLoading else false,
+                        personalError = if(member) it.personalError else null,
                         messages = if(member) it.messages else emptyList()
                     )
                 }
@@ -155,16 +162,32 @@ internal class IdentityGameViewModel(private val repository: OnlineGameSessionRe
         })
     }
 
+
+    fun retryPersonal() {
+        val room = roomId ?: return
+        val id = sessionId ?: return
+        val user = uid ?: return
+        if (mutable.value.session?.participants?.any { it.uid == user } != true) return
+        refreshPersonal(room,id,sessionGeneration)
+    }
+
     private fun refreshPersonal(room: String,id: String,generation: Long) {
+        if(mutable.value.personalLoading) return
+        mutable.update { it.copy(personalLoading = true, personalError = null) }
         viewModelScope.launch {
             try{
                 val (_,personal)=repository.restoreMySession(room,id)
                 if(generation == sessionGeneration && sessionId == id){
-                    mutable.update { it.copy(personal = personal) }
+                    mutable.update { it.copy(
+                        personal = personal, personalLoading = false, personalError = null
+                    ) }
                 }
             }catch(_: Exception) {
                 if(generation == sessionGeneration && sessionId == id){
-                    mutable.update { it.copy(personal = null) }
+                    mutable.update { it.copy(
+                        personalLoading = false,
+                        personalError = "개인 별칭을 복원하지 못했습니다. 다시 불러와 주세요."
+                    ) }
                 }
             }
         }

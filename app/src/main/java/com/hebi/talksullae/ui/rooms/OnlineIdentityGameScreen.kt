@@ -136,6 +136,17 @@ internal fun OnlineIdentityGameHost(
         }
 
         if (snapshot != null) {
+            if (player && ownAlias == null &&
+                (phase == GamePhase.PLAYING || phase == GamePhase.VOTING)) {
+                state.personalError?.let { error ->
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = vm::retryPersonal,
+                        enabled = !state.personalLoading,
+                        modifier = Modifier.testTag("identity-personal-retry")) {
+                        Text("내 별칭 다시 불러오기")
+                    }
+                }
+            }
             Text("상태: ${phase?.name ?: "확인 중"} · 라운드 ${snapshot.session.round}",
                 style = MaterialTheme.typography.titleMedium)
             remaining?.let {
@@ -212,10 +223,19 @@ internal fun OnlineIdentityGameHost(
                 guessAliases.forEach { alias ->
                     IdentityGuessRow(
                         alias = alias, candidates = targets, names = names,
-                        selected = selections[alias], used = selections.values.toSet(),
+                        selected = selections[alias],
                         enabled = ownAlias != null && !state.hasSubmitted && !state.busy &&
                             state.pendingAction == null,
-                        onChoose = { selections[alias] = it }
+                        onChoose = { candidate ->
+                            val previousAlias = selections.entries
+                                .firstOrNull { it.key != alias && it.value == candidate }?.key
+                            val previousChoice = selections[alias]
+                            if (previousAlias != null) {
+                                if (previousChoice == null) selections.remove(previousAlias)
+                                else selections[previousAlias] = previousChoice
+                            }
+                            selections[alias] = candidate
+                        }
                     )
                 }
                 if (state.hasSubmitted) {
@@ -279,14 +299,15 @@ private fun IdentityMessages(
 @Composable
 private fun IdentityGuessRow(
     alias: String, candidates: List<String>, names: Map<String, String>,
-    selected: String?, used: Set<String>, enabled: Boolean,
+    selected: String?, enabled: Boolean,
     onChoose: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(alias, modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyLarge)
-        OutlinedButton(onClick = { expanded = true }, enabled = enabled) {
+        OutlinedButton(onClick = { expanded = true }, enabled = enabled,
+            modifier = Modifier.testTag("identity-guess-select-$alias")) {
             Text(selected?.let { names[it] } ?: "친구 선택")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -294,7 +315,8 @@ private fun IdentityGuessRow(
                 DropdownMenuItem(
                     text = { Text(names[candidate] ?: "친구") },
                     onClick = { onChoose(candidate); expanded = false },
-                    enabled = candidate == selected || candidate !in used
+                    modifier = Modifier.testTag("identity-guess-option-$alias-$candidate"),
+                    enabled = enabled
                 )
             }
         }
