@@ -126,6 +126,8 @@ internal fun OnlineBalanceGameHost(
                     enabled=!state.busy,modifier=Modifier.fillMaxWidth()
                         .testTag("balance-create"))
             }else Text("방장이 게임을 만들면 참여할 수 있습니다.")
+            OutlinedButton(onClick=vm::refresh,modifier=Modifier.fillMaxWidth()
+                .testTag("balance-refresh")){Text("게임 다시 확인")}
         }
         if(session!=null){
             Text("상태: ${phase?.name ?: "확인 중"} · ${if(mode=="async")"비동기" else "실시간"}",
