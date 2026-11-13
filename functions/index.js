@@ -8,6 +8,7 @@ const { sendRoomMessage } = require("./src/chatService");
 const gameSession = require("./src/game/sessionService");
 const identityChat = require("./src/game/identityChatService");
 const liarChat = require("./src/game/liarChatService");
+const forbiddenChat = require("./src/game/forbiddenChatService");
 const safetyControls = require("./src/safetyControls");
 const retention = require("./src/retention");
 
@@ -31,6 +32,7 @@ exports.findActiveGameSession = onCall(config, request=>gameSession.findActiveGa
 
 exports.sendIdentityMessage = onCall(config, request=>identityChat.sendIdentityMessage(db,request));
 exports.sendLiarMessage = onCall(config, request=>liarChat.sendLiarMessage(db,request));
+exports.sendForbiddenMessage = onCall(config, request=>forbiddenChat.sendForbiddenMessage(db,request));
 exports.setUserBlock = onCall(config, request=>safetyControls.setUserBlock(db,request));
 exports.reportChatMessage = onCall(config, request=>safetyControls.reportChatMessage(db,request));
 exports.requestAccountDeletion = onCall(config, request=>safetyControls.requestAccountDeletion(db,request));

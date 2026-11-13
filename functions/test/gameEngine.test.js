@@ -72,12 +72,13 @@ test("public session projection is an allowlist excluding identities and role se
     {publishedResult:"공개"});
 });
 
-test("only audited identity@1 and liar@1 are registered; future games remain fail-closed",()=>{
+test("only audited identity@1, liar@1 and forbidden@1 are registered",()=>{
   assert.equal(productionRules.supported("identity",1),true);
   assert.equal(productionRules.require("identity",1).gameId,"identity");
   assert.equal(productionRules.supported("liar",1),true);
   assert.equal(productionRules.require("liar",1).gameId,"liar");
-  for(const id of ["forbidden","balance"]){
+  assert.equal(productionRules.supported("forbidden",1),true);
+  for(const id of ["balance"]){
     assert.equal(productionRules.supported(id,1),false);
     assert.throws(()=>productionRules.require(id,1),/다음 개발 단계/);
   }

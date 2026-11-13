@@ -99,12 +99,18 @@ function validatePublicState(state){
   if(state===null || typeof state!=="object" || Array.isArray(state)){
     throw new HttpsError("failed-precondition","공개 게임 상태 형식이 올바르지 않습니다.");
   }
-  const allowed=new Set(["prompt","notice","options","publishedResult"]);
+  const allowed=new Set(["prompt","notice","options","publishedResult","eliminatedUids"]);
   if(Object.keys(state).some(key=>!allowed.has(key)) || JSON.stringify(state).length>4000){
     throw new HttpsError("failed-precondition","비공개 필드를 공개 게임 상태에 저장할 수 없습니다.");
   }
   for(const [key,value] of Object.entries(state)){
-    if(key==="options"){
+    if(key==="eliminatedUids"){
+      if(!Array.isArray(value)||value.length>10||
+         value.some(item=>typeof item!=="string"||item.length>128)||
+         new Set(value).size!==value.length){
+        throw new HttpsError("failed-precondition","금지어 탈락 상태가 올바르지 않습니다.");
+      }
+    }else if(key==="options"){
       if(!Array.isArray(value) || value.length>20 ||
          value.some(item=>typeof item!=="string"||item.length>100)){
         throw new HttpsError("failed-precondition","공개 선택지가 올바르지 않습니다.");
@@ -160,7 +166,8 @@ function makeRuleRegistry(definitions=[]){
 // Only audited identity@1 and liar@1 are activated. Others remain fail-closed.
 const identityRules=require("./identityRules");
 const liarRules=require("./liarRules");
-const productionRules=makeRuleRegistry([identityRules,liarRules]);
+const forbiddenRules=require("./forbiddenRules");
+const productionRules=makeRuleRegistry([identityRules,liarRules,forbiddenRules]);
 
 function publicSnapshot(doc){
   requirePhase(doc.phase);
