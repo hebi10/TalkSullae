@@ -214,6 +214,11 @@ internal fun OnlineBalanceGameHost(
                 Text("전체 선택·예측 결과",style=MaterialTheme.typography.titleMedium)
                 Text(session.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.",
                     modifier=Modifier.testTag("balance-result"))
+                if(uid==ownerId&&phase==GamePhase.FINISHED) {
+                    PrimaryAction("다음 밸런스 게임 만들기",
+                        onClick={vm.create(asyncMode)},enabled=!state.busy,
+                        modifier=Modifier.fillMaxWidth().testTag("balance-create-next"))
+                }
             }
             if(phase==GamePhase.CANCELLED)Text("게임이 취소됐습니다.")
             if(uid==ownerId&&phase!=GamePhase.FINISHED&&phase!=GamePhase.CANCELLED){

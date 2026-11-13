@@ -398,6 +398,15 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
           scoresByUid:scores,createdAt:FieldValue.serverTimestamp()
         }));
         extraWrites.push(()=>tx.update(roomRef,{activeGameSessionId:null}));
+        if(session.gameId==="balance"){
+          extraWrites.push(()=>{
+            for(const playerId of participants){
+              tx.set(roomRef.collection("recentCompletedGameSessions").doc(playerId),{
+                balance:env.sessionId,completedAt:Timestamp.fromMillis(timestamp)
+              },{merge:true});
+            }
+          });
+        }
       }else{
         validateTimer(moved.durationMs);
         changes.phaseEndsAt=Timestamp.fromMillis(timestamp+moved.durationMs);
@@ -499,6 +508,31 @@ async function findActiveGameSession(db,request){
     revision:session.revision,joined:Object.hasOwn(session.participants||{},uid)};
 }
 
+async function findRecentCompletedGameSession(db,request){
+  const uid=authUid(request);
+  if(!allowed(request.data,new Set(["roomId","gameId"]))||
+     Object.keys(request.data).length!==2||
+     request.data.gameId!=="balance"){
+    throw new HttpsError("invalid-argument","지원하지 않는 완료 게임 조회입니다.");
+  }
+  const roomId=roomIdValue(request.data.roomId);
+  const roomRef=db.collection("rooms").doc(roomId);
+  const [room,member,pointer]=await Promise.all([
+    roomRef.get(),roomRef.collection("members").doc(uid).get(),
+    roomRef.collection("recentCompletedGameSessions").doc(uid).get()
+  ]);
+  requireActive(room,member);
+  const id=pointer.exists?pointer.get("balance"):null;
+  if(typeof id!=="string"||!SESSION_ID_PATTERN.test(id))return {sessionId:null};
+  const doc=await roomRef.collection("gameSessions").doc(id).get();
+  if(!doc.exists||doc.get("gameId")!=="balance"||
+     doc.get("phase")!=="finished"||
+     !Object.hasOwn(doc.get("participants")||{},uid)){
+    return {sessionId:null};
+  }
+  return {sessionId:id};
+}
+
 async function cancelRevokedDueSession(db,roomRef,sessionRef,nowMillis){
   return db.runTransaction(async tx=>{
     const [room,doc]=await Promise.all([tx.get(roomRef),tx.get(sessionRef)]);
@@ -588,5 +622,5 @@ async function expireDueGameSessions(db,rules=productionRules,now=Date.now){
 module.exports={
   parseCreate,parseAction,validateSessionRef,submissionId,
   createGameSession,gameSessionAction,getMyGameSession,findActiveGameSession,
-  expireDueGameSessions,cancelRevokedDueSession
+  expireDueGameSessions,cancelRevokedDueSession,findRecentCompletedGameSession
 };

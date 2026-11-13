@@ -193,6 +193,7 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
     refs.push({roomRef,room,sessions});
   }
   for(const {roomRef,sessions} of refs){
+    await roomRef.collection("recentCompletedGameSessions").doc(uid).delete();
     await removeMessages(db,roomRef.collection("messages"),uid);
     for(const session of sessions.docs){
       const sessionRef=session.ref;
