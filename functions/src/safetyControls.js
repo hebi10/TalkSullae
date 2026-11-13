@@ -78,9 +78,6 @@ async function reportChatMessage(db,request,now=Date.now){
     ]);
     if(!room.exists||room.get("status")!=="active"||!member.exists||
        member.get("status")!=="active")throw new HttpsError("permission-denied","신고할 방에 접근할 수 없습니다.");
-    if(!message.exists||typeof message.get("senderUid")!=="string"){
-      throw new HttpsError("not-found","신고할 메시지가 없습니다.");
-    }
     if(previous.exists){
       if(previous.get("actorUid")!==uid||previous.get("requestId")!==requestId||
          previous.get("roomId")!==roomId||previous.get("messageId")!==data.messageId||
@@ -88,6 +85,9 @@ async function reportChatMessage(db,request,now=Date.now){
         throw new HttpsError("already-exists","같은 요청 ID를 다른 신고에 재사용할 수 없습니다.");
       }
       return {reportId,deduplicated:true};
+    }
+    if(!message.exists||typeof message.get("senderUid")!=="string"){
+      throw new HttpsError("not-found","신고할 메시지가 없습니다.");
     }
     if(rate.exists){
       const last=rate.get("lastSubmittedAt");
@@ -125,28 +125,40 @@ async function requestAccountDeletion(db,request,now=Date.now){
      Math.floor(now()/1000)<authTime){
     throw new HttpsError("failed-precondition","최근 Google 로그인으로 본인 확인이 필요합니다.");
   }
-  const index=await db.collection("userRooms").doc(uid).collection("rooms").limit(MAX_ROOMS+1).get();
-  if(index.size>MAX_ROOMS)throw new HttpsError("resource-exhausted","방이 많아 운영자 확인이 필요합니다.");
-  for(const d of index.docs){
-    const room=await db.collection("rooms").doc(d.id).get();
-    if(room.exists&&room.get("status")==="active"&&room.get("ownerId")===uid){
-      throw new HttpsError("failed-precondition","방장인 방은 먼저 다른 멤버에게 위임하거나 종료해 주세요.");
+  const ref=db.collection("accountDeletionJobs").doc(uid);
+  const indexQuery=db.collection("userRooms").doc(uid)
+    .collection("rooms").limit(MAX_ROOMS+1);
+  return db.runTransaction(async tx=>{
+    // Read room index, room state, active sessions and job in this same
+    // transaction; all join/create/game transactions read the job document.
+    // A conflicting concurrent join is retried rather than stranded in a
+    // waiting game after the deletion request was acknowledged.
+    const [existing,index]=await Promise.all([tx.get(ref),tx.get(indexQuery)]);
+    if(existing.exists && ["queued","processing","completed"].includes(existing.get("status"))){
+      return {status:"queued"};
     }
-    if(room.exists&&typeof room.get("activeGameSessionId")==="string"){
-      const session=await room.ref.collection("gameSessions").doc(room.get("activeGameSessionId")).get();
-      if(session.exists&&session.get("participants")?.[uid]&&
+    if(index.size>MAX_ROOMS){
+      throw new HttpsError("resource-exhausted","방이 많아 운영자 확인이 필요합니다.");
+    }
+    const rooms=await Promise.all(index.docs.map(item=>
+      tx.get(db.collection("rooms").doc(item.id))));
+    const sessions=await Promise.all(rooms.map(room=>
+      room.exists && typeof room.get("activeGameSessionId")==="string"
+        ?tx.get(room.ref.collection("gameSessions").doc(room.get("activeGameSessionId")))
+        :Promise.resolve(null)));
+    for(let i=0;i<rooms.length;i++){
+      const room=rooms[i],session=sessions[i];
+      if(room.exists&&room.get("status")==="active"&&room.get("ownerId")===uid){
+        throw new HttpsError("failed-precondition","방장인 방은 먼저 다른 멤버에게 위임하거나 종료해 주세요.");
+      }
+      if(session?.exists && session.get("participants")?.[uid] &&
          !["finished","cancelled"].includes(session.get("phase"))){
         throw new HttpsError("failed-precondition","참여 중인 게임이 끝난 뒤 계정을 삭제할 수 있습니다.");
       }
     }
-  }
-  const ref=db.collection("accountDeletionJobs").doc(uid);
-  await db.runTransaction(async tx=>{
-    const old=await tx.get(ref);
-    if(old.exists&&["queued","processing","completed"].includes(old.get("status")))return;
     tx.set(ref,{status:"queued",requestedAt:FieldValue.serverTimestamp(),attempts:0});
+    return {status:"queued"};
   });
-  return {status:"queued"};
 }
 
 async function removeMessages(db,ref,uid,field="senderUid"){

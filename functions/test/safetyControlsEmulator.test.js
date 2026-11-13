@@ -50,6 +50,12 @@ test("reporting requires real member and real stored message; retry is idempoten
  const replay=await safety.reportChatMessage(db,{...auth(member),data},()=>nowMillis);
  assert.equal(first.reportId,replay.reportId);
  assert.equal(replay.deduplicated,true);
+ // A retry after the original message expires must still recover the saved report.
+ await db.collection("rooms").doc(roomId).collection("messages")
+   .doc(message.messageId).delete();
+ const late=await safety.reportChatMessage(db,{...auth(member),data},()=>nowMillis);
+ assert.equal(late.deduplicated,true);
+ assert.equal(late.reportId,first.reportId);
  const record=await db.collection("safetyReports").doc(first.reportId).get();
  assert.equal(record.get("reportedUid"),owner);
  assert.equal(record.get("actorUid"),member);
