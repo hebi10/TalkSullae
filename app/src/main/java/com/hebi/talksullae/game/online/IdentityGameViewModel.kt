@@ -57,6 +57,8 @@ internal class IdentityGameViewModel(private val repository: OnlineGameSessionRe
     private var older: List<IdentityChatMessage> = emptyList()
     private var oldestCursor: DocumentSnapshot? = null
     private var sessionGeneration: Long = 0
+    private var personalRequestRevision: Long? = null
+    private var personalRefreshPending: Boolean = false
 
     fun start(room: String, user: String) {
         if(roomId == room && uid == user) return
@@ -68,6 +70,8 @@ internal class IdentityGameViewModel(private val repository: OnlineGameSessionRe
 
     fun stop() {
         sessionGeneration++
+        personalRequestRevision = null
+        personalRefreshPending = false
         sessionListener?.remove()
         messageListener?.remove()
         sessionListener = null
@@ -102,6 +106,8 @@ internal class IdentityGameViewModel(private val repository: OnlineGameSessionRe
     }
 
     private fun unbind() {
+        personalRequestRevision = null
+        personalRefreshPending = false
         sessionListener?.remove()
         messageListener?.remove()
         sessionListener = null
@@ -171,23 +177,53 @@ internal class IdentityGameViewModel(private val repository: OnlineGameSessionRe
         refreshPersonal(room,id,sessionGeneration)
     }
 
+
     private fun refreshPersonal(room: String,id: String,generation: Long) {
-        if(mutable.value.personalLoading) return
+        val expectedRevision = mutable.value.session?.session?.revision ?: return
+        if(mutable.value.personalLoading) {
+            if(personalRequestRevision != expectedRevision) personalRefreshPending = true
+            return
+        }
+        personalRequestRevision = expectedRevision
         mutable.update { it.copy(personalLoading = true, personalError = null) }
         viewModelScope.launch {
-            try{
-                val (_,personal)=repository.restoreMySession(room,id)
+            try {
+                val (returned, personal) = repository.restoreMySession(room,id)
                 if(generation == sessionGeneration && sessionId == id){
-                    mutable.update { it.copy(
-                        personal = personal, personalLoading = false, personalError = null
-                    ) }
+                    val current = mutable.value.session?.session
+                    when {
+                        current?.revision != expectedRevision -> personalRefreshPending = true
+                        returned.session.revision != expectedRevision -> {
+                            mutable.update { it.copy(
+                                personalError = "개인 게임 상태가 갱신됐습니다. 다시 불러와 주세요."
+                            ) }
+                        }
+                        personal == null &&
+                            (current?.phase == GamePhase.PLAYING ||
+                                current?.phase == GamePhase.VOTING) -> {
+                            mutable.update { it.copy(
+                                personalError = "개인 별칭을 복원하지 못했습니다. 다시 불러와 주세요."
+                            ) }
+                        }
+                        else -> {
+                            mutable.update { it.copy(personal = personal, personalError = null) }
+                        }
+                    }
                 }
             }catch(_: Exception) {
                 if(generation == sessionGeneration && sessionId == id){
                     mutable.update { it.copy(
-                        personalLoading = false,
                         personalError = "개인 별칭을 복원하지 못했습니다. 다시 불러와 주세요."
                     ) }
+                }
+            }finally {
+                if(generation == sessionGeneration && sessionId == id){
+                    personalRequestRevision = null
+                    mutable.update { it.copy(personalLoading = false) }
+                    if(personalRefreshPending) {
+                        personalRefreshPending = false
+                        refreshPersonal(room,id,generation)
+                    }
                 }
             }
         }

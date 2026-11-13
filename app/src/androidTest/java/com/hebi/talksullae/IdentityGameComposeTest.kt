@@ -23,6 +23,7 @@ import com.hebi.talksullae.game.online.OnlineGameSessionRepository
 import com.hebi.talksullae.game.online.OnlineGameSnapshot
 import com.hebi.talksullae.game.online.GameLobbyPlayer
 import com.hebi.talksullae.ui.rooms.OnlineIdentityGameHost
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -39,16 +40,28 @@ class IdentityGameComposeTest {
     )
 
     private inner class FakeGameRepo(
-        private val phase: GamePhase, private val failFirstRestore: Boolean = false
+        private var phase: GamePhase, private val failFirstRestore: Boolean = false,
+        private val deferFirstRestore: Boolean = false
     ) : OnlineGameSessionRepository {
         @Volatile var restoreAttempts = 0
+        private var revision: Long = 1L
+        private var onSession: ((OnlineGameSnapshot?) -> Unit)? = null
+        private val firstRestoreGate = CompletableDeferred<Unit>()
+
+        fun advanceToPlaying() {
+            phase = GamePhase.PLAYING
+            revision = 2L
+            onSession?.invoke(snapshot())
+        }
+
+        fun finishFirstRestore() { firstRestoreGate.complete(Unit) }
         @Volatile var lastAction: Map<String, Any>? = null
         @Volatile var lastMessage: String? = null
 
         private fun snapshot() = OnlineGameSnapshot(
             session = GameSessionView(
                 roomId = roomId, sessionId = sessionId, gameId = "identity",
-                rulesVersion = 1, phase = phase, revision = 1, round = 1,
+                rulesVersion = 1, phase = phase, revision = revision, round = 1,
                 deadlineEpochMillis = System.currentTimeMillis()+60000
             ),
             mode = GameMode.REALTIME,
@@ -65,6 +78,7 @@ class IdentityGameComposeTest {
             onResult: (OnlineGameSnapshot?) -> Unit,
             onError: (String) -> Unit
         ): ListenerRegistration {
+            onSession = onResult
             onResult(snapshot())
             return listener()
         }
@@ -115,9 +129,14 @@ class IdentityGameComposeTest {
         override suspend fun restoreMySession(
             roomId: String, sessionId: String
         ): Pair<OnlineGameSnapshot, Map<*, *>?> {
+            val captured = snapshot()
             restoreAttempts++
+            if (deferFirstRestore && restoreAttempts == 1) firstRestoreGate.await()
             if (failFirstRestore && restoreAttempts == 1) error("Temporary restore failure")
-            return snapshot() to mapOf("alias" to "고양이", "submitted" to false)
+            val personal = if (captured.session.phase == GamePhase.WAITING ||
+                captured.session.phase == GamePhase.READY) null
+            else mapOf("alias" to "고양이", "submitted" to false)
+            return captured to personal
         }
     }
 
@@ -181,7 +200,9 @@ class IdentityGameComposeTest {
         }
         compose.waitUntil(6000) {
             compose.onAllNodesWithTag("identity-guess-select-토끼")
-                .fetchSemanticsNodes().isNotEmpty()
+                .fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithText("개인 별칭 확인 중…")
+                    .fetchSemanticsNodes().isEmpty()
         }
         fun select(alias: String, candidate: String) {
             compose.onNodeWithTag("identity-guess-select-$alias").performClick()
@@ -218,6 +239,32 @@ class IdentityGameComposeTest {
         compose.waitUntil(6000) {
             compose.onAllNodesWithText("내 동물 별칭: 고양이")
                 .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("identity-chat-input").assertIsEnabled()
+        compose.runOnIdle { assertEquals(2,repo.restoreAttempts) }
+    }
+
+    @Test
+    fun playingSnapshotDuringReadyRestoreTriggersFreshPersonalRead() {
+        val repo = FakeGameRepo(GamePhase.READY, deferFirstRestore = true)
+        compose.setContent {
+            TalkSullaeTheme(darkTheme = true) {
+                OnlineIdentityGameHost(
+                    uid = "owner",roomId = roomId,roomName = "실제 친구방",
+                    ownerId = "owner",members = users,onBack = {},
+                    repository = repo
+                )
+            }
+        }
+        compose.waitUntil(6000) { repo.restoreAttempts >= 1 }
+        compose.runOnIdle {
+            repo.advanceToPlaying()
+            repo.finishFirstRestore()
+        }
+        compose.waitUntil(6000) {
+            repo.restoreAttempts >= 2 &&
+                compose.onAllNodesWithText("내 동물 별칭: 고양이")
+                    .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag("identity-chat-input").assertIsEnabled()
         compose.runOnIdle { assertEquals(2,repo.restoreAttempts) }

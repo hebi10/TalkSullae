@@ -18,3 +18,9 @@
 - main의 OPS-08 배포 동결 정책과 AAB/Play 워크플로를 보존한다.
 - 최신 커밋의 필수 CI·리뷰를 확인하기 전에는 PR #31을 병합하지 않는다.
 - Firebase 운영 Functions/Rules/Indexes/Scheduler 배포나 Play 업로드·트랙 승격을 수행하지 않는다.
+
+
+## 최신 Codex 재리뷰 보강 (P2)
+- READY 단계에서 발행된 개인 정보 요청이 PLAYING 상태 변경 뒤 늦게 완료될 때, 오래된 응답을 최신 세션에 적용하지 않는다.
+- 조회 중 세션 revision 변경은 후속 재조회 1회로 연결하고, 서버 반환 revision이 현재 상태와 일치하지 않을 때는 오류·재시도 안내를 표시한다.
+- Android 계측에서 지연된 READY 응답을 의도적으로 발생시킨 후 PLAYING 개인 역할 복원이 자동으로 재시도되는지 검사한다.
