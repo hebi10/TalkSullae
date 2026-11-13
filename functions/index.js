@@ -1,10 +1,12 @@
 const { initializeApp,getApps } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 const { onCall } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const room = require("./src/roomService");
 const { submitSafetyReport } = require("./src/safetyReport");
 const { sendRoomMessage } = require("./src/chatService");
 const gameSession = require("./src/game/sessionService");
+const identityChat = require("./src/game/identityChatService");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -23,3 +25,9 @@ exports.createGameSession = onCall(config, request=>gameSession.createGameSessio
 exports.gameSessionAction = onCall(config, request=>gameSession.gameSessionAction(db,request));
 exports.getMyGameSession = onCall(config, request=>gameSession.getMyGameSession(db,request));
 exports.findActiveGameSession = onCall(config, request=>gameSession.findActiveGameSession(db,request));
+
+exports.sendIdentityMessage = onCall(config, request=>identityChat.sendIdentityMessage(db,request));
+exports.expireGameSessionDeadlines = onSchedule({
+  schedule:"* * * * *",region:"asia-northeast3",maxInstances:1,
+  timeZone:"Asia/Seoul"
+}, async()=>{ await gameSession.expireDueGameSessions(db); });

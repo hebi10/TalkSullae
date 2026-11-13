@@ -278,8 +278,10 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
         throw new HttpsError("already-exists","이미 이 단계에 제출했습니다.");
       }
       const rule=rules.require(session.gameId,session.rulesVersion);
+      const privateDoc=await tx.get(sessionRef.collection("privateAssignments").doc(uid));
+      const personalData=privateDoc.exists?privateDoc.get("data"):null;
       const clean=requireServerState(rule.validateSubmission({
-        session,actorUid:uid,choice:env.payload.choice
+        session,actorUid:uid,choice:env.payload.choice,personalData
       }));
       changes={submissionCount:(session.submissionCount||0)+1};
       extraWrites.push(()=>tx.create(submissionRef,{
@@ -292,10 +294,11 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
         throw new HttpsError("failed-precondition","마감 가능한 단계가 아닙니다.");
       }
       const submissions={};
-      if(["playing","voting"].includes(session.phase)){
+      const submissionPhase=session.phase==="reveal"?"voting":session.phase;
+      if(["playing","voting"].includes(submissionPhase)){
         const docs=await Promise.all(participants.map(playerId=>
           tx.get(sessionRef.collection("privateSubmissions")
-            .doc(submissionId(playerId,session.round,session.phase)))));
+            .doc(submissionId(playerId,session.round,submissionPhase)))));
         docs.forEach((snap,index)=>{
           if(snap.exists)submissions[participants[index]]=snap.get("data");
         });
@@ -305,8 +308,24 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
       if(session.phaseEndsAt.toMillis()>timestamp && !allSubmitted){
         throw new HttpsError("failed-precondition","게임 단계의 제한 시간이 남아 있습니다.");
       }
+      const assignments={};
+      const memberNames={};
+      if(session.gameId==="identity" && ["voting","reveal"].includes(session.phase)){
+        const [secrets,members]=await Promise.all([
+          Promise.all(participants.map(playerId=>
+            tx.get(sessionRef.collection("privateAssignments").doc(playerId)))),
+          Promise.all(participants.map(playerId=>
+            tx.get(roomRef.collection("members").doc(playerId))))
+        ]);
+        secrets.forEach((secret,index)=>{
+          if(secret.exists)assignments[participants[index]]=secret.get("data");
+        });
+        members.forEach((member,index)=>{
+          memberNames[participants[index]]=member.exists?member.get("displayName"):"멤버";
+        });
+      }
       const rule=rules.require(session.gameId,session.rulesVersion);
-      const moved=rule.advance({session,submissions,nowMillis:timestamp});
+      const moved=rule.advance({session,submissions,assignments,memberNames,nowMillis:timestamp});
       if(!nonemptyObject(moved)||typeof moved.phase!=="string"){
         throw new HttpsError("failed-precondition","게임 전이 응답이 잘못되었습니다.");
       }
@@ -378,6 +397,11 @@ async function getMyGameSession(db,request,rules=productionRules){
     if(personal!==null&&!nonemptyObject(personal)){
       throw new HttpsError("internal","게임 개인 상태가 잘못되었습니다.");
     }
+    if(personal!==null && session.phase==="voting"){
+      const vote=await sessionRef.collection("privateSubmissions")
+        .doc(submissionId(uid,session.round,"voting")).get();
+      personal={...personal,submitted:vote.exists};
+    }
   }
   return {public:publicSnapshot(session),personal};
 }
@@ -413,7 +437,94 @@ async function findActiveGameSession(db,request){
     revision:session.revision,joined:Object.hasOwn(session.participants||{},uid)};
 }
 
+async function cancelRevokedDueSession(db,roomRef,sessionRef,nowMillis){
+  return db.runTransaction(async tx=>{
+    const [room,doc]=await Promise.all([tx.get(roomRef),tx.get(sessionRef)]);
+    if(!doc.exists || TERMINAL_PHASES.has(doc.get("phase")) ||
+       !doc.get("phaseEndsAt") || doc.get("phaseEndsAt").toMillis()>nowMillis){
+      return {status:"skipped"};
+    }
+    const currentActiveRoom=room.exists && room.get("status")==="active" &&
+      room.get("activeGameSessionId")===sessionRef.id;
+    if(currentActiveRoom){
+      const ids=participantIds(doc.data());
+      const members=await Promise.all(ids.map(uid=>
+        tx.get(roomRef.collection("members").doc(uid))));
+      if(ids.length>0 && members.every(member=>
+        member.exists && member.get("status")==="active")){
+        return {status:"still-active"};
+      }
+    }
+    tx.update(sessionRef,{
+      phase:"cancelled",phaseEndsAt:null,revision:doc.get("revision")+1,
+      updatedAt:FieldValue.serverTimestamp()
+    });
+    if(room.exists && room.get("activeGameSessionId")===sessionRef.id){
+      tx.update(roomRef,{activeGameSessionId:null});
+    }
+    return {status:"cancelled"};
+  });
+}
+
+/**
+ * Server-only scheduled sweep. A synthetic authenticated action is constructed
+ * exclusively from Firestore-verified active participants, never from client input.
+ * One stage is advanced per due session. Firestore transactions protect duplicate runs.
+ */
+async function expireDueGameSessions(db,rules=productionRules,now=Date.now){
+  const timestamp=now();
+  const due=await db.collectionGroup("gameSessions")
+    .where("phaseEndsAt","<=",Timestamp.fromMillis(timestamp))
+    .orderBy("phaseEndsAt")
+    .limit(40).get();
+  const counts={advanced:0,cancelled:0,skipped:0};
+  for(const document of due.docs){
+    const session=document.data();
+    const path=document.ref.path.split("/");
+    if(path.length!==4 || path[0]!=="rooms" || path[2]!=="gameSessions" ||
+       !SESSION_ID_PATTERN.test(path[3]) || session.sessionId!==path[3] ||
+       session.roomId!==path[1] || TERMINAL_PHASES.has(session.phase)){
+      counts.skipped++;
+      continue;
+    }
+    const roomRef=db.collection("rooms").doc(path[1]);
+    const ids=participantIds(session);
+    const room=await roomRef.get();
+    if(!room.exists || room.get("status")!=="active" ||
+       room.get("activeGameSessionId")!==path[3] || !ids.length){
+      const outcome=await cancelRevokedDueSession(db,roomRef,document.ref,timestamp);
+      counts[outcome.status==="cancelled"?"cancelled":"skipped"]++;
+      continue;
+    }
+    const members=await Promise.all(ids.map(uid=>
+      roomRef.collection("members").doc(uid).get()));
+    if(members.some(member=>!member.exists||member.get("status")!=="active")){
+      const outcome=await cancelRevokedDueSession(db,roomRef,document.ref,timestamp);
+      counts[outcome.status==="cancelled"?"cancelled":"skipped"]++;
+      continue;
+    }
+    const actorUid=ids[0];
+    const requestId=sha(["deadline-sweep",path[3],session.revision,session.phase]);
+    try{
+      const moved=await gameSessionAction(db,{auth:{uid:actorUid},data:{
+        roomId:path[1],sessionId:path[3],gameId:session.gameId,
+        rulesVersion:session.rulesVersion,expectedRevision:session.revision,
+        requestId,payload:{kind:"advance"}
+      }},rules,()=>timestamp);
+      counts[moved.deduplicated?"skipped":"advanced"]++;
+    }catch(error){
+      if(["aborted","failed-precondition","permission-denied"].includes(error?.code)){
+        counts.skipped++;
+      }else{
+        throw error;
+      }
+    }
+  }
+  return counts;
+}
+
 module.exports={
   parseCreate,parseAction,validateSessionRef,submissionId,
-  createGameSession,gameSessionAction,getMyGameSession,findActiveGameSession
+  createGameSession,gameSessionAction,getMyGameSession,findActiveGameSession,
+  expireDueGameSessions,cancelRevokedDueSession
 };
