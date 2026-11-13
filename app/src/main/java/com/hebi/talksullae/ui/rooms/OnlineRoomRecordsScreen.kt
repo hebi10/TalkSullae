@@ -17,6 +17,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -75,8 +80,23 @@ internal fun OnlineRoomRecordsHost(
     members:List<CloudMember>,onBack:()->Unit
 ) {
     var offset by remember(roomId){mutableIntStateOf(0)}
-    val today=remember{YearMonth.now(ZoneId.of("Asia/Seoul"))}
-    val season=remember(offset){today.minusMonths(offset.toLong()).toString()}
+    val zone=remember{ZoneId.of("Asia/Seoul")}
+    var today by remember{mutableStateOf(YearMonth.now(zone))}
+    val lifecycle=LocalLifecycleOwner.current
+    DisposableEffect(lifecycle){
+        val observer=LifecycleEventObserver{ _, event->
+            if(event==Lifecycle.Event.ON_RESUME)today=YearMonth.now(zone)
+        }
+        lifecycle.lifecycle.addObserver(observer)
+        onDispose{lifecycle.lifecycle.removeObserver(observer)}
+    }
+    LaunchedEffect(zone){
+        while(true){
+            today=YearMonth.now(zone)
+            delay(60_000L)
+        }
+    }
+    val season=remember(today,offset){today.minusMonths(offset.toLong()).toString()}
     var state by remember(roomId,uid,season){
         mutableStateOf(RoomRecordsState(season,offset>0))
     }

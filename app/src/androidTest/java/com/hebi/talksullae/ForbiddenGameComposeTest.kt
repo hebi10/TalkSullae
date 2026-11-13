@@ -120,9 +120,7 @@ class ForbiddenGameComposeTest {
         compose.waitUntil(8000){
             compose.onAllNodesWithText("지훈 · 커피").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.runOnIdle{
-            assertEquals(0,compose.onAllNodesWithText("치킨").fetchSemanticsNodes().size)
-        }
+        assertEquals(0,compose.onAllNodesWithText("치킨").fetchSemanticsNodes().size)
         compose.onNodeWithTag("forbidden-chat-input").performTextInput("안전한 메시지")
         compose.onNodeWithTag("forbidden-chat-send").performClick()
         compose.waitUntil(8000){repo.lastText!=null}
