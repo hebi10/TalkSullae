@@ -30,7 +30,7 @@ internal data class ForbiddenGameState(
     val personalLoading: Boolean = false,
     val personalError: String? = null,
     val otherGameActive: Boolean = false,
-    val messages: List<ForbiddenChatMessage> = emptyList(),
+    val messages: List<LiarChatMessage> = emptyList(),
     val loading: Boolean = true,
     val busy: Boolean = false,
     val sending: Boolean = false,
@@ -60,8 +60,8 @@ internal class ForbiddenGameViewModel(private val repository: OnlineGameSessionR
     private var sessionId: String? = null
     private var sessionListener: ListenerRegistration? = null
     private var messageListener: ListenerRegistration? = null
-    private var recent: List<ForbiddenChatMessage> = emptyList()
-    private var older: List<ForbiddenChatMessage> = emptyList()
+    private var recent: List<LiarChatMessage> = emptyList()
+    private var older: List<LiarChatMessage> = emptyList()
     private var oldestCursor: DocumentSnapshot? = null
     private var sessionGeneration: Long = 0
     private var personalRequestRevision: Long? = null
@@ -247,9 +247,9 @@ internal class ForbiddenGameViewModel(private val repository: OnlineGameSessionR
         }
     }
 
-    private fun mergeMessages(): List<ForbiddenChatMessage> =
+    private fun mergeMessages(): List<LiarChatMessage> =
         (older + recent).associateBy { it.id }.values.sortedWith(
-            compareBy<ForbiddenChatMessage> { it.createdAtMillis ?: Long.MAX_VALUE }
+            compareBy<LiarChatMessage> { it.createdAtMillis ?: Long.MAX_VALUE }
                 .thenBy { it.id }
         )
 
