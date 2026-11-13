@@ -114,6 +114,7 @@ import com.hebi.talksullae.firebase.FirebaseBridge
 import com.hebi.talksullae.firebase.GoogleLogin
 import com.hebi.talksullae.firebase.googleUid
 import com.hebi.talksullae.ui.rooms.OnlineRoomsHost
+import com.hebi.talksullae.ui.safety.AccountDeletionScreen
 import com.hebi.talksullae.ui.safety.SafetyReportScreen
 import com.hebi.talksullae.ui.safety.SafetyReportViewModel
 import com.google.firebase.auth.FirebaseAuth
@@ -131,6 +132,7 @@ private const val Create = "create"
 private const val Invite = "invite"
 private const val Settings = "settings"
 private const val SafetyReport = "safety-report"
+private const val AccountDeletion = "account-deletion"
 
 private data class NavItem(val id: String, val title: String, val icon: ImageVector)
 
@@ -188,6 +190,7 @@ fun TalkSullaeApp(
             Onboarding -> route = Welcome
             Create, Settings -> route = Main
             SafetyReport -> if (reportModel?.close() == true) route = Settings
+            AccountDeletion -> route = Settings
             Invite -> {
                 route = if (pendingInvitePreview) Main else Room
                 pendingInvitePreview = false
@@ -220,13 +223,14 @@ fun TalkSullaeApp(
                         Create -> "새 방 만들기"
                         Settings -> "설정"
                         SafetyReport -> "안전 신고"
+                        AccountDeletion -> "계정 삭제"
                         else -> "톡술래"
                     },
                     subtitle = when (route) {
                         Room -> if (editingRoomChat) null else "UI 미리보기"
                         Game -> "게임 흐름 미리보기 · 실제 플레이 아님"
                         Online -> "초대 코드 · 멤버 관리"
-                        Welcome, Onboarding, SafetyReport -> null
+                        Welcome, Onboarding, SafetyReport, AccountDeletion -> null
                         else -> "채팅으로 즐기는 추리 게임 · 데모"
                     },
                     onBack = if (route == Main || route == Welcome) null else goBack
@@ -406,7 +410,12 @@ fun TalkSullaeApp(
                         darkTheme = isDark,
                         onThemeChange = { isDark = it },
                         onSafetyReport = { route = SafetyReport },
+                        onAccountDeletion = { route = AccountDeletion },
                         onBack = goBack
+                    )
+                    AccountDeletion -> AccountDeletionScreen(
+                        onBack = goBack,
+                        onSignedOut = { signedUser = null; route = Welcome }
                     )
                     SafetyReport -> reportModel?.let { model ->
                         SafetyReportScreen(
@@ -813,6 +822,7 @@ private fun SettingsScreen(
     darkTheme: Boolean,
     onThemeChange: (Boolean) -> Unit,
     onSafetyReport: () -> Unit,
+    onAccountDeletion: () -> Unit,
     onBack: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
@@ -830,7 +840,7 @@ private fun SettingsScreen(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PreviewNotice("알림 설정과 계정 자동 삭제·차단은 준비 중입니다. 삭제 요청은 아래 링크를 이용할 수 있습니다.")
+        PreviewNotice("알림 설정은 준비 중입니다. 사용자 차단과 채팅 신고는 온라인 방의 메시지에서 이용할 수 있습니다.")
         ContentCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("다크 모드", modifier = Modifier.weight(1f))
@@ -855,7 +865,11 @@ private fun SettingsScreen(
         }
         ContentCard {
             Text("계정 삭제·차단", style = MaterialTheme.typography.titleMedium)
-            Text("계정 삭제는 요청 링크로 접수하며, 앱 내 자동 삭제와 사용자 차단은 준비 중입니다.")
+            Text("온라인 계정은 최근 Google 로그인 후 삭제를 요청할 수 있습니다. 방장 위임과 진행 중 게임 종료가 필요합니다.")
+            OutlinedButton(
+                onClick = onAccountDeletion,
+                modifier = Modifier.fillMaxWidth().testTag("account-deletion-in-app")
+            ) { Text("앱에서 계정 삭제 요청") }
             TextButton(
                 onClick = { openPolicyLink("$privacyPolicyUrl#account-deletion") },
                 modifier = Modifier.fillMaxWidth().testTag("account-deletion-request-open")

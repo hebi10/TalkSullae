@@ -4,6 +4,7 @@ const {createHash} = require("node:crypto");
 const {FieldValue, Timestamp} = require("firebase-admin/firestore");
 const {HttpsError} = require("firebase-functions/v2/https");
 const {authUid, roomIdValue} = require("./policy");
+const {ROOM_CHAT_DAYS,DAY_MS}=require("./retention");
 
 const MAX_MESSAGE_LENGTH = 1000;
 const MIN_SEND_INTERVAL_MS = 750;
@@ -82,7 +83,8 @@ async function sendRoomMessage(db, request) {
       senderUid: uid,
       senderName,
       text,
-      createdAt: FieldValue.serverTimestamp()
+      createdAt: FieldValue.serverTimestamp(),
+      expiresAt: Timestamp.fromMillis(nowMillis+ROOM_CHAT_DAYS*DAY_MS)
     });
     transaction.set(rateRef, {lastSentAt: Timestamp.fromMillis(nowMillis)});
     return {messageId, deduplicated: false};

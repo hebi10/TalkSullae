@@ -12,7 +12,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -23,6 +25,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +42,10 @@ import com.hebi.talksullae.firebase.RoomChatInputPolicy
 import com.hebi.talksullae.firebase.RoomChatMessage
 import com.hebi.talksullae.firebase.RoomChatRepository
 import com.hebi.talksullae.firebase.RoomChatViewModel
+import com.hebi.talksullae.firebase.UserSafetyRepository
+import com.hebi.talksullae.firebase.FirestoreUserSafetyRepository
+import com.hebi.talksullae.firebase.UserSafetyViewModel
+import com.hebi.talksullae.firebase.UserSafetyState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,7 +56,8 @@ internal fun OnlineRoomChatHost(
     roomId: String,
     roomName: String,
     onBack: () -> Unit,
-    repository: RoomChatRepository? = null
+    repository: RoomChatRepository? = null,
+    safetyRepository: UserSafetyRepository? = null
 ) {
     val chatRepository = remember(repository) { repository ?: FirestoreRoomChatRepository() }
     val factory = remember(chatRepository) {
@@ -65,6 +74,27 @@ internal fun OnlineRoomChatHost(
     }
 
     val state by vm.state.collectAsStateWithLifecycle()
+    val safetyRepo = remember(repository,safetyRepository) {
+        safetyRepository ?: if (repository == null) FirestoreUserSafetyRepository() else null
+    }
+    val safetyFactory = remember(safetyRepo) {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                UserSafetyViewModel(requireNotNull(safetyRepo)) as T
+        }
+    }
+    val safetyVm: UserSafetyViewModel? =
+        if (safetyRepo != null) viewModel(key = "room-safety-$uid",factory = safetyFactory)
+        else null
+    DisposableEffect(safetyVm,uid) {
+        safetyVm?.start(uid)
+        onDispose { safetyVm?.stop() }
+    }
+    val safety = safetyVm?.state?.collectAsStateWithLifecycle()?.value ?: UserSafetyState()
+    var reportTarget by remember { mutableStateOf<RoomChatMessage?>(null) }
+    var reportCategory by remember { mutableStateOf("abuse") }
+    var reportDetails by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val newestId = state.messages.lastOrNull()?.id
     LaunchedEffect(newestId) {
@@ -122,7 +152,34 @@ internal fun OnlineRoomChatHost(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(state.messages.asReversed(), key = { it.id }) { message ->
-                RoomChatMessageRow(message, isOwn = message.senderUid == uid)
+                if (message.senderUid in safety.blocked) {
+                    Column(Modifier.fillMaxWidth().padding(8.dp)) {
+                        Text("차단한 사용자의 메시지입니다.")
+                        TextButton(onClick = { safetyVm?.setBlocked(message.senderUid,false) },
+                            enabled = !safety.working) { Text("차단 해제") }
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        RoomChatMessageRow(message, isOwn = message.senderUid == uid)
+                        if (message.senderUid != uid && safetyVm != null) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(
+                                    onClick = {
+                                        reportTarget = message
+                                        reportCategory = "abuse"
+                                        reportDetails = ""
+                                    },
+                                    modifier = Modifier.testTag("chat-report-" + message.id)
+                                ) { Text("신고") }
+                                TextButton(
+                                    onClick = { safetyVm.setBlocked(message.senderUid,true) },
+                                    enabled = !safety.working,
+                                    modifier = Modifier.testTag("chat-block-" + message.id)
+                                ) { Text("사용자 차단") }
+                            }
+                        }
+                    }
+                }
             }
             if (!state.initialLoading && state.messages.isEmpty() && state.readError == null) {
                 item(key = "empty-chat") { Text("아직 메시지가 없습니다. 첫 메시지를 보내 보세요.") }
@@ -141,6 +198,17 @@ internal fun OnlineRoomChatHost(
         }
 
         HorizontalDivider()
+        safety.error?.let { Text(it,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            color = MaterialTheme.colorScheme.error) }
+        safety.info?.let { Text(it,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) }
+        if (safety.pending != null && !safety.working) {
+            TextButton(onClick = { safetyVm?.retryReport() },
+                modifier = Modifier.testTag("chat-report-retry")) {
+                Text("같은 신고 다시 시도")
+            }
+        }
         state.info?.let {
             Text(
                 it,
@@ -191,6 +259,46 @@ internal fun OnlineRoomChatHost(
             )
         }
     }
+
+    reportTarget?.let { message ->
+        AlertDialog(
+            onDismissRequest = { if(!safety.working)reportTarget=null },
+            title = { Text("채팅 메시지 신고") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("선택한 메시지와 신고 사유가 운영 담당자에게 전달됩니다.")
+                    Row {
+                        listOf("abuse" to "괴롭힘","child_safety" to "아동 안전",
+                            "other" to "기타").forEach { (key,label) ->
+                            TextButton(onClick = { reportCategory=key }) {
+                                Text(label + if(reportCategory==key)" ✓" else "")
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value=reportDetails,onValueChange={ reportDetails=it },
+                        label={ Text("신고 사유 (5~1000자)") },maxLines=5,
+                        modifier=Modifier.fillMaxWidth().testTag("chat-report-details")
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        safetyVm?.report(roomId,message.id,reportCategory,reportDetails)
+                        reportTarget=null
+                    },
+                    enabled = reportDetails.trim().length in 5..1000 &&
+                        !safety.working,
+                    modifier = Modifier.testTag("chat-report-submit")
+                ) { Text("신고 제출") }
+            },
+            dismissButton = {
+                TextButton(onClick={reportTarget=null}) { Text("취소") }
+            }
+        )
+    }
+
 }
 
 @Composable

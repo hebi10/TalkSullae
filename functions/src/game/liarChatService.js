@@ -5,6 +5,7 @@ const {FieldValue,Timestamp}=require("firebase-admin/firestore");
 const {HttpsError}=require("firebase-functions/v2/https");
 const {authUid}=require("../policy");
 const {parseIdentityChat,MIN_INTERVAL}=require("./identityChatService");
+const {DAY_MS,GAME_CHAT_DAYS}=require("../retention");
 
 const sha=value=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
@@ -49,7 +50,8 @@ async function sendLiarMessage(db,request,now=Date.now){
       throw new HttpsError("resource-exhausted","메시지를 너무 빠르게 보내고 있습니다.");
     }
     tx.create(messageRef,{
-      senderUid:uid,text:input.text,createdAt:FieldValue.serverTimestamp()
+      senderUid:uid,text:input.text,createdAt:FieldValue.serverTimestamp(),
+      expiresAt:Timestamp.fromMillis(now()+GAME_CHAT_DAYS*DAY_MS)
     });
     tx.set(rateRef,{lastSentAt:Timestamp.fromMillis(now())});
     return {messageId,deduplicated:false};

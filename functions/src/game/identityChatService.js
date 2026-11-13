@@ -5,6 +5,7 @@ const {FieldValue,Timestamp}=require("firebase-admin/firestore");
 const {HttpsError}=require("firebase-functions/v2/https");
 const {authUid,roomIdValue}=require("../policy");
 const {productionRules}=require("./engine");
+const {DAY_MS,GAME_CHAT_DAYS}=require("../retention");
 const SESSION_ID=/^[a-f0-9]{64}$/;
 const KEY=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_LENGTH=500;
@@ -78,7 +79,8 @@ async function sendIdentityMessage(db,request,now=Date.now){
     tx.create(messageRef,{
       alias:privateRole,
       text:input.text,
-      createdAt:FieldValue.serverTimestamp()
+      createdAt:FieldValue.serverTimestamp(),
+      expiresAt:Timestamp.fromMillis(now()+GAME_CHAT_DAYS*DAY_MS)
     });
     tx.set(rateRef,{lastSentAt:Timestamp.fromMillis(now())});
     return {messageId,deduplicated:false};

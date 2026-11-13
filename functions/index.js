@@ -8,6 +8,8 @@ const { sendRoomMessage } = require("./src/chatService");
 const gameSession = require("./src/game/sessionService");
 const identityChat = require("./src/game/identityChatService");
 const liarChat = require("./src/game/liarChatService");
+const safetyControls = require("./src/safetyControls");
+const retention = require("./src/retention");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -29,6 +31,15 @@ exports.findActiveGameSession = onCall(config, request=>gameSession.findActiveGa
 
 exports.sendIdentityMessage = onCall(config, request=>identityChat.sendIdentityMessage(db,request));
 exports.sendLiarMessage = onCall(config, request=>liarChat.sendLiarMessage(db,request));
+exports.setUserBlock = onCall(config, request=>safetyControls.setUserBlock(db,request));
+exports.reportChatMessage = onCall(config, request=>safetyControls.reportChatMessage(db,request));
+exports.requestAccountDeletion = onCall(config, request=>safetyControls.requestAccountDeletion(db,request));
+exports.processAccountDeletionQueue = onSchedule({
+  schedule:"every 30 minutes",region:"asia-northeast3",maxInstances:1
+}, async()=>{await safetyControls.processAccountDeletionQueue(db);});
+exports.expireDueMessages = onSchedule({
+  schedule:"every 24 hours",region:"asia-northeast3",maxInstances:1
+}, async()=>{await retention.expireDueMessages(db);});
 exports.expireGameSessionDeadlines = onSchedule({
   schedule:"* * * * *",region:"asia-northeast3",maxInstances:1,
   timeZone:"Asia/Seoul"
