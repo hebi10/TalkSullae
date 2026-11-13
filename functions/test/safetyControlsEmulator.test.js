@@ -50,6 +50,12 @@ test("reporting requires real member and real stored message; retry is idempoten
  const replay=await safety.reportChatMessage(db,{...auth(member),data},()=>nowMillis);
  assert.equal(first.reportId,replay.reportId);
  assert.equal(replay.deduplicated,true);
+ // A retry after the original message expires must still recover the saved report.
+ await db.collection("rooms").doc(roomId).collection("messages")
+   .doc(message.messageId).delete();
+ const late=await safety.reportChatMessage(db,{...auth(member),data},()=>nowMillis);
+ assert.equal(late.deduplicated,true);
+ assert.equal(late.reportId,first.reportId);
  const record=await db.collection("safetyReports").doc(first.reportId).get();
  assert.equal(record.get("reportedUid"),owner);
  assert.equal(record.get("actorUid"),member);
@@ -119,7 +125,12 @@ test("server deletion worker removes user chat, membership, preference and auth 
  assert.equal((await base.collection("members").doc(owner).get()).exists,true);
  assert.equal((await base.get()).get("memberCount"),1);
  assert.equal((await db.collection("userSafety").doc(member).get()).exists,false);
- assert.equal((await db.collection("accountDeletionJobs").doc(member).get()).exists,false);
+ const tombstone=await db.collection("accountDeletionJobs").doc(member).get();
+ assert.equal(tombstone.get("status"),"completed");
+ assert.ok(tombstone.get("expiresAt").toMillis()>Date.now());
+ await assert.rejects(rooms.createRoom(db,{...auth(member),data:{
+   name:"삭제 후 토큰 재사용",description:"",requiresApproval:false
+ }}),e=>e.code==="permission-denied");
 });
 
 test("a queued deletion blocks new game participation even when the user signs in again",async()=>{
