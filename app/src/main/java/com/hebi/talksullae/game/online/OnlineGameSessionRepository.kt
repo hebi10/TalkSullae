@@ -57,6 +57,7 @@ internal interface OnlineGameSessionRepository {
     ): String
 
     suspend fun findActiveSession(roomId: String): String?
+    suspend fun findRecentCompletedSession(roomId: String, gameId: String): String? = null
 
     suspend fun createSession(
         roomId: String,
@@ -199,6 +200,13 @@ internal class FirestoreOnlineGameSessionRepository(
 
     override suspend fun findActiveSession(roomId: String): String? {
         val result = invoke("findActiveGameSession", mapOf("roomId" to roomId))
+        return result["sessionId"] as? String
+    }
+
+    override suspend fun findRecentCompletedSession(roomId: String, gameId: String): String? {
+        val result = invoke("findRecentCompletedGameSession", mapOf(
+            "roomId" to roomId,"gameId" to gameId
+        ))
         return result["sessionId"] as? String
     }
 

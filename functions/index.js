@@ -29,6 +29,8 @@ exports.createGameSession = onCall(config, request=>gameSession.createGameSessio
 exports.gameSessionAction = onCall(config, request=>gameSession.gameSessionAction(db,request));
 exports.getMyGameSession = onCall(config, request=>gameSession.getMyGameSession(db,request));
 exports.findActiveGameSession = onCall(config, request=>gameSession.findActiveGameSession(db,request));
+exports.findRecentCompletedGameSession = onCall(config,
+  request=>gameSession.findRecentCompletedGameSession(db,request));
 
 exports.sendIdentityMessage = onCall(config, request=>identityChat.sendIdentityMessage(db,request));
 exports.sendLiarMessage = onCall(config, request=>liarChat.sendLiarMessage(db,request));

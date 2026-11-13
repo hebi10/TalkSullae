@@ -67,6 +67,7 @@ internal class BalanceGameViewModel(
         viewModelScope.launch{
             try{
                 val found=repository.findActiveSession(currentRoom)
+                    ?: repository.findRecentCompletedSession(currentRoom,"balance")
                 if(generation!=token||room!=currentRoom)return@launch
                 if(found==null){
                     listener?.remove();listener=null;gameId=null
@@ -149,7 +150,9 @@ internal class BalanceGameViewModel(
     }
     fun create(asyncMode:Boolean){
         val currentRoom=room?:return
-        if(mutable.value.busy||mutable.value.session!=null||
+        val prior=mutable.value.session?.session?.phase
+        if(mutable.value.busy||
+           (prior!=null && prior!=GamePhase.FINISHED && prior!=GamePhase.CANCELLED)||
            mutable.value.otherGameActive)return
         val token=generation
         mutable.update{it.copy(busy=true,error=null)}

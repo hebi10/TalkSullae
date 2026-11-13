@@ -42,7 +42,8 @@ class BalanceGameComposeTest {
             participants=people.map{GameLobbyPlayer(it.uid,phase!=GamePhase.WAITING)},
             publicState=mapOf("options" to listOf("평생 여름","평생 겨울"),
                 "notice" to if(phase==GamePhase.PLAYING)"choose" else "predict",
-                "prompt" to "둘 중 하나를 선택하세요."),
+                "prompt" to "둘 중 하나를 선택하세요.",
+                "publishedResult" to "A: 평생 여름 (1명)"),
             fromCache=false
         )
         override fun watchSession(roomId:String,sessionId:String,
@@ -56,7 +57,10 @@ class BalanceGameComposeTest {
             cursor:DocumentSnapshot):IdentityChatPage=IdentityChatPage(emptyList(),null,false)
         override suspend fun sendIdentityMessage(roomId:String,sessionId:String,
             requestId:String,text:String):String=error("not identity")
-        override suspend fun findActiveSession(roomId:String):String?=sessionId
+        override suspend fun findActiveSession(roomId:String):String? =
+            if(phase==GamePhase.FINISHED)null else sessionId
+        override suspend fun findRecentCompletedSession(roomId:String,gameId:String):String? =
+            if(phase==GamePhase.FINISHED && gameId=="balance")sessionId else null
         override suspend fun createSession(roomId:String,gameId:String,
             mode:String,requestId:String):String {
             createdMode=mode
@@ -119,5 +123,14 @@ class BalanceGameComposeTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         assertEquals(0,compose.onAllNodesWithTag("balance-own-submit").fetchSemanticsNodes().size)
+    }    @Test fun completedAsyncSessionCanBeReopenedAndShowsFinalResults(){
+        val repo=Fake(GamePhase.FINISHED)
+        mount(repo)
+        compose.waitUntil(8000){
+            compose.onAllNodesWithTag("balance-result").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("A: 평생 여름 (1명)",substring=true).assertExists()
+        compose.onNodeWithTag("balance-create-next").assertExists()
     }
+
 }

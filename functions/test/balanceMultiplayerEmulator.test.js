@@ -73,6 +73,18 @@ test("two players privately choose A/B then predict one friend, reveal and settl
  const result=await s.ref.collection("results").doc("final").get();
  for(const uid of s.ids)assert.equal(result.get("scoresByUid")[uid],120);
  assert.equal((await s.ref.collection("results").get()).size,1);
+ const recent=await game.findRecentCompletedGameSession(db,{
+    ...auth(s.ids[0]),data:{roomId:s.roomId,gameId:"balance"}
+ });
+ assert.equal(recent.sessionId,s.sessionId);
+ const restored=await game.getMyGameSession(db,{
+   ...auth(s.ids[1]),data:{roomId:s.roomId,sessionId:s.sessionId}
+ });
+ assert.equal(restored.public.phase,"finished");
+ assert.match(restored.public.publicState.publishedResult,/A:/);
+ await assert.rejects(game.findRecentCompletedGameSession(db,{
+   ...auth("outsider"),data:{roomId:s.roomId,gameId:"balance"}
+ }),e=>e.code==="permission-denied");
 });
 test("async mode uses server deadlines and refuses late or outsider choices",async()=>{
  const s=await start(3,"async");

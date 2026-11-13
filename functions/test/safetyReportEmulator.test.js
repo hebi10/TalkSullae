@@ -96,3 +96,15 @@ test("concurrent distinct requests enforce one per UID, and an expired limit all
   assert.notEqual(afterCooldown.reportId, accepted[0].value.reportId);
   assert.notEqual(afterCooldown.reportId, isolated.reportId);
 });
+
+test("legacy safety reports are denied after a deletion job is queued",async()=>{
+ const uid=randomUUID();
+ await db.collection("accountDeletionJobs").doc(uid).set({
+   status:"queued",requestedAt:Timestamp.now()
+ });
+ await assert.rejects(submitSafetyReport(db,requestFor(uid)),
+   error=>error.code==="permission-denied");
+ const reports=await db.collection("safetyReports")
+   .where("actorUid","==",uid).get();
+ assert.equal(reports.size,0);
+});
