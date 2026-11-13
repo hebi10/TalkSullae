@@ -48,7 +48,12 @@ async function submitSafetyReport(db, request) {
   const rateRef = db.collection("safetyReportRateLimits").doc(sha256(uid));
 
   return db.runTransaction(async tx => {
-    const existing = await tx.get(reportRef);
+    const [existing,deletion] = await Promise.all([
+      tx.get(reportRef),tx.get(db.collection("accountDeletionJobs").doc(uid))
+    ]);
+    if (deletion.exists) {
+      throw new HttpsError("permission-denied","계정 삭제 요청 중에는 신고를 새로 등록할 수 없습니다.");
+    }
     if (existing.exists) {
       const stored = existing.data();
       if (stored.actorUid !== uid || stored.requestId !== report.requestId ||
