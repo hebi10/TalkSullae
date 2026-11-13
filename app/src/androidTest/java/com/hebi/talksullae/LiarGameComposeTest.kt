@@ -44,6 +44,7 @@ class LiarGameComposeTest {
         private val activeGame: String = "liar"
     ) : OnlineGameSessionRepository {
         @Volatile var lastAction: Map<String, Any>? = null
+        @Volatile var advanceRequested: Boolean = false
         @Volatile var lastText: String? = null
 
         private fun snapshot() = OnlineGameSnapshot(
@@ -125,7 +126,8 @@ class LiarGameComposeTest {
             rulesVersion: Int,revision: Long,requestId: String,
             action: Map<String, Any>
         ): Long {
-            lastAction = action
+            if(action["kind"] == "advance") advanceRequested = true
+            else lastAction = action
             return revision + 1
         }
 
@@ -197,6 +199,10 @@ class LiarGameComposeTest {
             assertEquals("submit",repo.lastAction?.get("kind"))
             assertEquals("friend3",repo.lastAction?.get("choice"))
         }
+        compose.waitUntil(8000) { repo.advanceRequested }
+        compose.runOnIdle {
+            assertEquals(true,repo.advanceRequested)
+        }
     }
 
     @Test
@@ -211,6 +217,7 @@ class LiarGameComposeTest {
         compose.onNodeWithTag("liar-topic-send").assertIsEnabled().performClick()
         compose.waitUntil(8000) { liarRepo.lastAction != null }
         compose.runOnIdle { assertEquals("커피",liarRepo.lastAction?.get("choice")) }
+        compose.waitUntil(8000) { liarRepo.advanceRequested }
     }
 
     @Test
