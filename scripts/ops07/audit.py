@@ -89,6 +89,14 @@ def jobs(source):
     indentation = min((depth for depth, match in candidates if match is not None), default=None)
     if indentation is None:
         return {"__unparsed_jobs__": source}
+    # Mixed block and flow job mappings must be rejected, not attached to prior jobs.
+    for line in children:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        depth = len(line) - len(line.lstrip())
+        if depth == indentation and not re.fullmatch(
+                r"""(['"]?)[A-Za-z][\w-]*\1\s*:\s*(?:#.*)?""", line.strip()):
+            return {"__unparsed_jobs__": source}
     result, name, buffer = {}, None, []
     for line in children:
         depth = len(line) - len(line.lstrip())
@@ -198,6 +206,7 @@ def _publishing_command(body):
     commands = "\n".join(line for line in body.splitlines()
                          if not line.lstrip().startswith(("- name:", "name:", "#")))
     commands = re.sub(r"\\\s*\n\s*", " ", commands)
+    commands = commands.replace(" && ", "\n").replace("; ", "\n").replace(" | ", "\n")
     if re.search(r"(?i)\bgh\s+release\s+create\b|softprops/action-gh-release|upload-google-play@", commands):
         return True
     if "androidpublisher.googleapis.com" in commands and re.search(
@@ -219,7 +228,7 @@ def _publishing_command(body):
             continue
         script, args = match.group(1).lower(), match.group(2).lower()
         # Existing publishers mutate even without an explicit operation flag.
-        if re.search(r"(?:^|/)(?:store_icon|publish-mobile-play|publish_mobile_play)[.]py$", script):
+        if re.search(r"(?:^|/)(?:store_icon|images_only|publish-mobile-play|publish_mobile_play)[.]py$", script):
             return True
         if not re.search(script_names, script):
             continue
@@ -242,6 +251,8 @@ def automatic_mutations(filename, source):
                                      "public-release.yml", "ui-r09-full-release.yml"})
     issues = []
     workflow_jobs = jobs(source)
+    if "__unparsed_jobs__" in workflow_jobs:
+        return [filename + ": unsupported job mapping may contain Play publisher"]
     for name, body in workflow_jobs.items():
         explicit = _publishing_command(body)
         possible = explicit or (relevant_file and MUTATOR.search(name) is not None
@@ -274,7 +285,9 @@ def _store_mutating_command(body):
         if not match:
             continue
         script, args = match.group(1).lower(), match.group(2).lower()
-        if re.search(r"(?:^|/)store_icon[.]py$", script):
+        if script.endswith("/ops06/store_gate.py"):
+            continue
+        if re.search(r"(?:^|/)(?:store_icon|images_only)[.]py$", script):
             return True
         if "publish_play_store_refresh" in script:
             return True
@@ -288,7 +301,7 @@ def _store_mutating_command(body):
 
 
 def _workflow_steps(body):
-    found = list(re.finditer(r"(?m)^( +)- (?:name|uses|run):", body))
+    found = list(re.finditer(r"(?m)^( +)- [A-Za-z][\w-]*:", body))
     if not found:
         return []
     depth = min(len(item.group(1)) for item in found)
@@ -360,8 +373,16 @@ def store_guard_findings():
             guard = steps[index]
             if not _safe_store_step(guard, [steps[i] for i in mutations], body, filename):
                 problems.append("STORE_OPTIONAL: " + filename + ": approval is optional, ignored or not executable")
+            if index in mutations:
+                problems.append("STORE_ORDER: " + filename + ": approval and publication share one step")
             if any(i < index for i in mutations):
                 problems.append("STORE_ORDER: " + filename + ": publication precedes approval")
+            for downstream in steps[index + 1:]:
+                if not (_store_mutating_command(downstream) or "google-github-actions/auth@" in downstream):
+                    continue
+                if re.search(r"\b(?:always|failure|cancelled)\s*\(", _step_condition(downstream)):
+                    problems.append("STORE_BYPASS: " + filename + ": publication may continue after rejected approval")
+                    break
             if any("google-github-actions/auth@" in step for step in steps[:index]):
                 problems.append("STORE_ORDER: " + filename + ": Play authentication precedes approval")
             if any(_publishing_command(step) and ("androidpublisher.googleapis.com" in step
@@ -447,10 +468,25 @@ def findings():
         if not release or guard not in release or not re.search(
                 r'if \[\[ "\$FINAL_RELEASE_APPROVAL" != "HOMECREW_FINAL_RELEASE_APPROVED" \]\]; then', release):
             problems.append("APPROVAL: HomeCrew final release authorization gate missing")
+    internal = read(".github/workflows/play-internal-release.yml")
+    if internal is not None:
+        for stage in ("verify", "publish"):
+            body = jobs(internal).get(stage)
+            guards = [step for step in _workflow_steps(body or "")
+                      if "scripts/ops04/internal.py guard" in step]
+            if len(guards) != 1:
+                problems.append("PROVENANCE: OPS-04 " + stage + " requires a signed-source guard")
+                continue
+            if _step_condition(guards[0]) or re.search(r"(?m)^\s+continue-on-error\s*:", guards[0]):
+                problems.append("PROVENANCE: OPS-04 " + stage + " guard must run and stop on failure")
     if REPOSITORY == "hebi10/TripCanvas":
-        internal = read(".github/workflows/play-internal-release.yml") or ""
-        if internal.count("scripts/ops04/internal.py guard") < 2:
-            problems.append("PROVENANCE: OPS-04 requires guard in both verify and publish jobs")
+        promote = jobs(read(".github/workflows/play-promote.yml")).get("promote")
+        if not promote or "inputs.final_release_confirmed == true" not in _guaranteed_atoms(job_condition(promote)):
+            problems.append("APPROVAL: TripCanvas legacy closed promotion lacks mandatory final approval")
+    if REPOSITORY == "hebi10/PetWorld":
+        closed = read(".github/workflows/play-closed-release.yml") or ""
+        if re.search(r"(?i)publisher[.]py\s+deploy[^\n]*--bundle", closed):
+            problems.append("CLOSED: PetWorld promotion must not upload a new binary")
     return problems
 
 
