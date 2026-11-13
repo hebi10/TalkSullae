@@ -7,6 +7,7 @@ const { submitSafetyReport } = require("./src/safetyReport");
 const { sendRoomMessage } = require("./src/chatService");
 const gameSession = require("./src/game/sessionService");
 const identityChat = require("./src/game/identityChatService");
+const liarChat = require("./src/game/liarChatService");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -27,6 +28,7 @@ exports.getMyGameSession = onCall(config, request=>gameSession.getMyGameSession(
 exports.findActiveGameSession = onCall(config, request=>gameSession.findActiveGameSession(db,request));
 
 exports.sendIdentityMessage = onCall(config, request=>identityChat.sendIdentityMessage(db,request));
+exports.sendLiarMessage = onCall(config, request=>liarChat.sendLiarMessage(db,request));
 exports.expireGameSessionDeadlines = onSchedule({
   schedule:"* * * * *",region:"asia-northeast3",maxInstances:1,
   timeZone:"Asia/Seoul"

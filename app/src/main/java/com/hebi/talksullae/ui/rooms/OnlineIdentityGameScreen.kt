@@ -120,7 +120,12 @@ internal fun OnlineIdentityGameHost(
             }
         }
 
-        if (!state.loading && snapshot == null) {
+        if (state.otherGameActive) {
+            Text("이 방에서 다른 게임이 진행 중입니다. 종료한 뒤 너 누구야?를 시작할 수 있습니다.")
+            OutlinedButton(onClick = vm::refresh, modifier = Modifier.fillMaxWidth()) {
+                Text("진행 중인 게임 다시 확인")
+            }
+        } else if (!state.loading && snapshot == null) {
             Text("현재 진행 중인 게임이 없습니다.")
             if (uid == ownerId) {
                 PrimaryAction("새 너 누구야? 게임 만들기",

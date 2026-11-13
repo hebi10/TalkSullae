@@ -20,6 +20,19 @@ internal data class IdentityChatPage(
     val hasMore: Boolean
 )
 
+internal data class LiarChatMessage(
+    val id: String,
+    val senderUid: String,
+    val text: String,
+    val createdAtMillis: Long?
+)
+
+internal data class LiarChatPage(
+    val messages: List<LiarChatMessage>,
+    val cursor: DocumentSnapshot?,
+    val hasMore: Boolean
+)
+
 internal interface OnlineGameSessionRepository {
     fun watchSession(
         roomId: String,
@@ -66,6 +79,19 @@ internal interface OnlineGameSessionRepository {
         roomId: String,
         sessionId: String
     ): Pair<OnlineGameSnapshot, Map<*, *>?>
+
+    fun watchLiarMessages(
+        roomId: String, sessionId: String,
+        onPage: (LiarChatPage) -> Unit, onError: (String) -> Unit
+    ): ListenerRegistration = error("Liar chat repository is not configured")
+
+    suspend fun loadOlderLiarMessages(
+        roomId: String, sessionId: String, cursor: DocumentSnapshot
+    ): LiarChatPage = error("Liar chat repository is not configured")
+
+    suspend fun sendLiarMessage(
+        roomId: String, sessionId: String, requestId: String, text: String
+    ): String = error("Liar chat repository is not configured")
 }
 
 /**
@@ -214,4 +240,44 @@ internal class FirestoreOnlineGameSessionRepository(
             ?: error("지원하지 않는 게임 데이터 버전입니다.")
         return snapshot to (result["personal"] as? Map<*, *>)
     }
+    private fun liarPage(docs: List<DocumentSnapshot>): LiarChatPage =
+        LiarChatPage(
+            messages = docs.mapNotNull { snapshot ->
+                val senderUid = snapshot.getString("senderUid") ?: return@mapNotNull null
+                val text = snapshot.getString("text") ?: return@mapNotNull null
+                LiarChatMessage(
+                    id = snapshot.id, senderUid = senderUid, text = text,
+                    createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time
+                )
+            },
+            cursor = docs.lastOrNull(),
+            hasMore = docs.size == 30
+        )
+
+    override fun watchLiarMessages(
+        roomId: String, sessionId: String,
+        onPage: (LiarChatPage) -> Unit, onError: (String) -> Unit
+    ): ListenerRegistration = identityQuery(roomId, sessionId)
+        .addSnapshotListener { snapshot, error ->
+            if (error != null) onError("라이어 게임 채팅 기록을 불러올 수 없습니다.")
+            else if (snapshot != null) onPage(liarPage(snapshot.documents))
+        }
+
+    override suspend fun loadOlderLiarMessages(
+        roomId: String, sessionId: String, cursor: DocumentSnapshot
+    ): LiarChatPage {
+        val result = identityQuery(roomId, sessionId).startAfter(cursor).get().await()
+        return liarPage(result.documents)
+    }
+
+    override suspend fun sendLiarMessage(
+        roomId: String, sessionId: String, requestId: String, text: String
+    ): String {
+        val result = invoke("sendLiarMessage", mapOf(
+            "roomId" to roomId, "sessionId" to sessionId,
+            "requestId" to requestId, "text" to text
+        ))
+        return result["messageId"] as? String ?: error("라이어 메시지 저장 결과가 없습니다.")
+    }
+
 }

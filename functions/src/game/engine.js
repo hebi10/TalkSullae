@@ -157,10 +157,10 @@ function makeRuleRegistry(definitions=[]){
   });
 }
 
-// Only audited identity@1 is activated. The remaining planned games stay fail-closed.
-// Arbitrary client-supplied or remotely downloaded game modules are never executable.
+// Only audited identity@1 and liar@1 are activated. Others remain fail-closed.
 const identityRules=require("./identityRules");
-const productionRules=makeRuleRegistry([identityRules]);
+const liarRules=require("./liarRules");
+const productionRules=makeRuleRegistry([identityRules,liarRules]);
 
 function publicSnapshot(doc){
   requirePhase(doc.phase);
