@@ -354,12 +354,23 @@ internal class LiarGameViewModel(private val repository: OnlineGameSessionReposi
         mutable.update { it.copy(busy = true,error = null) }
         viewModelScope.launch {
             try {
-                repository.submitAction(
+                val newRevision = repository.submitAction(
                     room,id,pending.gameId,pending.rulesVersion,pending.revision,
                     pending.requestId,pending.payload
                 )
                 if(generation == sessionGeneration && sessionId == id){
                     mutable.update { it.copy(pendingAction = null,error = null) }
+                    if(pending.payload["kind"] == "submit") {
+                        // Only the server may advance; it rejects early transitions.
+                        try {
+                            repository.submitAction(
+                                room,id,pending.gameId,pending.rulesVersion,newRevision,
+                                UUID.randomUUID().toString(),mapOf("kind" to "advance")
+                            )
+                        }catch(_: Exception) {
+                            // Other players may still be voting; the server deadline remains authoritative.
+                        }
+                    }
                     refreshPersonal(room,id,generation)
                 }
             }catch(e:Exception){
