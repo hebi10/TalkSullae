@@ -8,19 +8,17 @@ on:
       - 'scripts/release/test_promote_internal.py'
   workflow_dispatch:
     inputs:
+      ops01_release_approved:
+        description: 'Approve Play changes only after final planned work and QA'
+        type: boolean
+        required: true
+        default: false
       mode:
         description: 'Read-only check or promote existing internal 0.3.1 (3) to closed'
         required: true
         default: check
         type: choice
         options: [check, promote]
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/play-promote-closed.yml'
-      - 'scripts/release/promote_internal.py'
-      - 'scripts/release/test_promote_internal.py'
-
 permissions:
   contents: read
 
@@ -162,7 +160,9 @@ jobs:
 
   closed-publish:
     needs: [source, play-preflight]
-    if: needs.source.outputs.mode == 'promote' && needs.play-preflight.result == 'success'
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.ops01_release_approved == true &&
+      (needs.source.outputs.mode == 'promote' && needs.play-preflight.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
