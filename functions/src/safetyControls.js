@@ -261,11 +261,24 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
   try{await auth.deleteUser(uid);}catch(error){
     if(error.code!=="auth/user-not-found")throw error;
   }
-  await jobRef.delete();
+  // Keep a minimal tombstone longer than the maximum Firebase ID-token
+  // lifetime, so tokens on other devices cannot recreate account data.
+  await jobRef.set({
+    status:"completed",completedAt:FieldValue.serverTimestamp(),
+    expiresAt:Timestamp.fromMillis(Date.now()+2*60*60*1000),
+    attempts:FieldValue.delete(),lastError:FieldValue.delete()
+  },{merge:true});
   return {status:"completed"};
 }
 
 async function processAccountDeletionQueue(db,auth=getAuth()){
+  // Remove only expired tombstones; incomplete jobs stay visible for recovery.
+  const old=await db.collection("accountDeletionJobs")
+    .where("expiresAt","<=",Timestamp.fromMillis(Date.now()))
+    .limit(100).get();
+  for(const expired of old.docs){
+    if(expired.get("status")==="completed")await expired.ref.delete();
+  }
   const jobs=await db.collection("accountDeletionJobs").where("status","in",["queued","processing"]).limit(5).get();
   const summary={completed:0,failed:0};
   for(const doc of jobs.docs){

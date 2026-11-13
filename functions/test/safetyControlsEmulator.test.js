@@ -125,7 +125,12 @@ test("server deletion worker removes user chat, membership, preference and auth 
  assert.equal((await base.collection("members").doc(owner).get()).exists,true);
  assert.equal((await base.get()).get("memberCount"),1);
  assert.equal((await db.collection("userSafety").doc(member).get()).exists,false);
- assert.equal((await db.collection("accountDeletionJobs").doc(member).get()).exists,false);
+ const tombstone=await db.collection("accountDeletionJobs").doc(member).get();
+ assert.equal(tombstone.get("status"),"completed");
+ assert.ok(tombstone.get("expiresAt").toMillis()>Date.now());
+ await assert.rejects(rooms.createRoom(db,{...auth(member),data:{
+   name:"삭제 후 토큰 재사용",description:"",requiresApproval:false
+ }}),e=>e.code==="permission-denied");
 });
 
 test("a queued deletion blocks new game participation even when the user signs in again",async()=>{
