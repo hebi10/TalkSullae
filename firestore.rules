@@ -78,6 +78,53 @@ service cloud.firestore {
         }
       }
 
+      match /playerStats/{userId} {
+        allow get: if activeMember(roomId)
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active"
+          && signedIn() && request.auth.uid == userId;
+        allow list, create, update, delete: if false;
+        match /games/{gameSessionId} {
+          allow get: if activeMember(roomId) && signedIn() && request.auth.uid == userId;
+          allow list: if activeMember(roomId) && signedIn() && request.auth.uid == userId
+            && request.query.limit != null && request.query.limit <= 30;
+          allow create, update, delete: if false;
+        }
+      }
+
+      match /seasons/{seasonId} {
+        allow get: if activeMember(roomId)
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active";
+        allow list: if activeMember(roomId)
+          && request.query.limit != null && request.query.limit <= 24;
+        allow create, update, delete: if false;
+        match /scores/{userId} {
+          allow get: if activeMember(roomId)
+            && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active";
+          allow list: if activeMember(roomId)
+            && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active"
+            && request.query.limit != null && request.query.limit <= 20;
+          allow create, update, delete: if false;
+        }
+      }
+
+      match /recordEvents/{sessionId} {
+        allow get: if activeMember(roomId)
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active";
+        allow list: if activeMember(roomId)
+          && request.query.limit != null && request.query.limit <= 20;
+        allow create, update, delete: if false;
+      }
+
+      match /recordSettlements/{sessionId} {
+        allow read, write: if false;
+      }
+
+      match /stats/{documentId} {
+        allow get: if activeMember(roomId)
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active";
+        allow list, create, update, delete: if false;
+      }
+
       match /{other=**} {
         allow read, write: if false;
       }

@@ -193,6 +193,14 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
     refs.push({roomRef,room,sessions});
   }
   for(const {roomRef,sessions} of refs){
+    // Personal game history and monthly leaderboard entries must not survive
+    // account deletion; other members' shared season totals remain unchanged.
+    await db.recursiveDelete(roomRef.collection("playerStats").doc(uid));
+    const seasons=await roomRef.collection("seasons").limit(121).get();
+    if(seasons.size>120)throw new Error("Manual review: too many seasons");
+    for(const season of seasons.docs){
+      await season.ref.collection("scores").doc(uid).delete();
+    }
     await removeMessages(db,roomRef.collection("messages"),uid);
     for(const session of sessions.docs){
       const sessionRef=session.ref;
