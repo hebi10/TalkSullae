@@ -90,13 +90,24 @@ internal fun OnlineRoomsHost(
     var chatVisible by rememberSaveable { mutableStateOf(false) }
     var identityVisible by rememberSaveable { mutableStateOf(false) }
     var liarVisible by rememberSaveable { mutableStateOf(false) }
+    var forbiddenVisible by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state.selectedId, selected?.status) {
         if (state.selectedId == null || selected?.status != "active") {
             chatVisible = false
             identityVisible = false
             liarVisible = false
+            forbiddenVisible = false
         }
+    }
+
+    if (forbiddenVisible && room != null && selected?.status == "active") {
+        OnlineForbiddenGameHost(
+            uid = uid,roomId = room.id,roomName = room.name,ownerId = room.ownerId,
+            members = state.members.filter { it.status == "active" },
+            onBack = { forbiddenVisible = false }
+        )
+        return
     }
 
     if (liarVisible && room != null && selected?.status == "active") {
@@ -267,18 +278,24 @@ internal fun OnlineRoomsHost(
             Text(if (isOwner) "내 역할: 방장" else "내 역할: 멤버")
             PrimaryAction(
                 "일반 채팅 열기",
-                onClick = { liarVisible = false; identityVisible = false; chatVisible = true },
+                onClick = { forbiddenVisible = false; liarVisible = false; identityVisible = false; chatVisible = true },
                 modifier = Modifier.fillMaxWidth().testTag("online-chat-open")
             )
             PrimaryAction(
                 "너 누구야? 온라인 게임",
-                onClick = { liarVisible = false; chatVisible = false; identityVisible = true },
+                onClick = { forbiddenVisible = false; liarVisible = false; chatVisible = false; identityVisible = true },
                 modifier = Modifier.fillMaxWidth().testTag("identity-game-open")
             )
             PrimaryAction(
                 "라이어 채팅 온라인 게임",
-                onClick = { chatVisible = false; identityVisible = false; liarVisible = true },
+                onClick = { forbiddenVisible = false; chatVisible = false; identityVisible = false; liarVisible = true },
                 modifier = Modifier.fillMaxWidth().testTag("liar-game-open")
+            )
+            PrimaryAction(
+                "금지어 채팅 온라인 게임",
+                onClick = {chatVisible = false; identityVisible = false;
+                    liarVisible = false; forbiddenVisible = true},
+                modifier = Modifier.fillMaxWidth().testTag("forbidden-game-open")
             )
 
             if (isOwner) {

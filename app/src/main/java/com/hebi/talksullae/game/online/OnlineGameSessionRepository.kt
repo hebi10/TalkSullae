@@ -92,6 +92,19 @@ internal interface OnlineGameSessionRepository {
     suspend fun sendLiarMessage(
         roomId: String, sessionId: String, requestId: String, text: String
     ): String = error("Liar chat repository is not configured")
+
+    fun watchForbiddenMessages(
+        roomId: String, sessionId: String,
+        onPage: (LiarChatPage) -> Unit, onError: (String) -> Unit
+    ): ListenerRegistration = watchLiarMessages(roomId,sessionId,onPage,onError)
+
+    suspend fun loadOlderForbiddenMessages(
+        roomId: String,sessionId: String,cursor: DocumentSnapshot
+    ): LiarChatPage = loadOlderLiarMessages(roomId,sessionId,cursor)
+
+    suspend fun sendForbiddenMessage(
+        roomId: String,sessionId: String,requestId: String,text: String
+    ): String = error("Forbidden chat repository is not configured")
 }
 
 /**
@@ -278,6 +291,26 @@ internal class FirestoreOnlineGameSessionRepository(
             "requestId" to requestId, "text" to text
         ))
         return result["messageId"] as? String ?: error("라이어 메시지 저장 결과가 없습니다.")
+    }
+
+    override fun watchForbiddenMessages(
+        roomId: String,sessionId: String,
+        onPage: (LiarChatPage) -> Unit,onError: (String) -> Unit
+    ): ListenerRegistration = watchLiarMessages(roomId,sessionId,onPage,onError)
+
+    override suspend fun loadOlderForbiddenMessages(
+        roomId: String,sessionId: String,cursor: DocumentSnapshot
+    ): LiarChatPage = loadOlderLiarMessages(roomId,sessionId,cursor)
+
+    override suspend fun sendForbiddenMessage(
+        roomId: String,sessionId: String,requestId: String,text: String
+    ): String {
+        val result=invoke("sendForbiddenMessage",mapOf(
+            "roomId" to roomId,"sessionId" to sessionId,
+            "requestId" to requestId,"text" to text
+        ))
+        return result["messageId"] as? String
+            ?: error("금지어 메시지 저장 결과가 없습니다.")
     }
 
 }

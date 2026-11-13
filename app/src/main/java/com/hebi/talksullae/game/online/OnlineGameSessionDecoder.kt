@@ -64,10 +64,14 @@ object OnlineGameSessionDecoder {
         }.sortedBy { it.uid }
 
         val rawPublic = data["publicState"] as? Map<*, *> ?: return null
-        val allowed = setOf("prompt", "notice", "options", "publishedResult")
+        val allowed = setOf("prompt", "notice", "options", "publishedResult", "eliminatedUids")
         if (rawPublic.keys.any { it !is String || it !in allowed }) return null
         if (phase != GamePhase.REVEAL && phase != GamePhase.FINISHED &&
             rawPublic.containsKey("publishedResult")) return null
+        val eliminated = rawPublic["eliminatedUids"]
+        if (eliminated != null && (eliminated !is List<*> || eliminated.size > 10 ||
+            eliminated.any { it !is String || it !in rawPlayers.keys } ||
+            eliminated.toSet().size != eliminated.size)) return null
         val publicState = rawPublic.entries.associate { (key, value) ->
             key as String to value
         }

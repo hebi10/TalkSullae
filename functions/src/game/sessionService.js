@@ -336,8 +336,10 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
       }
       const assignments={};
       const memberNames={};
-      if(["identity","liar"].includes(session.gameId) &&
-         ["voting","reveal"].includes(session.phase)){
+      if((["identity","liar"].includes(session.gameId) &&
+         ["voting","reveal"].includes(session.phase)) ||
+         (session.gameId==="forbidden" &&
+          ["playing","reveal"].includes(session.phase))){
         const [secrets,members]=await Promise.all([
           Promise.all(participants.map(playerId=>
             tx.get(sessionRef.collection("privateAssignments").doc(playerId)))),
@@ -422,7 +424,17 @@ async function getMyGameSession(db,request,rules=productionRules){
     const rule=rules.require(session.gameId,session.rulesVersion);
     const doc=await sessionRef.collection("privateAssignments").doc(uid).get();
     const personalData=doc.exists?doc.get("data"):null;
-    personal=rule.projectForPlayer({session,actorUid:uid,personalData});
+    if(session.gameId==="forbidden" && !LOBBY_PHASES.has(session.phase) &&
+       !TERMINAL_PHASES.has(session.phase)){
+      const ids=participantIds(session);
+      const snaps=await Promise.all(ids.map(playerId=>
+        sessionRef.collection("privateAssignments").doc(playerId).get()));
+      const assignments=Object.fromEntries(ids.map((playerId,index)=>
+        [playerId,snaps[index].exists?snaps[index].get("data"):null]));
+      personal=rule.projectForPlayer({session,actorUid:uid,personalData,assignments});
+    }else{
+      personal=rule.projectForPlayer({session,actorUid:uid,personalData});
+    }
     if(personal!==null&&!nonemptyObject(personal)){
       throw new HttpsError("internal","게임 개인 상태가 잘못되었습니다.");
     }
