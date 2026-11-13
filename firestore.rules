@@ -83,6 +83,20 @@ service cloud.firestore {
       }
     }
 
+    match /userSafety/{userId} {
+      allow read, write: if false;
+      match /blocks/{targetUid} {
+        allow get: if signedIn() && request.auth.uid == userId;
+        allow list: if signedIn() && request.auth.uid == userId
+          && request.query.limit != null && request.query.limit <= 100;
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /accountDeletionJobs/{userId} {
+      allow read, write: if false;
+    }
+
     match /userRooms/{userId} {
       allow read, write: if false;
       match /rooms/{roomId} {

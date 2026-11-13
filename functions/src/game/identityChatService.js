@@ -5,6 +5,7 @@ const {FieldValue,Timestamp}=require("firebase-admin/firestore");
 const {HttpsError}=require("firebase-functions/v2/https");
 const {authUid,roomIdValue}=require("../policy");
 const {productionRules}=require("./engine");
+const {DAY_MS,GAME_CHAT_DAYS}=require("../retention");
 const SESSION_ID=/^[a-f0-9]{64}$/;
 const KEY=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_LENGTH=500;
@@ -41,10 +42,12 @@ async function sendIdentityMessage(db,request,now=Date.now){
   const messageRef=sessionRef.collection("publicMessages").doc(messageId);
   const rateRef=sessionRef.collection("gameChatRateLimits").doc(uid);
   return db.runTransaction(async tx=>{
-    const [room,member,session,personal,existing,rate]=await Promise.all([
+    const [room,member,session,personal,existing,rate,deletion]=await Promise.all([
       tx.get(roomRef),tx.get(memberRef),tx.get(sessionRef),
-      tx.get(privateRef),tx.get(messageRef),tx.get(rateRef)
+      tx.get(privateRef),tx.get(messageRef),tx.get(rateRef),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))
     ]);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 채팅할 수 없습니다.");
     if(!room.exists||room.get("status")!=="active"||
        !member.exists||member.get("status")!=="active"||
        !session.exists||room.get("activeGameSessionId")!==input.sessionId ||
@@ -78,7 +81,8 @@ async function sendIdentityMessage(db,request,now=Date.now){
     tx.create(messageRef,{
       alias:privateRole,
       text:input.text,
-      createdAt:FieldValue.serverTimestamp()
+      createdAt:FieldValue.serverTimestamp(),
+      expiresAt:Timestamp.fromMillis(now()+GAME_CHAT_DAYS*DAY_MS)
     });
     tx.set(rateRef,{lastSentAt:Timestamp.fromMillis(now())});
     return {messageId,deduplicated:false};

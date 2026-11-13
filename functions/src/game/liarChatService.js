@@ -5,6 +5,7 @@ const {FieldValue,Timestamp}=require("firebase-admin/firestore");
 const {HttpsError}=require("firebase-functions/v2/https");
 const {authUid}=require("../policy");
 const {parseIdentityChat,MIN_INTERVAL}=require("./identityChatService");
+const {DAY_MS,GAME_CHAT_DAYS}=require("../retention");
 
 const sha=value=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
@@ -19,10 +20,12 @@ async function sendLiarMessage(db,request,now=Date.now){
   const messageRef=sessionRef.collection("publicMessages").doc(messageId);
   const rateRef=sessionRef.collection("gameChatRateLimits").doc(uid);
   return db.runTransaction(async tx=>{
-    const [room,member,session,personal,existing,rate]=await Promise.all([
+    const [room,member,session,personal,existing,rate,deletion]=await Promise.all([
       tx.get(roomRef),tx.get(memberRef),tx.get(sessionRef),
-      tx.get(personalRef),tx.get(messageRef),tx.get(rateRef)
+      tx.get(personalRef),tx.get(messageRef),tx.get(rateRef),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))
     ]);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 채팅할 수 없습니다.");
     if(!room.exists||room.get("status")!=="active"||
        !member.exists||member.get("status")!=="active"||
        !session.exists||room.get("activeGameSessionId")!==input.sessionId||
@@ -49,7 +52,8 @@ async function sendLiarMessage(db,request,now=Date.now){
       throw new HttpsError("resource-exhausted","메시지를 너무 빠르게 보내고 있습니다.");
     }
     tx.create(messageRef,{
-      senderUid:uid,text:input.text,createdAt:FieldValue.serverTimestamp()
+      senderUid:uid,text:input.text,createdAt:FieldValue.serverTimestamp(),
+      expiresAt:Timestamp.fromMillis(now()+GAME_CHAT_DAYS*DAY_MS)
     });
     tx.set(rateRef,{lastSentAt:Timestamp.fromMillis(now())});
     return {messageId,deduplicated:false};

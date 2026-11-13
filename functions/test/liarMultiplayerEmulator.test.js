@@ -85,7 +85,7 @@ test("real four-player game has private role/topic, timed chat, votes, guess and
  assert.equal(again.messageId,first.messageId);
  assert.equal(again.deduplicated,true);
  const message=await s.ref.collection("publicMessages").doc(first.messageId).get();
- assert.deepEqual(Object.keys(message.data()).sort(),["createdAt","senderUid","text"]);
+ assert.deepEqual(Object.keys(message.data()).sort(),["createdAt","expiresAt","senderUid","text"]);
  assert.equal(message.get("senderUid"),s.owner);
  assert.equal(message.get("topic"),undefined);
  await assert.rejects(chat.sendLiarMessage(db,{...uid("outsider"),data:{
