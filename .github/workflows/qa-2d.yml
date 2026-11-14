@@ -165,8 +165,8 @@ jobs:
             adb install -r qa-build/debug/app-debug.apk
             adb install -r qa-build/androidTest/debug/app-debug-androidTest.apk
             mkdir -p "qa-captures/${{ matrix.name }}"
-            adb shell am instrument -w -r -e class com.hebi.talksullae.MainNavigationTest,com.hebi.talksullae.RoomChatComposeTest,com.hebi.talksullae.IdentityGameComposeTest,com.hebi.talksullae.LiarGameComposeTest,com.hebi.talksullae.ForbiddenGameComposeTest,com.hebi.talksullae.BalanceGameComposeTest com.hebi.talksullae.test/androidx.test.runner.AndroidJUnitRunner | tee "qa-captures/${{ matrix.name }}/instrumentation.txt"
-            python3 scripts/qa/assert_instrumentation.py "qa-captures/${{ matrix.name }}/instrumentation.txt" 28
+            adb shell am instrument -w -r -e class com.hebi.talksullae.MainNavigationTest,com.hebi.talksullae.RoomChatComposeTest,com.hebi.talksullae.IdentityGameComposeTest,com.hebi.talksullae.LiarGameComposeTest,com.hebi.talksullae.ForbiddenGameComposeTest,com.hebi.talksullae.BalanceGameComposeTest,com.hebi.talksullae.RoomRecordsComposeTest com.hebi.talksullae.test/androidx.test.runner.AndroidJUnitRunner | tee "qa-captures/${{ matrix.name }}/instrumentation.txt"
+            python3 scripts/qa/assert_instrumentation.py "qa-captures/${{ matrix.name }}/instrumentation.txt" 30
             python3 scripts/qa/capture_matrix.py --profile "${{ matrix.name }}" --size "${{ matrix.size }}" --output "qa-captures/${{ matrix.name }}"
             if [ "${{ matrix.name }}" = api36-phone ]; then python3 scripts/qa/export_play_store_captures.py play-store-captures; fi
       - name: Upload Play store UI captures with sample data

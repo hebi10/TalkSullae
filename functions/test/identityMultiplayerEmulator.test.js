@@ -127,6 +127,9 @@ test("four players complete real anonymous chat, unique guesses, reveal and sett
     "advance",{},n-1,1762935790400);
   assert.equal(replay.deduplicated,true);
   assert.equal((await sessionRef.collection("results").get()).size,1);
+  const playerRecord=await db.collection("rooms").doc(roomId)
+    .collection("playerStats").doc("owner").get();
+  assert.equal(playerRecord.get("totalGames"),1);
   assert.equal((await db.collection("rooms").doc(roomId).get()).get("activeGameSessionId"),null);
 });
 

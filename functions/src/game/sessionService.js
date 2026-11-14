@@ -25,6 +25,7 @@ const ACTION_KEYS=Object.freeze({
   cancel:new Set(["kind"])
 });
 const sha=value=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const {prepareSettlement}=require("./recordService");
 const nonemptyObject=value=>value!==null && typeof value==="object" &&
   !Array.isArray(value) && Object.getPrototypeOf(value)===Object.prototype;
 const allowed=(obj,keys)=>nonemptyObject(obj)&&Object.keys(obj).every(k=>keys.has(k));
@@ -391,6 +392,11 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
           throw new HttpsError("failed-precondition","이미 점수가 확정된 게임입니다.");
         }
         const settlementId=sha([env.roomId,env.sessionId,"final",session.rulesVersion]);
+        const settle=await prepareSettlement(tx,roomRef,{
+          gameId:session.gameId,sessionId:env.sessionId,settlementId,
+          scoreByUid:scores,participants,nowMillis:timestamp
+        });
+        extraWrites.push(settle);
         changes.settlementId=settlementId;
         changes.phaseEndsAt=null;
         extraWrites.push(()=>tx.create(sessionRef.collection("results").doc("final"),{

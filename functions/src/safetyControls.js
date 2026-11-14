@@ -202,9 +202,15 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
        !["finished","cancelled"].includes(s.get("phase")))){
       throw new Error("Account still participates in an active game");
     }
-    refs.push({roomRef,room,sessions});
+    const seasons=await roomRef.collection("seasons").limit(121).get();
+    if(seasons.size>120)throw new Error("Manual review: too many seasons");
+    refs.push({roomRef,room,sessions,seasons});
   }
-  for(const {roomRef,sessions} of refs){
+  for(const {roomRef,sessions,seasons} of refs){
+    await db.recursiveDelete(roomRef.collection("playerStats").doc(uid));
+    for(const season of seasons.docs){
+      await season.ref.collection("scores").doc(uid).delete();
+    }
     await roomRef.collection("recentCompletedGameSessions").doc(uid).delete();
     await removeMessages(db,roomRef.collection("messages"),uid);
     for(const session of sessions.docs){

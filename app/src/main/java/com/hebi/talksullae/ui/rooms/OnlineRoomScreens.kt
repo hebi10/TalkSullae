@@ -92,6 +92,7 @@ internal fun OnlineRoomsHost(
     var liarVisible by rememberSaveable { mutableStateOf(false) }
     var forbiddenVisible by rememberSaveable { mutableStateOf(false) }
     var balanceVisible by rememberSaveable { mutableStateOf(false) }
+    var recordsVisible by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state.selectedId, selected?.status) {
         if (state.selectedId == null || selected?.status != "active") {
@@ -100,7 +101,17 @@ internal fun OnlineRoomsHost(
             liarVisible = false
             forbiddenVisible = false
             balanceVisible = false
+            recordsVisible = false
         }
+    }
+
+    if (recordsVisible && room != null && selected?.status == "active") {
+        OnlineRoomRecordsHost(
+            uid = uid,roomId = room.id,roomName = room.name,
+            members = state.members.filter { it.status == "active" },
+            onBack = { recordsVisible = false }
+        )
+        return
     }
 
     if (balanceVisible && room != null && selected?.status == "active") {
@@ -315,6 +326,14 @@ internal fun OnlineRoomsHost(
                     liarVisible = false; forbiddenVisible = false; balanceVisible = true
                 },
                 modifier = Modifier.fillMaxWidth().testTag("balance-game-open")
+            )
+            PrimaryAction(
+                "방 기록·월간 시즌 순위",
+                onClick = {
+                    chatVisible = false; identityVisible = false; liarVisible = false
+                    forbiddenVisible = false; balanceVisible = false; recordsVisible = true
+                },
+                modifier = Modifier.fillMaxWidth().testTag("room-records-open")
             )
 
             if (isOwner) {

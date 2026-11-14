@@ -40,7 +40,7 @@ const fakeRules=makeRuleRegistry([{
     }
     if(session.phase==="reveal"){
       return {phase:"finished",publicState:{publishedResult:"모두 종료"},
-        scoresByUid:{owner:100,member:150}};
+        scoresByUid:{owner:100,member:120}};
     }
     throw new Error("unsupported stage");
   },
@@ -216,7 +216,7 @@ test("injected audited test rule drives timed submission, private recovery and o
     .collection("gameSessions").doc(initial.sessionId).collection("results").doc("final");
   const result=await resultRef.get();
   assert.equal(result.get("scoresByUid.owner"),100);
-  assert.equal(result.get("scoresByUid.member"),150);
+  assert.equal(result.get("scoresByUid.member"),120);
   const settlementId=result.get("settlementId");
   assert.match(settlementId,/^[a-f0-9]{64}$/);
   const repeatFinish=await action(roomId,initial.sessionId,"member",reveal.revision,
