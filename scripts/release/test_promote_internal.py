@@ -47,7 +47,10 @@ class FakeClient:
 class PromotionTests(unittest.TestCase):
     def test_exact_release_matches_gradle(self):
         gradle = Path(__file__).resolve().parents[2] / "app/build.gradle.kts"
-        self.assertEqual(version_from_source(gradle), (3, "0.3.1"))
+        self.assertEqual(EXPECTED_CODE, 3)
+        code, name = version_from_source(gradle)
+        self.assertGreater(code, EXPECTED_CODE)
+        self.assertEqual((code, name), (4, "0.4.0"))
 
     def test_missing_track_variable_uses_only_verified_alpha_fallback(self):
         workflow = (Path(__file__).resolve().parents[2]

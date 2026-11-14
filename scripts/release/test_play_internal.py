@@ -16,6 +16,7 @@ class FakeClient:
         self.calls = []
         self.assigned = False
         self.readback_ok = True
+        self.fail_track_update = False
 
     def create_edit(self):
         self.created += 1
@@ -39,6 +40,8 @@ class FakeClient:
         if path.endswith("/bundles?uploadType=media"):
             return {"versionCode": self.upload_code}
         if method == "PUT" and path.endswith("/tracks/qa"):
+            if self.fail_track_update:
+                raise PlaySafetyError("Google Play API HTTP 404 during qa track update")
             self.assigned = True
         return {}
 
@@ -56,6 +59,8 @@ class InternalPlayTests(unittest.TestCase):
         result = check_preflight(fake, "qa", 2)
         self.assertEqual(result["track"], "qa")
         self.assertEqual(result["current_max_code"], 1)
+        self.assertTrue(result["ready_for_deploy"])
+        self.assertFalse(result["requires_play_console_initialization"])
         self.assertEqual(fake.calls, [])
         self.assertEqual(len(fake.deleted), 1)
 
@@ -63,7 +68,42 @@ class InternalPlayTests(unittest.TestCase):
         fake = FakeClient(prior=0, has_qa=False)
         result = check_preflight(fake, "qa", 2)
         self.assertFalse(result["internal_track_exists"])
+        self.assertFalse(result["ready_for_deploy"])
+        self.assertTrue(result["requires_play_console_initialization"])
         self.assertFalse(result["api_committed"])
+
+
+    def test_deploy_preflight_fails_before_upload_if_internal_track_missing(self):
+        fake = FakeClient(prior=2, has_qa=False, upload_code=4)
+        with self.assertRaisesRegex(PlaySafetyError, "Initialize the internal testing track"):
+            check_preflight(fake, "qa", 4, require_existing_qa=True)
+        self.assertEqual(fake.calls, [])
+        self.assertEqual(len(fake.deleted), 1)
+
+    def test_missing_qa_never_uploads_even_when_deploy_directly_called(self):
+        fake = FakeClient(prior=2, has_qa=False, upload_code=4)
+        report = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "app.aab"
+            bundle.write_bytes(b"x" * 15000)
+            with self.assertRaisesRegex(PlaySafetyError, "not initialized"):
+                deploy(fake, "qa", bundle, 4, "0.4.0", "내부 테스트", report=report)
+        self.assertEqual(report["upload_stage"], "internal_track_missing")
+        self.assertFalse(report["api_committed"])
+        self.assertEqual(fake.calls, [])
+
+    def test_http_404_at_track_update_never_claims_commit(self):
+        fake = FakeClient(prior=2, has_qa=True, upload_code=4)
+        fake.fail_track_update = True
+        report = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "app.aab"
+            bundle.write_bytes(b"x" * 15000)
+            with self.assertRaisesRegex(PlaySafetyError, "HTTP 404"):
+                deploy(fake, "qa", bundle, 4, "0.4.0", "내부 테스트", report=report)
+        self.assertEqual(report["upload_stage"], "track_update_requested")
+        self.assertFalse(report["api_committed"])
+        self.assertFalse(any(":commit" in url for _, url, _ in fake.calls))
 
     def test_duplicate_code_preflight_fails(self):
         fake = FakeClient(prior=2)
