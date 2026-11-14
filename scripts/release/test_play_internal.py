@@ -7,10 +7,11 @@ from play_internal import check_preflight, deploy, track_name, TRACK
 
 
 class FakeClient:
-    def __init__(self, prior=1, has_qa=True, upload_code=2):
+    def __init__(self, prior=1, has_qa=True, upload_code=2, internal_track=TRACK):
         self.prior = prior
         self.has_qa = has_qa
         self.upload_code = upload_code
+        self.internal_track = internal_track
         self.created = 0
         self.deleted = []
         self.calls = []
@@ -27,9 +28,9 @@ class FakeClient:
 
     def list_tracks(self, edit):
         if self.assigned and self.readback_ok:
-            return [{"track": TRACK, "releases": [{"versionCodes": ["2"]}]}]
+            return [{"track": self.internal_track, "releases": [{"versionCodes": ["2"]}]}]
         if self.has_qa:
-            return [{"track": TRACK, "releases": [{"versionCodes": [str(self.prior)]}]}]
+            return [{"track": self.internal_track, "releases": [{"versionCodes": [str(self.prior)]}]}]
         return [{"track": "alpha", "releases": []}]
 
     def list_codes(self, edit, tracks):
@@ -39,7 +40,7 @@ class FakeClient:
         self.calls.append((method, path, "[binary]" if binary else data))
         if path.endswith("/bundles?uploadType=media"):
             return {"versionCode": self.upload_code}
-        if method == "PUT" and path.endswith("/tracks/qa"):
+        if method == "PUT" and path.endswith("/tracks/" + self.internal_track):
             if self.fail_track_update:
                 raise PlaySafetyError("Google Play API HTTP 404 during qa track update")
             self.assigned = True
@@ -53,6 +54,39 @@ class InternalPlayTests(unittest.TestCase):
             with self.subTest(name=name):
                 with self.assertRaises(PlaySafetyError):
                     track_name(name)
+
+    def test_auto_checks_existing_internal_alias(self):
+        fake = FakeClient(prior=3, internal_track="internal")
+        report = check_preflight(fake, "auto", 4, require_existing_qa=True)
+        self.assertEqual(report["track"], "internal")
+        self.assertEqual(report["visible_internal_track_ids"], ["internal"])
+        self.assertEqual(report["current_max_code"], 3)
+        self.assertTrue(report["ready_for_deploy"])
+        self.assertEqual(fake.calls, [])
+
+    def test_auto_writes_only_existing_internal_alias(self):
+        fake = FakeClient(internal_track="internal")
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "app.aab"
+            bundle.write_bytes(b"x" * 15000)
+            report = deploy(fake, "auto", bundle, 2, "0.4.0", "내부 테스트")
+        self.assertTrue(report["api_committed"])
+        self.assertEqual(report["track"], "internal")
+        updates = [(path.rsplit("/", 1)[-1], data["track"]) for method, path, data in fake.calls if method == "PUT"]
+        self.assertEqual(updates, [("internal", "internal")])
+
+    def test_auto_rejects_ambiguous_internal_aliases_before_upload(self):
+        class AmbiguousTracks(FakeClient):
+            def list_tracks(self, edit):
+                return [{"track": "qa"}, {"track": "internal"}]
+
+        fake = AmbiguousTracks()
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "app.aab"
+            bundle.write_bytes(b"x" * 15000)
+            with self.assertRaisesRegex(PlaySafetyError, "Ambiguous internal testing track"):
+                deploy(fake, "auto", bundle, 2, "0.4.0", "내부 테스트")
+        self.assertEqual(fake.calls, [])
 
     def test_preflight_never_posts_or_publishes(self):
         fake = FakeClient()

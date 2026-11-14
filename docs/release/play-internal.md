@@ -1,7 +1,7 @@
 # 2-H Google Play 내부 테스트 전용 배포
 
 ## 기본 원칙
-- 배포 대상: **내부 테스트만**, Google Play Android Publisher API 트랙 \`qa\`.
+- 배포 대상은 Google Play API에서 확인한 기존 내부 테스트 트랙입니다.
 - 소스 패키지: `com.hebi.talksullae` · GAME-05 내부 테스트 준비 버전 `0.4.0` / `versionCode=4` (Play API 등록 전).
 - 비공개 \`alpha\`, 공개 \`beta\`, \`production\` 및 기기별 테스트 트랙은 내부 배포 스크립트에서 **거부**합니다.
 - 기존 \`.github/workflows/play-closed.yml\` 및 비공개 트랙 설정은 변경하지 않습니다.
@@ -9,18 +9,18 @@
 - Play API의 \`track_assigned\` 확인은 Play Console 게시·테스터 설치가 승인됐다는 의미가 아닙니다.
 
 ## 실행 방법
-- 코드를 \`main\`에 병합하면 GitHub Actions의 \`Play internal-testing guarded publisher\`가 자동으로 보호 설정의 **존재만** 읽고 \`talksullae-play-internal-readiness\` 아티팩트를 만듭니다. 이 동작은 **업로드하지 않습니다**.
-- 해당 Actions 워크플로의 \`Run workflow\`에서 \`mode=check\` 선택: 앱 \`com.hebi.talksullae\`의 Android Publisher API 접근 및 \`qa\` 트랙 버전코드를 조회합니다. **업로드 없음**.
+- OPS-03의 `release-build.yml`을 수동 실행하면 검증한 `main`에서 서명 AAB 빌드를 요청합니다.
+- `Play internal-testing guarded publisher`의 `mode=check`는 앱 `com.hebi.talksullae`의 Android Publisher API 접근, 내부 테스트 트랙 및 등록 버전을 조회합니다.
 - \`mode=build\`: Android/Firebase 전체 QA 통과 후 기존 고정 업로드키로 Release AAB를 생성·서명·무결성 확인해 비공개 아티팩트로 보관합니다. **Play 업로드 없음**.
-- \`mode=deploy\`: 전체 QA, Play API preflight, 서명·AAB provenance가 모두 성공한 경우에만 트랙 \`qa\`에 업로드 → commit → readback을 실행합니다. \`play-internal\` GitHub Environment 승인자 설정 권장.
-- 명시적인 \`[deploy-internal]\` 커밋과 변경 대상 파일이 맞는 \`main\` push만 수동 배포 요청과 동등하게 인식합니다. 무관한 커밋/다른 브랜치에서는 절대 자동 배포하지 않습니다.
+- OPS-04는 기존 서명 AAB를 검증한 뒤 `publish` 모드와 `play-internal` 환경을 통해 확인된 내부 테스트 트랙에만 게시합니다. Play API에서 커밋한 버전을 다시 조회합니다.
+- 서명 빌드와 내부 테스트 게시를 각각 수동으로 실행합니다.
 
 ## Secrets 및 Variables
 - Firebase Android 구성: \`FIREBASE_ANDROID_GOOGLE_SERVICES_JSON\` (기존 연결 이력 존재).
 - 고정 Play 업로드키: \`PLAY_UPLOAD_KEYSTORE_BASE64\`, \`PLAY_UPLOAD_STORE_PASSWORD\`, \`PLAY_UPLOAD_KEY_ALIAS\`, \`PLAY_UPLOAD_KEY_PASSWORD\`.
 - 키 지문: Variables \`PLAY_UPLOAD_CERT_SHA256\`.
 - Google Play API: WIF Variables \`PLAY_WORKLOAD_IDENTITY_PROVIDER\` + \`PLAY_SERVICE_ACCOUNT\`, 또는 \`GOOGLE_PLAY_SERVICE_ACCOUNT_JSON\` Secret. Play Console에서 서비스 계정에 앱의 테스트 릴리스 권한이 필요합니다.
-- **\`PLAY_CLOSED_TRACK\`은 내부 테스트에 사용하지 않습니다.** 내부 트랙은 Google 공식 API의 \`qa\` 고정 값입니다.
+- 내부 테스트는 Android Publisher API에 존재하는 `qa` 또는 `internal`을 확인합니다. `PLAY_CLOSED_TRACK`은 비공개 테스트에 사용합니다.
 - 모든 비밀값은 Secrets에 등록하고 공개 GitHub/문서/로그에 표시하지 않습니다. GalliPick 등 다른 앱의 업로드키를 승인 없이 복사하지 않습니다.
 
 ## 현재 검증 상태 및 남은 작업
@@ -72,7 +72,7 @@ assertion.ref == 'refs/heads/main'
    - `PLAY_SERVICE_ACCOUNT`: Play Console에서 해당 앱 권한을 부여한 서비스 계정 이메일.
 2. `play-preflight`와 메인 Push `audit`은 GitHub Environment를 사용하지 않으므로 **Repository variables**로 등록해야 합니다. `play-internal` Environment에만 변수를 두면 사전 검사에서 읽지 못합니다.
 3. 서비스 계정 JSON Secret `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`은 승인된 별도 경로이지만, 가능한 한 장기 키를 만들지 않는 WIF를 우선합니다. 기존 톡술래 업로드키 Secrets와 지문 변수는 변경하지 않습니다.
-4. `PLAY_CLOSED_TRACK`은 내부 테스트에 필요하지 않으며, 내부 트랙은 `qa`로 고정되어 있습니다.
+4. 내부 테스트의 트랙 ID는 Play API 조회로 확인합니다.
 
 ### D. 무배포 인증 재검증 및 성공 기준
 
@@ -91,8 +91,9 @@ assertion.ref == 'refs/heads/main'
 - 소스: GAME-05까지 병합된 `main` 37dcc52fe5c246d603375b044dfeb0baabb15d67에서 준비한 신규 버전 `0.4.0 (4)`.
 - Android 서명 AAB를 게시했다고 주장하지 않습니다. 이 문서/PR/CI는 출시가 아니며 Google Play API 승인 전입니다.
 - 앞선 RELEASE-03 시도 #43145896908은 AAB 업로드 acknowledgement 이후 `qa` 트랙에서 HTTP 404가 발생, `api_committed=false`. 당시 read-only check의 `internal_track_exists=false`는 과거 사실이며 최신 Play Console 상태는 재조회해야 합니다.
-- `check` 모드는 `qa` 트랙이 없어도 `ready_for_deploy=false`, `requires_play_console_initialization=true`, Play에 등록된 최고 versionCode를 기록하고 업로드하지 않습니다.
-- `deploy`/OPS-04 `publish` 모드는 `qa` 트랙이 실제 존재하지 않으면 업로드 전에 안전 실패합니다. 다른 트랙으로 자동 전환하거나 서명키를 바꾸지 않습니다.
+- 내부 테스트 워크플로는 Play API에 이미 존재하는 `qa` 또는 `internal` 중 정확히 하나를 확인합니다. 두 ID가 동시에 나타나면 배포 전에 중단합니다.
+- `check` 모드는 확인한 내부 트랙 ID와 등록된 최고 versionCode를 기록합니다. API에서 내부 트랙이 보이지 않으면 `ready_for_deploy=false`를 기록하며, Console의 내부 출시 상태와 API 권한을 대조해야 합니다.
+- `deploy`/OPS-04 `publish` 모드는 내부 트랙이 확인된 경우에만 기존 서명 정책을 적용한 AAB를 해당 트랙에 업로드합니다.
 - 배포 전에 Play Console 소유자가 앱 `com.hebi.talksullae`의 내부 테스트 트랙을 확인하고, 필요하면 최초 릴리스/테스터 설정을 완료해야 합니다.
 - `0.4.0 (4)` 버전의 최종 사용 가능 여부는 실시간 Android Publisher API `check` 결과로 결정해야 하며 확인 없이 최신 버전으로 단정하지 않습니다.
 - 기능: 실제 게임 4종(너 누구야, 라이어 채팅, 금지어 채팅, 밸런스 예측), 친구 방·채팅, 신고·차단·계정 삭제, 전적·시즌·업적.
