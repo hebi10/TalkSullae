@@ -273,7 +273,7 @@ fun TalkSullaeApp(
                                     route = Main
                                     mainTab = "rooms"
                                 } catch (_: GetCredentialCancellationException) {
-                                    loginError = null
+                                    loginError = "Google 로그인을 완료하지 못했습니다. 다시 시도해 주세요."
                                 } catch (e: CancellationException) {
                                     throw e
                                 } catch (e: Exception) {
