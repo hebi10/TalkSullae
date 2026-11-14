@@ -149,7 +149,7 @@ def main():
     args = parser.parse_args()
     report = {"package": PACKAGE, "track": TRACK, "result": "unverified", "api_committed": False}
     try:
-        track_name(args.track)
+        report["track"] = track_name(args.track)
         client = PlayClient(os.environ.get("PLAY_ACCESS_TOKEN"))
         if args.mode == "check":
             report = check_preflight(

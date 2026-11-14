@@ -1,7 +1,7 @@
 # 2-H Google Play 내부 테스트 전용 배포
 
 ## 기본 원칙
-- 배포 대상: **내부 테스트만**, Google Play Android Publisher API 트랙 \`qa\`.
+- 배포 대상은 Google Play API에서 확인한 기존 내부 테스트 트랙입니다.
 - 소스 패키지: `com.hebi.talksullae` · GAME-05 내부 테스트 준비 버전 `0.4.0` / `versionCode=4` (Play API 등록 전).
 - 비공개 \`alpha\`, 공개 \`beta\`, \`production\` 및 기기별 테스트 트랙은 내부 배포 스크립트에서 **거부**합니다.
 - 기존 \`.github/workflows/play-closed.yml\` 및 비공개 트랙 설정은 변경하지 않습니다.
@@ -9,18 +9,18 @@
 - Play API의 \`track_assigned\` 확인은 Play Console 게시·테스터 설치가 승인됐다는 의미가 아닙니다.
 
 ## 실행 방법
-- 코드를 \`main\`에 병합하면 GitHub Actions의 \`Play internal-testing guarded publisher\`가 자동으로 보호 설정의 **존재만** 읽고 \`talksullae-play-internal-readiness\` 아티팩트를 만듭니다. 이 동작은 **업로드하지 않습니다**.
-- 해당 Actions 워크플로의 \`Run workflow\`에서 \`mode=check\` 선택: 앱 \`com.hebi.talksullae\`의 Android Publisher API 접근 및 \`qa\` 트랙 버전코드를 조회합니다. **업로드 없음**.
+- OPS-03의 `release-build.yml`을 수동 실행하면 검증한 `main`에서 서명 AAB 빌드를 요청합니다.
+- `Play internal-testing guarded publisher`의 `mode=check`는 앱 `com.hebi.talksullae`의 Android Publisher API 접근, 내부 테스트 트랙 및 등록 버전을 조회합니다.
 - \`mode=build\`: Android/Firebase 전체 QA 통과 후 기존 고정 업로드키로 Release AAB를 생성·서명·무결성 확인해 비공개 아티팩트로 보관합니다. **Play 업로드 없음**.
-- \`mode=deploy\`: 전체 QA, Play API preflight, 서명·AAB provenance가 모두 성공한 경우에만 트랙 \`qa\`에 업로드 → commit → readback을 실행합니다. \`play-internal\` GitHub Environment 승인자 설정 권장.
-- 명시적인 \`[deploy-internal]\` 커밋과 변경 대상 파일이 맞는 \`main\` push만 수동 배포 요청과 동등하게 인식합니다. 무관한 커밋/다른 브랜치에서는 절대 자동 배포하지 않습니다.
+- OPS-04는 기존 서명 AAB를 검증한 뒤 `publish` 모드와 `play-internal` 환경을 통해 확인된 내부 테스트 트랙에만 게시합니다. Play API에서 커밋한 버전을 다시 조회합니다.
+- 서명 빌드와 내부 테스트 게시를 각각 수동으로 실행합니다.
 
 ## Secrets 및 Variables
 - Firebase Android 구성: \`FIREBASE_ANDROID_GOOGLE_SERVICES_JSON\` (기존 연결 이력 존재).
 - 고정 Play 업로드키: \`PLAY_UPLOAD_KEYSTORE_BASE64\`, \`PLAY_UPLOAD_STORE_PASSWORD\`, \`PLAY_UPLOAD_KEY_ALIAS\`, \`PLAY_UPLOAD_KEY_PASSWORD\`.
 - 키 지문: Variables \`PLAY_UPLOAD_CERT_SHA256\`.
 - Google Play API: WIF Variables \`PLAY_WORKLOAD_IDENTITY_PROVIDER\` + \`PLAY_SERVICE_ACCOUNT\`, 또는 \`GOOGLE_PLAY_SERVICE_ACCOUNT_JSON\` Secret. Play Console에서 서비스 계정에 앱의 테스트 릴리스 권한이 필요합니다.
-- **\`PLAY_CLOSED_TRACK\`은 내부 테스트에 사용하지 않습니다.** 내부 트랙은 Google 공식 API의 \`qa\` 고정 값입니다.
+- 내부 테스트는 Android Publisher API에 존재하는 `qa` 또는 `internal`을 확인합니다. `PLAY_CLOSED_TRACK`은 비공개 테스트에 사용합니다.
 - 모든 비밀값은 Secrets에 등록하고 공개 GitHub/문서/로그에 표시하지 않습니다. GalliPick 등 다른 앱의 업로드키를 승인 없이 복사하지 않습니다.
 
 ## 현재 검증 상태 및 남은 작업
@@ -72,7 +72,7 @@ assertion.ref == 'refs/heads/main'
    - `PLAY_SERVICE_ACCOUNT`: Play Console에서 해당 앱 권한을 부여한 서비스 계정 이메일.
 2. `play-preflight`와 메인 Push `audit`은 GitHub Environment를 사용하지 않으므로 **Repository variables**로 등록해야 합니다. `play-internal` Environment에만 변수를 두면 사전 검사에서 읽지 못합니다.
 3. 서비스 계정 JSON Secret `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`은 승인된 별도 경로이지만, 가능한 한 장기 키를 만들지 않는 WIF를 우선합니다. 기존 톡술래 업로드키 Secrets와 지문 변수는 변경하지 않습니다.
-4. `PLAY_CLOSED_TRACK`은 내부 테스트에 필요하지 않으며, 내부 트랙은 `qa`로 고정되어 있습니다.
+4. 내부 테스트의 트랙 ID는 Play API 조회로 확인합니다.
 
 ### D. 무배포 인증 재검증 및 성공 기준
 
