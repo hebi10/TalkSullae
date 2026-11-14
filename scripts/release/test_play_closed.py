@@ -59,8 +59,8 @@ class TestPlaySafety(unittest.TestCase):
         code, name = version_from_source(
             Path(__file__).resolve().parents[2] / "app/build.gradle.kts"
         )
-        self.assertEqual(code, 3)
-        self.assertEqual(name, "0.3.1")
+        self.assertEqual(code, 4)
+        self.assertEqual(name, "0.4.0")
 
     def test_preflight_never_uploads(self):
         fake = FakeClient()
