@@ -57,6 +57,39 @@ class Ops04SafetyTests(unittest.TestCase):
                     internal.guard()
                 api.assert_not_called()
 
+    def test_current_github_run_id_reaches_provenance_checks(self):
+        data = self.environment(mode="check")
+        data["BUILD_RUN_ID"] = "43552232756"
+        data["BUILD_WORKFLOW_FILE"] = ".github/workflows/play-internal.yml"
+        responses = {
+            "repos/hebi10/fixture/git/ref/heads/main": {"object": {"sha": "a" * 40}},
+            "repos/hebi10/fixture/actions/runs/43552232756": {
+                "head_sha": "a" * 40,
+                "head_branch": "main",
+                "event": "workflow_dispatch",
+                "status": "completed",
+                "conclusion": "success",
+                "repository": {"full_name": "hebi10/fixture"},
+                "path": ".github/workflows/play-internal.yml",
+            },
+            "repos/hebi10/fixture/actions/runs/43552232756/artifacts?per_page=100": {
+                "total_count": 1,
+                "artifacts": [{"name": "verified-signed-aab-123", "expired": False, "size_in_bytes": 1000}],
+            },
+        }
+        with patch.dict(os.environ, data, clear=True):
+            with patch.object(internal, "github", side_effect=responses.__getitem__):
+                internal.guard()
+
+    def test_non_numeric_run_id_is_rejected(self):
+        data = self.environment(mode="check")
+        data["BUILD_RUN_ID"] = "43552232756/.."
+        with patch.dict(os.environ, data, clear=True):
+            with patch.object(internal, "github") as api:
+                with self.assertRaisesRegex(internal.GateError, "Invalid source run ID"):
+                    internal.guard()
+                api.assert_not_called()
+
     def test_missing_bundle_fails_closed(self):
         with tempfile.TemporaryDirectory() as folder:
             with patch.object(internal, "BUNDLE_PATH", Path(folder)):
