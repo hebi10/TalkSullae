@@ -2,7 +2,7 @@
 
 ## 기본 원칙
 - 배포 대상: **내부 테스트만**, Google Play Android Publisher API 트랙 \`qa\`.
-- 소스 패키지: `com.hebi.talksullae` · 최신 `main` 기준 `0.3.1` / `versionCode=3`.
+- 소스 패키지: `com.hebi.talksullae` · GAME-05 내부 테스트 준비 버전 `0.4.0` / `versionCode=4` (Play API 등록 전).
 - 비공개 \`alpha\`, 공개 \`beta\`, \`production\` 및 기기별 테스트 트랙은 내부 배포 스크립트에서 **거부**합니다.
 - 기존 \`.github/workflows/play-closed.yml\` 및 비공개 트랙 설정은 변경하지 않습니다.
 - 서명 및 Play API 인증을 갖추지 못했다면 **AAB를 업로드하지 않고**, 무엇이 부족한지 안전한 보고서로 남깁니다.
@@ -85,3 +85,18 @@ assertion.ref == 'refs/heads/main'
 - https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines
 - https://developers.google.com/android-publisher/getting_started
 - https://support.google.com/googleplay/android-developer/answer/9859348
+
+## GAME-05 내부 테스트 릴리스 준비 — 2026-11-14
+
+- 소스: GAME-05까지 병합된 `main` 37dcc52fe5c246d603375b044dfeb0baabb15d67에서 준비한 신규 버전 `0.4.0 (4)`.
+- Android 서명 AAB를 게시했다고 주장하지 않습니다. 이 문서/PR/CI는 출시가 아니며 Google Play API 승인 전입니다.
+- 앞선 RELEASE-03 시도 #43145896908은 AAB 업로드 acknowledgement 이후 `qa` 트랙에서 HTTP 404가 발생, `api_committed=false`. 당시 read-only check의 `internal_track_exists=false`는 과거 사실이며 최신 Play Console 상태는 재조회해야 합니다.
+- `check` 모드는 `qa` 트랙이 없어도 `ready_for_deploy=false`, `requires_play_console_initialization=true`, Play에 등록된 최고 versionCode를 기록하고 업로드하지 않습니다.
+- `deploy`/OPS-04 `publish` 모드는 `qa` 트랙이 실제 존재하지 않으면 업로드 전에 안전 실패합니다. 다른 트랙으로 자동 전환하거나 서명키를 바꾸지 않습니다.
+- 배포 전에 Play Console 소유자가 앱 `com.hebi.talksullae`의 내부 테스트 트랙을 확인하고, 필요하면 최초 릴리스/테스터 설정을 완료해야 합니다.
+- `0.4.0 (4)` 버전의 최종 사용 가능 여부는 실시간 Android Publisher API `check` 결과로 결정해야 하며 확인 없이 최신 버전으로 단정하지 않습니다.
+- 기능: 실제 게임 4종(너 누구야, 라이어 채팅, 금지어 채팅, 밸런스 예측), 친구 방·채팅, 신고·차단·계정 삭제, 전적·시즌·업적.
+- 새로운 서버 Callable, Firestore Rules, 인덱스, Cloud Scheduler가 운영에 필요한 기능이므로 운영 Firebase가 해당 소스와 호환되는지 확인·승인 배포하지 않은 상태에서는 Play 내부 테스트를 진행해도 기능 정상 동작을 보장할 수 없습니다.
+- 현재 연결된 GitHub 도구는 workflow_dispatch 요청을 제공하지 않습니다. 수동 Run workflow 또는 GitHub에서 승인된 Work 모드가 필요합니다. 커밋 메시지 배포 마커로 승인 게이트를 우회하지 않습니다.
+- 정확한 최신 main SHA에서 `Android verification` CI 성공 → OPS-03 서명 AAB 빌드 전용 → SHA256·서명·패키지·versionCode 확인 → OPS-04 독립 승인 내부 테스트 업로드 → API commit/readback → Console 게시·테스터 설치 확인 순서를 준수합니다.
+- 비공개 `alpha` 및 프로덕션 트랙은 변경하지 않습니다. 기존 0.3.1 (3) 비공개 승격 워크플로는 역사적 버전에 고정돼 있으므로 새 코드 4를 임의 승격하지 않습니다.
