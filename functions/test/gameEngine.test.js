@@ -78,7 +78,8 @@ test("only audited identity@1, liar@1 and forbidden@1 are registered",()=>{
   assert.equal(productionRules.supported("liar",1),true);
   assert.equal(productionRules.require("liar",1).gameId,"liar");
   assert.equal(productionRules.supported("forbidden",1),true);
-  for(const id of ["balance"]){
+  assert.equal(productionRules.supported("balance",1),true);
+  for(const id of []){
     assert.equal(productionRules.supported(id,1),false);
     assert.throws(()=>productionRules.require(id,1),/다음 개발 단계/);
   }
