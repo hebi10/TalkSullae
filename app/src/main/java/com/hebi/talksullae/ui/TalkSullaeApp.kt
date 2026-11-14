@@ -3,6 +3,7 @@ package com.hebi.talksullae.ui
 import android.app.Activity
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -119,6 +120,7 @@ import com.hebi.talksullae.ui.safety.SafetyReportScreen
 import com.hebi.talksullae.ui.safety.SafetyReportViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private const val Welcome = "welcome"
@@ -270,6 +272,10 @@ fun TalkSullaeApp(
                                     GoogleLogin(activity).signIn()
                                     route = Main
                                     mainTab = "rooms"
+                                } catch (_: GetCredentialCancellationException) {
+                                    loginError = null
+                                } catch (e: CancellationException) {
+                                    throw e
                                 } catch (e: Exception) {
                                     loginError = e.localizedMessage ?: "Google 로그인에 실패했습니다."
                                 } finally {

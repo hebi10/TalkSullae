@@ -19,6 +19,7 @@ class MainNavigationTest {
     private fun openDemo() {
         composeRule.onNodeWithTag("welcome-start").assertExists().performClick()
         composeRule.onNodeWithTag("onboarding-nickname").assertExists()
+        composeRule.onNodeWithText("닉네임").assertExists()
         composeRule.onNodeWithTag("onboarding-continue").performClick()
         composeRule.onNodeWithTag("room-list").assertExists()
     }

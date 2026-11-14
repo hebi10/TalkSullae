@@ -95,7 +95,7 @@ fun OnboardingScreen(
             value = nickname,
             onValueChange = { nickname = it },
             modifier = Modifier.fillMaxWidth().testTag("onboarding-nickname"),
-            label = { Text("데모 닉네임") },
+            label = { Text("닉네임") },
             supportingText = { Text("2~16자, 이 기기 화면에서만 사용") },
             isError = !validNickname,
             singleLine = true
