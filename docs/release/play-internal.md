@@ -91,8 +91,9 @@ assertion.ref == 'refs/heads/main'
 - 소스: GAME-05까지 병합된 `main` 37dcc52fe5c246d603375b044dfeb0baabb15d67에서 준비한 신규 버전 `0.4.0 (4)`.
 - Android 서명 AAB를 게시했다고 주장하지 않습니다. 이 문서/PR/CI는 출시가 아니며 Google Play API 승인 전입니다.
 - 앞선 RELEASE-03 시도 #43145896908은 AAB 업로드 acknowledgement 이후 `qa` 트랙에서 HTTP 404가 발생, `api_committed=false`. 당시 read-only check의 `internal_track_exists=false`는 과거 사실이며 최신 Play Console 상태는 재조회해야 합니다.
-- `check` 모드는 `qa` 트랙이 없어도 `ready_for_deploy=false`, `requires_play_console_initialization=true`, Play에 등록된 최고 versionCode를 기록하고 업로드하지 않습니다.
-- `deploy`/OPS-04 `publish` 모드는 `qa` 트랙이 실제 존재하지 않으면 업로드 전에 안전 실패합니다. 다른 트랙으로 자동 전환하거나 서명키를 바꾸지 않습니다.
+- 내부 테스트 워크플로는 Play API에 이미 존재하는 `qa` 또는 `internal` 중 정확히 하나를 확인합니다. 두 ID가 동시에 나타나면 배포 전에 중단합니다.
+- `check` 모드는 확인한 내부 트랙 ID와 등록된 최고 versionCode를 기록합니다. API에서 내부 트랙이 보이지 않으면 `ready_for_deploy=false`를 기록하며, Console의 내부 출시 상태와 API 권한을 대조해야 합니다.
+- `deploy`/OPS-04 `publish` 모드는 내부 트랙이 확인된 경우에만 기존 서명 정책을 적용한 AAB를 해당 트랙에 업로드합니다.
 - 배포 전에 Play Console 소유자가 앱 `com.hebi.talksullae`의 내부 테스트 트랙을 확인하고, 필요하면 최초 릴리스/테스터 설정을 완료해야 합니다.
 - `0.4.0 (4)` 버전의 최종 사용 가능 여부는 실시간 Android Publisher API `check` 결과로 결정해야 하며 확인 없이 최신 버전으로 단정하지 않습니다.
 - 기능: 실제 게임 4종(너 누구야, 라이어 채팅, 금지어 채팅, 밸런스 예측), 친구 방·채팅, 신고·차단·계정 삭제, 전적·시즌·업적.

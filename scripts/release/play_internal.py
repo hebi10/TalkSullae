@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed Play internal-test publisher for com.hebi.talksullae, track qa only."""
+"""Fail-closed Play internal-test publisher for com.hebi.talksullae."""
 import argparse
 import hashlib
 import json
@@ -11,12 +11,22 @@ from pathlib import Path
 from play_closed import PACKAGE, PlayClient, PlaySafetyError, release_code
 
 TRACK = "qa"
+INTERNAL_TRACK_IDS = frozenset({TRACK, "internal"})
+AUTO_TRACK = "auto"
 
 
 def track_name(value):
-    if value != TRACK:
-        raise PlaySafetyError("Only the phone/tablet Google Play internal testing track 'qa' is allowed")
-    return TRACK
+    if value not in (TRACK, AUTO_TRACK):
+        raise PlaySafetyError("Select 'qa' or discover the existing phone/tablet internal testing track with 'auto'")
+    return value
+
+
+def existing_track(tracks, selection):
+    allowed = INTERNAL_TRACK_IDS if selection == AUTO_TRACK else {selection}
+    matching = [track["track"] for track in tracks if track.get("track") in allowed]
+    if len(matching) > 1:
+        raise PlaySafetyError("Ambiguous internal testing track identifiers from Google Play")
+    return matching[0] if matching else None
 
 
 def check_preflight(client, track, requested_code=None, require_existing_qa=False):
@@ -25,16 +35,18 @@ def check_preflight(client, track, requested_code=None, require_existing_qa=Fals
     try:
         tracks = client.list_tracks(edit)
         current_max = max(client.list_codes(edit, tracks), default=0)
-        internal_exists = any(t.get("track") == TRACK for t in tracks)
+        selected = existing_track(tracks, track)
+        internal_exists = selected is not None
         if require_existing_qa and not internal_exists:
             raise PlaySafetyError(
-                "Initialize the internal testing track 'qa' in Play Console before deployment; "
+                "Initialize the internal testing track in Play Console or verify its API identifier; "
                 "no AAB upload was attempted."
             )
         if requested_code is not None and release_code(requested_code) <= current_max:
             raise PlaySafetyError("Source versionCode must exceed every uploaded or published Play versionCode")
         return {
-            "package": PACKAGE, "track": track,
+            "package": PACKAGE, "track": selected or track,
+            "visible_internal_track_ids": sorted(INTERNAL_TRACK_IDS.intersection(t.get("track") for t in tracks)),
             "internal_track_exists": internal_exists,
             "ready_for_deploy": internal_exists,
             "requires_play_console_initialization": not internal_exists,
@@ -69,13 +81,14 @@ def deploy(client, track, bundle, code, version, notes, report=None):
     committed = False
     try:
         tracks = client.list_tracks(edit)
-        if not any(t.get("track") == TRACK for t in tracks):
+        selected = existing_track(tracks, track)
+        if selected is None:
             report["upload_stage"] = "internal_track_missing"
             raise PlaySafetyError(
-                "Google Play internal testing track 'qa' is not initialized. "
-                "Create and activate the first internal release in Play Console. "
+                "Google Play internal testing track is not initialized or visible to the API. "
                 "No AAB upload was attempted."
             )
+        report["track"] = selected
         used = client.list_codes(edit, tracks)
         if used and code <= max(used):
             raise PlaySafetyError("Internal AAB versionCode must exceed all existing Play releases and uploaded bundles")
@@ -87,8 +100,8 @@ def deploy(client, track, bundle, code, version, notes, report=None):
         if release_code(uploaded.get("versionCode")) != code:
             raise PlaySafetyError("Internal Play bundle versionCode does not match the signed artifact")
         report["upload_stage"] = "track_update_requested"
-        client.request("PUT", edit + "/tracks/qa", {
-            "track": TRACK,
+        client.request("PUT", edit + "/tracks/" + selected, {
+            "track": selected,
             "releases": [{
                 "name": "TalkSullae " + version,
                 "versionCodes": [str(code)],
@@ -110,13 +123,13 @@ def deploy(client, track, bundle, code, version, notes, report=None):
 
     readback = client.create_edit()
     try:
-        matches = [t for t in client.list_tracks(readback) if t.get("track") == TRACK]
+        matches = [t for t in client.list_tracks(readback) if t.get("track") == selected]
         if len(matches) != 1 or not any(
             code in [release_code(v) for v in release.get("versionCodes", [])]
             for release in matches[0].get("releases", [])
         ):
-            raise PlaySafetyError("Internal edit committed but 'qa' readback not confirmed")
-        report["verification"] = "internal_qa_track_assigned"
+            raise PlaySafetyError("Internal edit committed but track readback not confirmed")
+        report["verification"] = "internal_" + selected + "_track_assigned"
         report["upload_stage"] = "readback_confirmed"
     finally:
         client.delete_edit(readback)
