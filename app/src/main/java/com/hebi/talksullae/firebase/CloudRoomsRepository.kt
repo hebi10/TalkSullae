@@ -30,6 +30,14 @@ data class CloudMember(
 
 data class JoinResult(val roomId: String, val status: String)
 data class Invitation(val code: String, val expiresAtMillis: Long)
+data class InvitationPreview(
+    val roomId: String,
+    val roomName: String,
+    val description: String,
+    val memberCount: Int,
+    val requiresApproval: Boolean,
+    val expiresAtMillis: Long
+)
 
 internal interface OnlineRoomsRepository {
     fun watchMyRooms(uid: String, onResult: (List<CloudRoomIndex>) -> Unit, onError: (String) -> Unit): ListenerRegistration
@@ -37,6 +45,7 @@ internal interface OnlineRoomsRepository {
     fun watchMembers(roomId: String, onResult: (List<CloudMember>) -> Unit, onError: (String) -> Unit): ListenerRegistration
     suspend fun createRoom(name: String, description: String, approval: Boolean): String
     suspend fun createInvitation(roomId: String): Invitation
+    suspend fun previewInvitation(code: String): InvitationPreview
     suspend fun requestJoin(code: String): JoinResult
     suspend fun changeMember(roomId: String, targetUid: String, action: String)
     suspend fun leaveRoom(roomId: String)
@@ -107,6 +116,18 @@ internal class CloudRoomsRepository(
         return Invitation(
             code = result["code"] as? String ?: error("초대 코드를 확인할 수 없습니다."),
             expiresAtMillis = (result["expiresAt"] as? Number)?.toLong() ?: 0L
+        )
+    }
+
+    override suspend fun previewInvitation(code: String): InvitationPreview {
+        val result = invoke("previewInvitation", mapOf("code" to code))
+        return InvitationPreview(
+            roomId = result["roomId"] as? String ?: error("초대 방을 확인할 수 없습니다."),
+            roomName = result["roomName"] as? String ?: error("초대 방 이름을 확인할 수 없습니다."),
+            description = result["description"] as? String ?: "",
+            memberCount = (result["memberCount"] as? Number)?.toInt() ?: 0,
+            requiresApproval = result["requiresApproval"] == true,
+            expiresAtMillis = (result["expiresAtMillis"] as? Number)?.toLong() ?: 0L
         )
     }
 

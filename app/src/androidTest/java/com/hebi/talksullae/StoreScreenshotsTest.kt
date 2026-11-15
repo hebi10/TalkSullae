@@ -27,6 +27,7 @@ import com.hebi.talksullae.firebase.CloudMember
 import com.hebi.talksullae.firebase.CloudRoom
 import com.hebi.talksullae.firebase.CloudRoomIndex
 import com.hebi.talksullae.firebase.Invitation
+import com.hebi.talksullae.firebase.InvitationPreview
 import com.hebi.talksullae.firebase.JoinResult
 import com.hebi.talksullae.firebase.OnlineRoomsRepository
 import com.hebi.talksullae.firebase.RoomChatRepository
@@ -177,6 +178,7 @@ private class SampleRoomsRepository : OnlineRoomsRepository {
     }
 
     override suspend fun createInvitation(roomId: String) = Invitation("sample-room.예시코드", 0)
+    override suspend fun previewInvitation(code: String): InvitationPreview = error("Screenshot fixture")
     override suspend fun createRoom(name: String, description: String, approval: Boolean): String = error("Screenshot fixture")
     override suspend fun requestJoin(code: String): JoinResult = error("Screenshot fixture")
     override suspend fun changeMember(roomId: String, targetUid: String, action: String) = error("Screenshot fixture")
