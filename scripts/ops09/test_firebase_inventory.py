@@ -37,10 +37,16 @@ class InventoryTests(unittest.TestCase):
                        {"fieldPath": "__name__", "order": "ASCENDING"}]
         }]
         server = [{
-            "collectionGroup": "safetyReports", "state": "READY",
-            "fields": [{"fieldPath": "status", "order": "ASCENDING"}]
+            "name": "projects/demo/databases/(default)/collectionGroups/"
+                    "safetyReports/indexes/abc123",
+            "queryScope": "COLLECTION", "state": "READY",
+            "fields": [{"fieldPath": "status", "order": "ASCENDING"},
+                       {"fieldPath": "__name__", "order": "ASCENDING"}]
         }]
         self.assertEqual(audit.missing_indexes(src, server), [])
+        server[0]["queryScope"] = "COLLECTION_GROUP"
+        self.assertEqual(audit.missing_indexes(src, server), ["safetyReports"])
+        server[0]["queryScope"] = "COLLECTION"
         server[0]["state"] = "CREATING"
         self.assertEqual(audit.missing_indexes(src, server), ["safetyReports"])
 
