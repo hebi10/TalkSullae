@@ -3,6 +3,7 @@ package com.hebi.talksullae.ui.rooms
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +54,7 @@ import com.hebi.talksullae.firebase.CloudMember
 import com.hebi.talksullae.firebase.CloudRoomsRepository
 import com.hebi.talksullae.firebase.OnlineRoomsRepository
 import com.hebi.talksullae.firebase.OnlineRoomsViewModel
+import com.hebi.talksullae.firebase.RoomChatRepository
 
 @Composable
 internal fun OnlineRoomsHost(
@@ -59,7 +62,10 @@ internal fun OnlineRoomsHost(
     accountName: String,
     onClose: () -> Unit,
     onSignOut: () -> Unit,
-    repository: OnlineRoomsRepository? = null
+    repository: OnlineRoomsRepository? = null,
+    chatRepository: RoomChatRepository? = null,
+    entryMode: String = "rooms",
+    onRoomDepthChanged: (Boolean) -> Unit = {}
 ) {
     val repo = remember(repository) { repository ?: CloudRoomsRepository() }
     val factory = remember(uid, repo) {
@@ -77,6 +83,9 @@ internal fun OnlineRoomsHost(
     }
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val depthCallback by rememberUpdatedState(onRoomDepthChanged)
+    LaunchedEffect(state.selectedId) { depthCallback(state.selectedId != null) }
+    DisposableEffect(Unit) { onDispose { depthCallback(false) } }
 
     var createVisible by rememberSaveable { mutableStateOf(false) }
     var roomName by rememberSaveable { mutableStateOf("") }
@@ -93,16 +102,68 @@ internal fun OnlineRoomsHost(
     var forbiddenVisible by rememberSaveable { mutableStateOf(false) }
     var balanceVisible by rememberSaveable { mutableStateOf(false) }
     var recordsVisible by rememberSaveable { mutableStateOf(false) }
+    var roomSection by rememberSaveable(uid, entryMode) { mutableStateOf("chat") }
 
     LaunchedEffect(state.selectedId, selected?.status) {
         if (state.selectedId == null || selected?.status != "active") {
+            roomSection = "chat"
             chatVisible = false
             identityVisible = false
             liarVisible = false
             forbiddenVisible = false
             balanceVisible = false
             recordsVisible = false
+        } else {
+            roomSection = if (entryMode == "records") "records" else "chat"
         }
+    }
+
+    BackHandler(enabled = state.selectedId != null) {
+        when {
+            identityVisible -> identityVisible = false
+            liarVisible -> liarVisible = false
+            forbiddenVisible -> forbiddenVisible = false
+            balanceVisible -> balanceVisible = false
+            roomSection != "chat" -> roomSection = "chat"
+            else -> vm.closeRoom()
+        }
+    }
+
+    if (room != null && selected?.status == "active" &&
+        roomSection != "members" &&
+        !(identityVisible || liarVisible || forbiddenVisible || balanceVisible)) {
+        Column(modifier = Modifier.fillMaxSize().testTag("live-room-shell")) {
+            LiveRoomSectionTabs(roomSection) { roomSection = it }
+            when (roomSection) {
+                "records" -> OnlineRoomRecordsHost(
+                    uid = uid, roomId = room.id, roomName = room.name,
+                    members = state.members.filter { it.status == "active" },
+                    onBack = { roomSection = "chat" }
+                )
+                "games" -> Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                        .padding(16.dp).testTag("live-game-list"),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("어떤 게임을 할까요?", style = MaterialTheme.typography.titleLarge)
+                    Text("게임은 방 안에서 진행되며 결과가 시즌 기록에 반영됩니다.")
+                    PrimaryAction("너 누구야?", onClick = { identityVisible = true },
+                        modifier = Modifier.fillMaxWidth().testTag("live-game-identity"))
+                    PrimaryAction("라이어 채팅", onClick = { liarVisible = true },
+                        modifier = Modifier.fillMaxWidth().testTag("live-game-liar"))
+                    PrimaryAction("금지어 채팅", onClick = { forbiddenVisible = true },
+                        modifier = Modifier.fillMaxWidth().testTag("live-game-forbidden"))
+                    PrimaryAction("밸런스 예측", onClick = { balanceVisible = true },
+                        modifier = Modifier.fillMaxWidth().testTag("live-game-balance"))
+                }
+                else -> OnlineRoomChatHost(
+                    uid = uid, roomId = room.id, roomName = room.name,
+                    onBack = { vm.closeRoom() },
+                    repository = chatRepository
+                )
+            }
+        }
+        return
     }
 
     if (recordsVisible && room != null && selected?.status == "active") {
@@ -172,10 +233,11 @@ internal fun OnlineRoomsHost(
             .testTag("online-rooms-host"),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        PreviewNotice("초대 코드로 친구를 모으고 가입 요청과 멤버를 관리할 수 있습니다.")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "온라인 방 관리",
+                if (state.selectedId == null) {
+                    if (entryMode == "records") "내 기록" else "내 방"
+                } else "방 관리",
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleLarge
             )
@@ -183,7 +245,7 @@ internal fun OnlineRoomsHost(
                 Text(if (state.selectedId == null) "닫기" else "방 목록")
             }
         }
-        Text(accountName, style = MaterialTheme.typography.bodySmall)
+        if (state.selectedId == null) Text(accountName, style = MaterialTheme.typography.bodySmall)
         if (state.working) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(modifier = Modifier.width(24.dp), strokeWidth = 2.dp)
@@ -204,9 +266,17 @@ internal fun OnlineRoomsHost(
             }
         }
         if (state.selectedId == null) {
-            SectionTitle("내 온라인 방")
-            if (state.entries.isEmpty()) {
-                Text("가입한 온라인 방이 없습니다. 새 방을 만들거나 초대 코드로 가입해 주세요.")
+            SectionTitle(if (entryMode == "records") "방별 게임 기록" else "참여 중인 방")
+            if (state.loading) {
+                CircularProgressIndicator(modifier = Modifier.testTag("live-rooms-loading"))
+            } else if (state.entries.isEmpty() && state.error == null) {
+                Text(if (entryMode == "records") "아직 기록이 없습니다. 방을 만든 뒤 게임을 시작해 보세요."
+                    else "참여한 방이 없습니다. 방을 만들거나 초대 코드를 입력해 주세요.")
+            }
+            if (state.error != null) {
+                OutlinedButton(onClick = vm::retry, modifier = Modifier.fillMaxWidth()) {
+                    Text("방 목록 다시 시도")
+                }
             }
             state.entries.forEach { entry ->
                 ContentCard(modifier = Modifier.testTag("online-room-${entry.id}")) {
@@ -216,11 +286,14 @@ internal fun OnlineRoomsHost(
                             Text(membershipLabel(entry.status), style = MaterialTheme.typography.bodySmall)
                         }
                         if (entry.status == "active") {
-                            TextButton(onClick = { vm.openRoom(entry.id) }) { Text("열기") }
+                            TextButton(onClick = { vm.openRoom(entry.id) }) {
+                                Text(if (entryMode == "records") "기록 보기" else "입장")
+                            }
                         }
                     }
                 }
             }
+            if (entryMode != "records") {
             HorizontalDivider()
             OutlinedButton(
                 onClick = { createVisible = !createVisible },
@@ -281,6 +354,7 @@ internal fun OnlineRoomsHost(
                 modifier = Modifier.fillMaxWidth().testTag("online-join-submit"),
                 enabled = joinCode.trim().isNotBlank() && !state.working
             )
+            }
             OutlinedButton(
                 onClick = onSignOut,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -294,48 +368,11 @@ internal fun OnlineRoomsHost(
             CircularProgressIndicator()
             Text("방 정보 확인 중…")
         } else {
+            LiveRoomSectionTabs(roomSection) { roomSection = it }
             SectionTitle(room.name)
             Text(room.description.ifBlank { "설명이 없습니다." })
             Text("참가 ${room.memberCount}명 · 승인 대기 ${room.pendingCount}명")
             Text(if (isOwner) "내 역할: 방장" else "내 역할: 멤버")
-            PrimaryAction(
-                "일반 채팅 열기",
-                onClick = { forbiddenVisible = false; liarVisible = false; identityVisible = false; chatVisible = true },
-                modifier = Modifier.fillMaxWidth().testTag("online-chat-open")
-            )
-            PrimaryAction(
-                "너 누구야? 온라인 게임",
-                onClick = { forbiddenVisible = false; liarVisible = false; chatVisible = false; identityVisible = true },
-                modifier = Modifier.fillMaxWidth().testTag("identity-game-open")
-            )
-            PrimaryAction(
-                "라이어 채팅 온라인 게임",
-                onClick = { balanceVisible = false; forbiddenVisible = false; chatVisible = false; identityVisible = false; liarVisible = true },
-                modifier = Modifier.fillMaxWidth().testTag("liar-game-open")
-            )
-            PrimaryAction(
-                "금지어 채팅 온라인 게임",
-                onClick = {chatVisible = false; identityVisible = false;
-                    liarVisible = false; forbiddenVisible = true},
-                modifier = Modifier.fillMaxWidth().testTag("forbidden-game-open")
-            )
-            PrimaryAction(
-                "밸런스 예측 온라인 게임",
-                onClick = {
-                    chatVisible = false; identityVisible = false
-                    liarVisible = false; forbiddenVisible = false; balanceVisible = true
-                },
-                modifier = Modifier.fillMaxWidth().testTag("balance-game-open")
-            )
-            PrimaryAction(
-                "방 기록·월간 시즌 순위",
-                onClick = {
-                    chatVisible = false; identityVisible = false; liarVisible = false
-                    forbiddenVisible = false; balanceVisible = false; recordsVisible = true
-                },
-                modifier = Modifier.fillMaxWidth().testTag("room-records-open")
-            )
-
             if (isOwner) {
                 PrimaryAction(
                     "새 초대 코드 발급 (이전 코드 폐기)",

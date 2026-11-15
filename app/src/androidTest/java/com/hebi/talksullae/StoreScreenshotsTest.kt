@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
 import com.hebi.talksullae.design.AppTopBar
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.DocumentSnapshot
 import com.hebi.talksullae.design.TalkSullaeTheme
 import com.hebi.talksullae.firebase.CloudMember
 import com.hebi.talksullae.firebase.CloudRoom
@@ -28,6 +29,8 @@ import com.hebi.talksullae.firebase.CloudRoomIndex
 import com.hebi.talksullae.firebase.Invitation
 import com.hebi.talksullae.firebase.JoinResult
 import com.hebi.talksullae.firebase.OnlineRoomsRepository
+import com.hebi.talksullae.firebase.RoomChatRepository
+import com.hebi.talksullae.firebase.RoomChatPage
 import com.hebi.talksullae.ui.entry.OnboardingScreen
 import com.hebi.talksullae.ui.rooms.OnlineRoomsHost
 import java.io.File
@@ -68,10 +71,11 @@ class StoreScreenshotsTest {
         val repository = SampleRoomsRepository()
         compose.setContent {
             StoreScreen("온라인 방", "초대 코드 · 멤버 관리") {
-                OnlineRoomsHost("sample-owner", "샘플 계정", {}, {}, repository)
+                OnlineRoomsHost("sample-owner", "샘플 계정", {}, {}, repository,
+                    chatRepository = SampleChatRepository())
             }
         }
-        compose.onNodeWithText("내 온라인 방").assertIsDisplayed()
+        compose.onNodeWithText("참여 중인 방").assertIsDisplayed()
         save("02-rooms")
 
         compose.onNodeWithTag("online-create-toggle").performScrollTo().performClick()
@@ -79,7 +83,8 @@ class StoreScreenshotsTest {
         save("03-create")
         compose.onNodeWithTag("online-create-toggle").performScrollTo().performClick()
 
-        compose.onNodeWithText("열기").performScrollTo().performClick()
+        compose.onNodeWithText("입장").performScrollTo().performClick()
+        compose.onNodeWithTag("live-room-tab-members").performClick()
         compose.onNodeWithText("승인").performScrollTo().assertIsDisplayed()
         save("04-approval")
 
@@ -176,4 +181,20 @@ private class SampleRoomsRepository : OnlineRoomsRepository {
     override suspend fun requestJoin(code: String): JoinResult = error("Screenshot fixture")
     override suspend fun changeMember(roomId: String, targetUid: String, action: String) = error("Screenshot fixture")
     override suspend fun leaveRoom(roomId: String) = error("Screenshot fixture")
+}
+
+
+private class SampleChatRepository : RoomChatRepository {
+    override fun watchRecent(
+        roomId: String, onPage: (RoomChatPage) -> Unit, onError: (String) -> Unit
+    ): ListenerRegistration {
+        onPage(RoomChatPage(emptyList(), null, false, false))
+        return ListenerRegistration {}
+    }
+
+    override suspend fun loadOlder(roomId: String, cursor: DocumentSnapshot): RoomChatPage =
+        RoomChatPage(emptyList(), null, false, false)
+
+    override suspend fun sendMessage(roomId: String, requestId: String, text: String): String =
+        error("Screenshot fixture does not send messages")
 }

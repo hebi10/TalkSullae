@@ -8,7 +8,8 @@ import kotlinx.coroutines.tasks.await
 data class CloudRoomIndex(
     val id: String,
     val name: String,
-    val status: String
+    val status: String,
+    val updatedAtMillis: Long = 0L
 )
 
 data class CloudRoom(
@@ -55,9 +56,10 @@ internal class CloudRoomsRepository(
                         CloudRoomIndex(
                             id = it.id,
                             name = it.getString("roomName").orEmpty(),
-                            status = it.getString("status").orEmpty()
+                            status = it.getString("status").orEmpty(),
+                            updatedAtMillis = it.getTimestamp("updatedAt")?.toDate()?.time ?: 0L
                         )
-                    }.sortedBy { it.name })
+                    }.sortedByDescending { it.updatedAtMillis })
                 }
             }
 
