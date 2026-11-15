@@ -39,7 +39,7 @@ import com.hebi.talksullae.design.PreviewNotice
 import com.hebi.talksullae.design.PrimaryAction
 
 @Composable
-fun WelcomeScreen(onlineConfigured: Boolean, onContinue: () -> Unit, onInvitePreview: () -> Unit) {
+fun WelcomeScreen(onlineConfigured: Boolean, onContinue: () -> Unit, onInvitePreview: () -> Unit, allowPreview: Boolean = true) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -62,7 +62,7 @@ fun WelcomeScreen(onlineConfigured: Boolean, onContinue: () -> Unit, onInvitePre
             onClick = onContinue,
             modifier = Modifier.fillMaxWidth().testTag("welcome-start")
         )
-        OutlinedButton(
+        if (allowPreview) OutlinedButton(
             onClick = onInvitePreview,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("welcome-invite-demo"),
             shape = RoundedCornerShape(8.dp)
@@ -77,7 +77,8 @@ fun OnboardingScreen(
     onContinueDemo: (String) -> Unit,
     onGoogleSignIn: (() -> Unit)? = null,
     signInBusy: Boolean = false,
-    authError: String? = null
+    authError: String? = null,
+    allowDemo: Boolean = true
 ) {
     var nickname by rememberSaveable { mutableStateOf("게스트") }
     var avatar by rememberSaveable { mutableStateOf("부엉이") }
@@ -89,9 +90,13 @@ fun OnboardingScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("처음 오셨나요?", style = MaterialTheme.typography.headlineMedium)
-        Text("닉네임과 아바타를 선택해 UI를 체험해 보세요.", style = MaterialTheme.typography.bodyMedium)
-        PreviewNotice("아래 닉네임과 아바타는 기기 내 데모에서 사용합니다.")
-        OutlinedTextField(
+        if (allowDemo) {
+            Text("닉네임과 아바타를 선택해 UI를 체험해 보세요.", style = MaterialTheme.typography.bodyMedium)
+            PreviewNotice("아래 닉네임과 아바타는 기기 내 데모에서 사용합니다.")
+        } else {
+            Text("Google 로그인 후 실제 닉네임을 설정할 수 있습니다.")
+        }
+        if (allowDemo) OutlinedTextField(
             value = nickname,
             onValueChange = { nickname = it },
             modifier = Modifier.fillMaxWidth().testTag("onboarding-nickname"),
@@ -100,8 +105,8 @@ fun OnboardingScreen(
             isError = !validNickname,
             singleLine = true
         )
-        Text("기본 아바타", style = MaterialTheme.typography.titleMedium)
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (allowDemo) Text("기본 아바타", style = MaterialTheme.typography.titleMedium)
+        if (allowDemo) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("부엉이", "토끼", "고양이").forEach { choice ->
                 FilterChip(
                     selected = avatar == choice,
@@ -129,7 +134,7 @@ fun OnboardingScreen(
             }
         }
         Spacer(Modifier.height(4.dp))
-        PrimaryAction(
+        if (allowDemo) PrimaryAction(
             label = "데모로 시작",
             onClick = { onContinueDemo(nickname.trim()) },
             modifier = Modifier.fillMaxWidth().testTag("onboarding-continue"),

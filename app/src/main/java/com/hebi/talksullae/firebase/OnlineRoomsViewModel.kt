@@ -14,6 +14,7 @@ data class OnlineRoomsState(
     val selectedRoom: CloudRoom? = null,
     val members: List<CloudMember> = emptyList(),
     val working: Boolean = false,
+    val loading: Boolean = true,
     val invite: Invitation? = null,
     val info: String? = null,
     val error: String? = null
@@ -38,13 +39,20 @@ internal class OnlineRoomsViewModel(
                     it.id == selectedId && it.status == "active"
                 }) {
                     revokeSelectedRoom("이 방의 가입 상태가 변경되어 목록으로 돌아왔습니다.")
-                    stateMutable.update { it.copy(entries = result, error = null) }
+                    stateMutable.update { it.copy(entries = result, error = null, loading = false) }
                 } else {
                     stateMutable.update { it.copy(entries = result, error = null) }
                 }
             },
-            { message -> stateMutable.update { it.copy(error = message) } }
+            { message -> stateMutable.update { it.copy(error = message, loading = false) } }
         )
+    }
+
+    fun retry() {
+        listListener?.remove()
+        listListener = null
+        stateMutable.update { it.copy(loading = true, error = null) }
+        start()
     }
 
     fun stop() {

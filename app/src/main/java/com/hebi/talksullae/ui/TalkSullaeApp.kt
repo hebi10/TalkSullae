@@ -112,6 +112,7 @@ import com.hebi.talksullae.design.PrimaryAction
 import com.hebi.talksullae.design.RoomCard
 import com.hebi.talksullae.design.SectionTitle
 import com.hebi.talksullae.design.TalkSullaeTheme
+import com.hebi.talksullae.BuildConfig
 import com.hebi.talksullae.firebase.FirebaseBridge
 import com.hebi.talksullae.firebase.GoogleLogin
 import com.hebi.talksullae.firebase.UserProfile
@@ -180,6 +181,8 @@ fun TalkSullaeApp(
         reportModel?.accountChanged(reportGoogleUid)
     }
     var mainTab by rememberSaveable { mutableStateOf("rooms") }
+    var onlineDepth by remember { mutableStateOf(false) }
+    LaunchedEffect(mainTab, signedUser?.uid) { onlineDepth = false }
     LaunchedEffect(signedUser?.uid, profileRetry) {
         val user = signedUser
         val loadToken = profileRequestVersions.beginLoad()
@@ -283,7 +286,7 @@ fun TalkSullaeApp(
                     title = when (route) {
                         Welcome -> "톡술래"
                         Onboarding -> "닉네임 · 아바타"
-                        Main -> "톡술래"
+                        Main -> if (signedUser != null && onlineProfile != null) "톡술래" else "톡술래"
                         Room, Invite -> currentRoom.name
                         Members -> "멤버 관리"
                         Online -> "온라인 방"
@@ -303,14 +306,14 @@ fun TalkSullaeApp(
                         Online -> "초대 코드 · 멤버 관리"
                         Welcome, Onboarding, SafetyReport, AccountDeletion,
                         ProfileSetup, ProfileEditor, ProfileLoadError -> null
-                        else -> "채팅으로 즐기는 추리 게임 · 데모"
+                        else -> if (BuildConfig.DEBUG && !configured) "채팅으로 즐기는 추리 게임 · 데모" else null
                     },
                     onBack = if (route == Main || route == Welcome || route == ProfileSetup ||
                         route == ProfileLoadError) null else goBack
                 )
             },
             bottomBar = {
-                if (route == Main && !profileLoading) {
+                if (route == Main && !profileLoading && !onlineDepth) {
                     MainNavigation(current = mainTab, onSelect = { mainTab = it })
                 }
             }
@@ -390,10 +393,12 @@ fun TalkSullaeApp(
                     )
                     Welcome -> WelcomeScreen(
                         onlineConfigured = configured && activity != null,
+                        allowPreview = BuildConfig.DEBUG && !configured,
                         onContinue = { pendingInvitePreview = false; route = Onboarding },
                         onInvitePreview = { pendingInvitePreview = true; route = Onboarding }
                     )
                     Onboarding -> OnboardingScreen(
+                        allowDemo = BuildConfig.DEBUG && !configured,
                         onContinueDemo = {
                             previewNickname = it
                             if (pendingInvitePreview) {
@@ -426,30 +431,69 @@ fun TalkSullaeApp(
                         signInBusy = loginBusy,
                         authError = loginError
                     )
-                    Main -> when (mainTab) {
-                        "rooms" -> RoomsScreen(
-                            rooms = previewRooms,
-                            openRoom = openRoom,
-                            onCreate = { route = Create },
-                            onOpenOnline = if (signedUser != null) ({ route = Online }) else null,
-                            onInvitePreview = {
-                                selectedRoom = "friends"
-                                pendingInvitePreview = true
-                                route = Invite
-                            }
-                        )
-                        "records" -> RankingsScreen(title = "내 기록")
-                        else -> ProfileScreen(
-                            darkTheme = isDark,
-                            onThemeChange = { isDark = it },
-                            onSettings = { route = Settings },
-                            nickname = onlineProfile?.nickname ?: previewNickname,
-                            actualProfile = if (signedUser != null) onlineProfile else null,
-                            onEditProfile = if (signedUser != null && onlineProfile != null) ({
-                                profileRequestVersions.invalidateSave()
-                                profileError = null
-                                route = ProfileEditor
-                            }) else null
+                    Main -> if (signedUser != null && onlineProfile != null) {
+                        when (mainTab) {
+                            "rooms", "records" -> OnlineRoomsHost(
+                                uid = requireNotNull(signedUser).uid,
+                                accountName = requireNotNull(onlineProfile).nickname,
+                                onClose = { onlineDepth = false; mainTab = "rooms" },
+                                onSignOut = {
+                                    if (activity != null) {
+                                        scope.launch {
+                                            GoogleLogin(activity).signOut()
+                                            onlineDepth = false
+                                            route = Welcome
+                                        }
+                                    }
+                                },
+                                entryMode = if (mainTab == "records") "records" else "rooms",
+                                onRoomDepthChanged = { onlineDepth = it }
+                            )
+                            else -> ProfileScreen(
+                                darkTheme = isDark,
+                                onThemeChange = { isDark = it },
+                                onSettings = { route = Settings },
+                                nickname = requireNotNull(onlineProfile).nickname,
+                                actualProfile = onlineProfile,
+                                onEditProfile = {
+                                    profileRequestVersions.invalidateSave()
+                                    profileError = null
+                                    route = ProfileEditor
+                                }
+                            )
+                        }
+                    } else if (BuildConfig.DEBUG && !configured) {
+                        when (mainTab) {
+                            "rooms" -> RoomsScreen(
+                                rooms = previewRooms,
+                                openRoom = openRoom,
+                                onCreate = { route = Create },
+                                onOpenOnline = if (signedUser != null) ({ route = Online }) else null,
+                                onInvitePreview = {
+                                    selectedRoom = "friends"
+                                    pendingInvitePreview = true
+                                    route = Invite
+                                }
+                            )
+                            "records" -> RankingsScreen(title = "내 기록")
+                            else -> ProfileScreen(
+                                darkTheme = isDark,
+                                onThemeChange = { isDark = it },
+                                onSettings = { route = Settings },
+                                nickname = onlineProfile?.nickname ?: previewNickname,
+                                actualProfile = if (signedUser != null) onlineProfile else null,
+                                onEditProfile = if (signedUser != null && onlineProfile != null) ({
+                                    profileRequestVersions.invalidateSave()
+                                    profileError = null
+                                    route = ProfileEditor
+                                }) else null
+                            )
+                    }
+                    } else {
+                        UnavailableScreen(
+                            title = "Google 로그인 필요",
+                            description = "로그인 후 실제 온라인 방을 이용할 수 있습니다.",
+                            onBack = { route = Onboarding }
                         )
                     }
                     Room -> DemoRoomLayout(
