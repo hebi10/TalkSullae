@@ -3,7 +3,9 @@ package com.hebi.talksullae.ui.rooms
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,6 +53,7 @@ import com.hebi.talksullae.design.PreviewNotice
 import com.hebi.talksullae.design.PrimaryAction
 import com.hebi.talksullae.design.SectionTitle
 import com.hebi.talksullae.firebase.CloudMember
+import com.hebi.talksullae.ui.entry.InviteLinkCodec
 import com.hebi.talksullae.firebase.CloudRoomsRepository
 import com.hebi.talksullae.firebase.OnlineRoomsRepository
 import com.hebi.talksullae.firebase.OnlineRoomsViewModel
@@ -65,7 +68,10 @@ internal fun OnlineRoomsHost(
     repository: OnlineRoomsRepository? = null,
     chatRepository: RoomChatRepository? = null,
     entryMode: String = "rooms",
-    onRoomDepthChanged: (Boolean) -> Unit = {}
+    onRoomDepthChanged: (Boolean) -> Unit = {},
+    incomingInviteCode: String? = null,
+    incomingInviteDeliveryId: Long = 0L,
+    onInviteCodeHandled: () -> Unit = {}
 ) {
     val repo = remember(repository) { repository ?: CloudRoomsRepository() }
     val factory = remember(uid, repo) {
@@ -77,9 +83,10 @@ internal fun OnlineRoomsHost(
         }
     }
     val vm: OnlineRoomsViewModel = viewModel(key = "online-$uid", factory = factory)
+    val contextForRotation = LocalActivity.current
     DisposableEffect(vm) {
         vm.start()
-        onDispose { vm.stop() }
+        onDispose { vm.stop(preserveInvite = (contextForRotation?.isChangingConfigurations == true)) }
     }
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -92,6 +99,33 @@ internal fun OnlineRoomsHost(
     var description by rememberSaveable { mutableStateOf("") }
     var approval by rememberSaveable { mutableStateOf(true) }
     var joinCode by remember { mutableStateOf("") }
+    // Each external delivery is a separate attempt, even if the code repeats.
+    // Do not automatically loop-retry the same failed request.
+    var lastAttemptedDelivery by remember(uid) { mutableStateOf<Pair<String, Long>?>(null) }
+    LaunchedEffect(incomingInviteCode, incomingInviteDeliveryId, uid,
+        state.working, state.pendingJoinCode) {
+        val incoming = incomingInviteCode
+        val key = incoming?.let { it to incomingInviteDeliveryId }
+        if (incoming != null && key != null && !state.working &&
+            lastAttemptedDelivery != key && state.pendingJoinCode != incoming
+        ) {
+            vm.closeRoom()
+            joinCode = incoming
+            if (vm.previewInvite(incoming)) lastAttemptedDelivery = key
+        }
+    }
+    LaunchedEffect(state.createdRoomId, state.selectedId, state.entries) {
+        val created = state.createdRoomId
+        if (created != null && state.selectedId == null &&
+            state.entries.any { it.id == created && it.status == "active" }
+        ) {
+            vm.clearCreatedRoom()
+            createVisible = false
+            roomName = ""
+            description = ""
+            vm.openRoom(created)
+        }
+    }
     var confirmation by remember { mutableStateOf<Pair<String, String>?>(null) }
     val room = state.selectedRoom
     val selected = state.entries.firstOrNull { it.id == state.selectedId }
@@ -328,14 +362,14 @@ internal fun OnlineRoomsHost(
                 PrimaryAction(
                     "실제 방 생성",
                     modifier = Modifier.fillMaxWidth().testTag("online-create-submit"),
-                    enabled = valid && !state.working,
+                    enabled = valid && !state.working && state.createdRoomId == null,
                     onClick = {
                         vm.createRoom(roomName, description, approval)
-                        createVisible = false
-                        roomName = ""
-                        description = ""
                     }
                 )
+            }
+            if (state.createdRoomId != null) {
+                Text("방 생성은 완료됐습니다. 방 목록과 동기화하는 중입니다.")
             }
             HorizontalDivider()
             SectionTitle("초대 코드로 가입")
@@ -350,7 +384,7 @@ internal fun OnlineRoomsHost(
             )
             PrimaryAction(
                 "가입 신청",
-                onClick = { vm.join(joinCode) },
+                onClick = { vm.previewInvite(joinCode) },
                 modifier = Modifier.fillMaxWidth().testTag("online-join-submit"),
                 enabled = joinCode.trim().isNotBlank() && !state.working
             )
@@ -385,6 +419,31 @@ internal fun OnlineRoomsHost(
                         Text("24시간 유효한 초대 코드입니다. 다른 사람에게 공개하지 마세요.")
                         SelectionContainer {
                             Text(invite.code, style = MaterialTheme.typography.bodySmall)
+                        }
+                        val link = InviteLinkCodec.encode(invite.code)
+                        Text("초대는 24시간 뒤 만료되며 새 코드를 발급하면 이전 코드는 무효가 됩니다.")
+                        if (link != null) {
+                            OutlinedButton(
+                                onClick = {
+                                    val send = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            Intent.EXTRA_TEXT,
+                                            "${room.name} 톡술래 초대\n$link\n\n초대 코드: ${invite.code}\n앱 설치 후 링크를 다시 열거나 초대 코드를 입력해 주세요."
+                                        )
+                                    }
+                                    context.startActivity(Intent.createChooser(send, "친구에게 초대 공유"))
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("live-invite-share")
+                            ) { Text("카카오톡 등으로 초대 공유") }
+                            OutlinedButton(
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("톡술래 초대 링크", link))
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            ) { Text("링크 복사") }
                         }
                         OutlinedButton(
                             onClick = {
@@ -437,6 +496,50 @@ internal fun OnlineRoomsHost(
                 shape = RoundedCornerShape(8.dp)
             ) { Text("이 방 나가기") }
         }
+    }
+
+    state.joinPreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = {
+                if (!state.working) {
+                    vm.dismissJoinPreview()
+                    onInviteCodeHandled()
+                }
+            },
+            title = { Text("초대 확인") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(preview.roomName, style = MaterialTheme.typography.titleMedium)
+                    if (preview.description.isNotBlank()) Text(preview.description)
+                    Text("현재 참가 ${preview.memberCount}명")
+                    Text(
+                        if (preview.requiresApproval) "가입 신청 후 방장의 승인이 필요합니다."
+                        else "가입하면 바로 방에 참여할 수 있습니다."
+                    )
+                    Text("승인 전에는 방의 채팅·멤버 정보·게임 기록을 볼 수 없습니다.")
+                    state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.confirmJoin()
+                        onInviteCodeHandled()
+                    },
+                    enabled = !state.working,
+                    modifier = Modifier.testTag("live-invite-confirm")
+                ) { Text("가입 신청") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        vm.dismissJoinPreview()
+                        onInviteCodeHandled()
+                    },
+                    enabled = !state.working
+                ) { Text("취소") }
+            }
+        )
     }
 
     confirmation?.let { (targetUid, action) ->

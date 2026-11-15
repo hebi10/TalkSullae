@@ -1,5 +1,6 @@
 package com.hebi.talksullae.firebase
 
+import com.hebi.talksullae.ui.entry.InviteLinkCodec
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.ListenerRegistration
@@ -16,6 +17,9 @@ data class OnlineRoomsState(
     val working: Boolean = false,
     val loading: Boolean = true,
     val invite: Invitation? = null,
+    val joinPreview: InvitationPreview? = null,
+    val pendingJoinCode: String? = null,
+    val createdRoomId: String? = null,
     val info: String? = null,
     val error: String? = null
 )
@@ -55,11 +59,20 @@ internal class OnlineRoomsViewModel(
         start()
     }
 
-    fun stop() {
+    fun stop(preserveInvite: Boolean = false) {
         listListener?.remove()
         listListener = null
         closeRoomListeners()
-        stateMutable.value = OnlineRoomsState()
+        val old = stateMutable.value
+        stateMutable.value = if (preserveInvite && old.pendingJoinCode != null) {
+            OnlineRoomsState(
+                joinPreview = old.joinPreview,
+                pendingJoinCode = old.pendingJoinCode,
+                loading = true
+            )
+        } else {
+            OnlineRoomsState()
+        }
     }
 
     fun openRoom(roomId: String) {
@@ -97,14 +110,20 @@ internal class OnlineRoomsViewModel(
     }
 
     fun clearNotice() = stateMutable.update { it.copy(info = null, error = null) }
+    fun clearCreatedRoom() = stateMutable.update { it.copy(createdRoomId = null) }
+    fun dismissJoinPreview() = stateMutable.update {
+        it.copy(joinPreview = null, pendingJoinCode = null)
+    }
 
     private fun action(successMessage: String, block: suspend () -> Unit) {
         if (stateMutable.value.working) return
+        stateMutable.update { it.copy(working = true, error = null, info = null) }
         viewModelScope.launch {
-            stateMutable.update { it.copy(working = true, error = null, info = null) }
             try {
                 block()
-                stateMutable.update { if (it.info == null) it.copy(info = successMessage) else it }
+                if (successMessage.isNotEmpty()) {
+                    stateMutable.update { if (it.info == null) it.copy(info = successMessage) else it }
+                }
             } catch (e: Exception) {
                 stateMutable.update { it.copy(error = e.localizedMessage ?: "연결 오류가 발생했습니다.") }
             } finally {
@@ -114,11 +133,9 @@ internal class OnlineRoomsViewModel(
     }
 
     fun createRoom(name: String, description: String, approval: Boolean) =
-        action("온라인 방 생성이 완료됐습니다.") {
-            repository.createRoom(name, description, approval)
-            // User's room index is populated by the server; its listener updates the list.
-            stateMutable.update { it.copy(info = "새 온라인 방이 생성됐습니다.") }
-            // The new room is selected only after the index becomes visible.
+        action("새 온라인 방이 생성됐습니다.") {
+            val newRoomId = repository.createRoom(name, description, approval)
+            stateMutable.update { it.copy(createdRoomId = newRoomId) }
         }
 
     fun generateInvitation(roomId: String) =
@@ -127,15 +144,48 @@ internal class OnlineRoomsViewModel(
             stateMutable.update { it.copy(invite = result) }
         }
 
-    fun join(code: String) =
-        action("가입 상태를 확인해 주세요.") {
-            val result = repository.requestJoin(code.trim())
-            stateMutable.update { it.copy(info = if (result.status == "pending") {
-                "가입 요청이 접수됐습니다. 방장의 승인을 기다립니다."
-            } else {
-                "가입이 완료됐습니다."
-            }) }
+    fun previewInvite(value: String): Boolean {
+        if (stateMutable.value.working) return false
+        val code = InviteLinkCodec.normalizeInput(value)
+        if (code == null) {
+            stateMutable.update { it.copy(error = "초대 코드 또는 링크 형식이 올바르지 않습니다.") }
+            return true
         }
+        stateMutable.update { it.copy(joinPreview = null, pendingJoinCode = null) }
+        action("") {
+            val result = repository.previewInvitation(code)
+            stateMutable.update {
+                it.copy(joinPreview = result, pendingJoinCode = code, info = null)
+            }
+        }
+        return true
+    }
+
+    fun join(value: String) {
+        val code = InviteLinkCodec.normalizeInput(value)
+        if (code == null) {
+            stateMutable.update { it.copy(error = "초대 코드가 올바르지 않습니다.") }
+            return
+        }
+        action("") {
+            val result = repository.requestJoin(code)
+            stateMutable.update {
+                it.copy(
+                    joinPreview = null, pendingJoinCode = null,
+                    info = if (result.status == "pending") {
+                        "가입 요청이 접수됐습니다. 방장의 승인을 기다립니다."
+                    } else {
+                        "가입이 완료됐습니다."
+                    }
+                )
+            }
+        }
+    }
+
+    fun confirmJoin() {
+        val code = stateMutable.value.pendingJoinCode ?: return
+        join(code)
+    }
 
     fun manage(roomId: String, memberId: String, operation: String) =
         action("멤버 관리 요청이 서버에서 처리됐습니다.") {

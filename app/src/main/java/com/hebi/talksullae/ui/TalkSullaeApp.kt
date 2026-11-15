@@ -150,7 +150,10 @@ private data class NavItem(val id: String, val title: String, val icon: ImageVec
 @Composable
 fun TalkSullaeApp(
     initialDarkTheme: Boolean = true,
-    onDarkThemeChanged: (Boolean) -> Unit = {}
+    onDarkThemeChanged: (Boolean) -> Unit = {},
+    incomingInviteCode: String? = null,
+    incomingInviteDeliveryId: Long = 0L,
+    onInviteCodeHandled: () -> Unit = {}
 ) {
     var isDark by rememberSaveable { mutableStateOf(initialDarkTheme) }
     SideEffect { onDarkThemeChanged(isDark) }
@@ -181,6 +184,17 @@ fun TalkSullaeApp(
         reportModel?.accountChanged(reportGoogleUid)
     }
     var mainTab by rememberSaveable { mutableStateOf("rooms") }
+    LaunchedEffect(incomingInviteCode, incomingInviteDeliveryId,
+        signedUser?.uid, onlineProfile?.nickname) {
+        if (incomingInviteCode != null) {
+            if (signedUser == null && configured) {
+                route = Onboarding
+            } else if (signedUser != null && onlineProfile != null) {
+                route = Main
+                mainTab = "rooms"
+            }
+        }
+    }
     var onlineDepth by remember { mutableStateOf(false) }
     LaunchedEffect(mainTab, signedUser?.uid) { onlineDepth = false }
     LaunchedEffect(signedUser?.uid, profileRetry) {
@@ -447,7 +461,10 @@ fun TalkSullaeApp(
                                     }
                                 },
                                 entryMode = if (mainTab == "records") "records" else "rooms",
-                                onRoomDepthChanged = { onlineDepth = it }
+                                onRoomDepthChanged = { onlineDepth = it },
+                                incomingInviteCode = incomingInviteCode,
+                                incomingInviteDeliveryId = incomingInviteDeliveryId,
+                                onInviteCodeHandled = onInviteCodeHandled
                             )
                             else -> ProfileScreen(
                                 darkTheme = isDark,

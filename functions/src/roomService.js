@@ -70,6 +70,34 @@ async function createInvitation(db, request) {
   return {code:`${roomId}.${token}`,expiresAt:expiresAt.toMillis()};
 }
 
+
+async function previewInvitation(db, request) {
+  const uid = authUid(request);
+  const {roomId,token} = parseJoinCode(request.data?.code);
+  const roomRef = db.collection("rooms").doc(roomId);
+  const inviteRef = roomRef.collection("invites").doc(hashToken(token));
+  const [room,invite,deletion] = await Promise.all([
+    roomRef.get(),inviteRef.get(),db.collection("accountDeletionJobs").doc(uid).get()
+  ]);
+  if(deletion.exists){
+    throw new HttpsError("permission-denied","계정 삭제 요청 중에는 초대를 확인할 수 없습니다.");
+  }
+  if(!room.exists || room.get("status")!=="active" ||
+     room.get("activeInviteHash")!==inviteRef.id || !invite.exists ||
+     !(invite.get("expiresAt") instanceof Timestamp) ||
+     invite.get("expiresAt").toMillis()<=Date.now()){
+    throw new HttpsError("permission-denied","초대가 만료되었거나 취소되었습니다.");
+  }
+  return {
+    roomId,
+    roomName:room.get("name"),
+    description:room.get("description")||"",
+    memberCount:room.get("memberCount")||0,
+    requiresApproval:room.get("requiresApproval")===true,
+    expiresAtMillis:invite.get("expiresAt").toMillis()
+  };
+}
+
 async function requestJoin(db, request) {
   const uid = authUid(request);
   const {roomId,token} = parseJoinCode(request.data?.code);
@@ -206,4 +234,4 @@ async function leaveRoom(db, request) {
   });
 }
 
-module.exports = {createRoom,createInvitation,requestJoin,changeMember,leaveRoom};
+module.exports = {createRoom,createInvitation,previewInvitation,requestJoin,changeMember,leaveRoom};
