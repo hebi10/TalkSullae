@@ -5,9 +5,12 @@ const {initializeApp,deleteApp}=require("firebase-admin/app");
 const {getFirestore}=require("firebase-admin/firestore");
 const {registerPushToken,notifyRoomActivity}=require("../src/pushService");
 const {createRoom,createInvitation,requestJoin}=require("../src/roomService");
+
 let app,db;
 const auth=uid=>({auth:{uid,token:{name:uid}}});
 const token="x".repeat(120)+":token";
+const deviceId="123e4567-e89b-42d3-a456-426614174000";
+const body=(enabled,revision,value=token)=>({token:value,enabled,deviceId,revision});
 before(async()=>{
   assert.ok(process.env.FIRESTORE_EMULATOR_HOST,"Firestore Emulator required");
   app=initializeApp({projectId:"demo-talksullae"},"live05-push");
@@ -15,20 +18,28 @@ before(async()=>{
 });
 after(async()=>{if(app)await deleteApp(app)});
 
-test("only a signed-in owner can register their own push token",async()=>{
+test("device token rotation preserves one registration and old writes cannot reverse opt-out",async()=>{
   const uid="push-owner";
   await db.collection("users").doc(uid).set({nickname:"알림사용자"});
-  await assert.rejects(registerPushToken(db,{data:{token,enabled:true}}),
+  await assert.rejects(registerPushToken(db,{data:body(true,1)}),
     e=>e.code==="unauthenticated");
-  await registerPushToken(db,{...auth(uid),data:{token,enabled:true}});
-  const docs=await db.collection("users").doc(uid).collection("pushTokens").get();
-  assert.equal(docs.size,1);
-  assert.notEqual(docs.docs[0].id,token);
-  await registerPushToken(db,{...auth(uid),data:{token,enabled:false}});
-  assert.equal((await db.collection("users").doc(uid).collection("pushTokens").get()).size,0);
+  await registerPushToken(db,{...auth(uid),data:body(true,1)});
+  const devices=db.collection("users").doc(uid).collection("pushDevices");
+  assert.equal((await devices.get()).size,1);
+  assert.notEqual((await devices.get()).docs[0].id,deviceId);
+  const rotated=token+"rotated";
+  await registerPushToken(db,{...auth(uid),data:body(true,1,rotated)});
+  assert.equal((await devices.get()).size,1);
+  assert.equal((await devices.get()).docs[0].get("token"),rotated);
+  await registerPushToken(db,{...auth(uid),data:body(false,2,rotated)});
+  assert.equal((await devices.get()).docs[0].get("enabled"),false);
+  const delayed=await registerPushToken(db,{...auth(uid),data:body(true,1,rotated)});
+  assert.equal(delayed.applied,false);
+  assert.equal(delayed.enabled,false);
+  assert.equal((await devices.get()).docs[0].get("enabled"),false);
 });
 
-test("room event never includes chat contents or sends to outsiders",async()=>{
+test("room event sends generic data only to verified recipients",async()=>{
   const owner="push-sender",guest="push-receiver";
   const created=await createRoom(db,{...auth(owner),data:{
     name:"알림 테스트 방",description:"",requiresApproval:false
@@ -37,7 +48,7 @@ test("room event never includes chat contents or sends to outsiders",async()=>{
   const invite=await createInvitation(db,{...auth(owner),data:{roomId}});
   await requestJoin(db,{...auth(guest),data:{code:invite.code}});
   await db.collection("users").doc(guest).set({nickname:"받는사람"});
-  await registerPushToken(db,{...auth(guest),data:{token,enabled:true}});
+  await registerPushToken(db,{...auth(guest),data:body(true,1)});
   const captured=[];
   const messaging={sendEach:async messages=>{
     captured.push(...messages);
