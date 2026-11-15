@@ -16,6 +16,7 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.hebi.talksullae.BuildConfig
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 
 object FirebaseBridge {
     fun isReady(context: Context): Boolean =
@@ -69,7 +70,12 @@ class GoogleLogin(private val activity: Activity) {
     }
 
     suspend fun signOut() {
-        if (FirebaseBridge.isReady(activity)) FirebaseAuth.getInstance().signOut()
+        if (FirebaseBridge.isReady(activity)) {
+            withTimeoutOrNull(2500L) {
+                PushDeviceRepository(activity).disableOnSignOut()
+            }
+            FirebaseAuth.getInstance().signOut()
+        }
         runCatching {
             CredentialManager.create(activity).clearCredentialState(ClearCredentialStateRequest())
         }
