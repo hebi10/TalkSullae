@@ -55,7 +55,7 @@ async function getMyCareer(db,request){
     throw new HttpsError("permission-denied","계정 삭제 요청 중에는 전적을 조회할 수 없습니다.");
   }
   const indices=await db.collection("userRooms").doc(uid)
-    .collection("rooms").limit(MAX_ROOMS+1).get();
+    .collection("rooms").where("status","==","active").limit(MAX_ROOMS+1).get();
   if(indices.size>MAX_ROOMS){
     throw new HttpsError("resource-exhausted",
       "참여한 방이 많아 전적을 모두 합산할 수 없습니다. 방별 기록을 확인해 주세요.");
