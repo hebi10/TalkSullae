@@ -71,7 +71,7 @@ class StoreScreenshotsTest {
                 OnlineRoomsHost("sample-owner", "샘플 계정", {}, {}, repository)
             }
         }
-        compose.onNodeWithText("내 온라인 방").assertIsDisplayed()
+        compose.onNodeWithText("참여 중인 방").assertIsDisplayed()
         save("02-rooms")
 
         compose.onNodeWithTag("online-create-toggle").performScrollTo().performClick()
@@ -79,7 +79,8 @@ class StoreScreenshotsTest {
         save("03-create")
         compose.onNodeWithTag("online-create-toggle").performScrollTo().performClick()
 
-        compose.onNodeWithText("열기").performScrollTo().performClick()
+        compose.onNodeWithText("입장").performScrollTo().performClick()
+        compose.onNodeWithTag("live-room-tab-members").performClick()
         compose.onNodeWithText("승인").performScrollTo().assertIsDisplayed()
         save("04-approval")
 
