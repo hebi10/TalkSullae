@@ -1,0 +1,48 @@
+name: LIVE-08 source release readiness
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'functions/**'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - 'firebase.json'
+      - 'docs/privacy-policy.md'
+      - 'scripts/qa/live08_*'
+      - '.github/workflows/live08-readiness.yml'
+      - '.github/workflows/play-internal-release.yml'
+      - '.github/workflows/play-closed-release.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'functions/**'
+      - 'scripts/qa/live08_*'
+      - '.github/workflows/live08-readiness.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    name: LIVE-08 fail-closed source and external gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test release candidate guard contract
+        run: python3 -m unittest discover -s scripts/qa -p 'test_live08_*.py' -v
+      - name: Read-only candidate source and policy inspection
+        run: python3 scripts/qa/live08_release_gate.py --report live08-evidence/readiness.json
+      - name: Preserve sanitized readiness report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live08-source-readiness
+          path: live08-evidence/readiness.json
+          if-no-files-found: warn
+          retention-days: 30
