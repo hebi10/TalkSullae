@@ -63,4 +63,20 @@ test("room event sends generic data only to verified recipients",async()=>{
   assert.equal(JSON.stringify(captured).includes("채팅 내용"),false);
   assert.equal((await notifyRoomActivity(db,roomId,"message",owner,messaging,
     ()=>1763160001000)).sent,0);
+  const invalidMessaging={sendEach:async values=>({
+    successCount:0,
+    responses:values.map(()=>({
+      success:false,error:{code:"messaging/registration-token-not-registered"}
+    }))
+  })};
+  await notifyRoomActivity(db,roomId,"game",owner,invalidMessaging,()=>1763160002000);
+  const device=(await db.collection("users").doc(guest)
+    .collection("pushDevices").get()).docs[0];
+  assert.equal((await device.ref.get()).get("enabled"),true);
+  assert.equal((await device.ref.get()).get("token"),null);
+  const fresh=token+"fresh";
+  const rotated=await registerPushToken(db,{...auth(guest),data:body(true,1,fresh)});
+  assert.equal(rotated.applied,true);
+  assert.equal((await device.ref.get()).get("enabled"),true);
+  assert.equal((await device.ref.get()).get("token"),fresh);
 });
