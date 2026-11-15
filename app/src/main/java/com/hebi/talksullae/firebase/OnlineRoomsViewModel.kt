@@ -135,18 +135,21 @@ internal class OnlineRoomsViewModel(
             stateMutable.update { it.copy(invite = result) }
         }
 
-    fun previewInvite(value: String) {
+    fun previewInvite(value: String): Boolean {
+        if (stateMutable.value.working) return false
         val code = InviteLinkCodec.normalizeInput(value)
         if (code == null) {
             stateMutable.update { it.copy(error = "초대 코드 또는 링크 형식이 올바르지 않습니다.") }
-            return
+            return true
         }
+        stateMutable.update { it.copy(joinPreview = null, pendingJoinCode = null) }
         action("") {
             val result = repository.previewInvitation(code)
             stateMutable.update {
                 it.copy(joinPreview = result, pendingJoinCode = code, info = null)
             }
         }
+        return true
     }
 
     fun join(value: String) {

@@ -96,11 +96,13 @@ internal fun OnlineRoomsHost(
     var description by rememberSaveable { mutableStateOf("") }
     var approval by rememberSaveable { mutableStateOf(true) }
     var joinCode by remember { mutableStateOf("") }
-    LaunchedEffect(incomingInviteCode, uid) {
-        if (incomingInviteCode != null) {
+    LaunchedEffect(incomingInviteCode, uid, state.working) {
+        if (incomingInviteCode != null && !state.working) {
+            vm.closeRoom()
             joinCode = incomingInviteCode
-            vm.previewInvite(incomingInviteCode)
-            onInviteCodeHandled()
+            if (vm.previewInvite(incomingInviteCode)) {
+                onInviteCodeHandled()
+            }
         }
     }
     LaunchedEffect(state.createdRoomId, state.entries) {
