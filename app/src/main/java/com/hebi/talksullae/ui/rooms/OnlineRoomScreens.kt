@@ -114,7 +114,7 @@ internal fun OnlineRoomsHost(
             if (vm.previewInvite(incoming)) lastAttemptedDelivery = key
         }
     }
-    LaunchedEffect(state.createdRoomId, state.entries) {
+    LaunchedEffect(state.createdRoomId, state.selectedId, state.entries) {
         val created = state.createdRoomId
         if (created != null && state.selectedId == null &&
             state.entries.any { it.id == created && it.status == "active" }
