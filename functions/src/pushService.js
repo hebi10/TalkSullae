@@ -35,12 +35,11 @@ async function registerPushToken(db,request){
   const devices=ref.collection("pushDevices");
   const deviceRef=devices.doc(idFor(input.deviceId));
   return db.runTransaction(async tx=>{
-    const [user,deleted,current,all,active]=await Promise.all([
+    const [user,deleted,current,all]=await Promise.all([
       tx.get(ref),
       tx.get(db.collection("accountDeletionJobs").doc(uid)),
       tx.get(deviceRef),
-      tx.get(devices.limit(MAX_DEVICE_RECORDS+1)),
-      tx.get(devices.where("enabled","==",true).limit(MAX_TOKENS+1))
+      tx.get(devices.limit(MAX_DEVICE_RECORDS+1))
     ]);
     if(deleted.exists){
       throw new HttpsError("permission-denied","계정 삭제 진행 중에는 알림을 등록할 수 없습니다.");
@@ -65,7 +64,16 @@ async function registerPushToken(db,request){
     if(input.revision===previousRevision&&previouslyEnabled!==input.enabled){
       throw new HttpsError("failed-precondition","이전 알림 변경 요청을 재사용할 수 없습니다.");
     }
-    if(input.enabled&&!previouslyEnabled&&active.size>=MAX_TOKENS){
+    // A stale installation whose delivery token has been invalidated is
+    // not an active delivery device, even if its consent remains enabled.
+    const deliverable=all.docs.filter(row=>
+      row.get("enabled")===true && typeof row.get("token")==="string" &&
+      TOKEN_RE.test(row.get("token"))
+    );
+    const currentDeliverable=current.exists &&
+      current.get("enabled")===true &&
+      typeof current.get("token")==="string" && TOKEN_RE.test(current.get("token"));
+    if(input.enabled&&!currentDeliverable&&deliverable.length>=MAX_TOKENS){
       throw new HttpsError("resource-exhausted","알림 기기는 최대 3대까지 등록할 수 있습니다.");
     }
     tx.set(deviceRef,{
@@ -88,14 +96,15 @@ async function notifyOneUser(db,uid,roomId,kind,skipUid,messaging,now=Date.now){
     db.collection("accountDeletionJobs").doc(uid).get(),
     skipUid?db.collection("userSafety").doc(uid).collection("blocks").doc(skipUid).get():
       Promise.resolve({exists:false}),
-    devicesRef.where("enabled","==",true).limit(MAX_TOKENS+1).get()
+    devicesRef.limit(MAX_DEVICE_RECORDS+1).get()
   ]);
   if(!member.exists||member.get("status")!=="active"||deleted.exists||block.exists||
-     devices.empty||devices.size>MAX_TOKENS)return 0;
+     devices.empty||devices.size>MAX_DEVICE_RECORDS)return 0;
   const valid=devices.docs.filter(row=>{
     const token=row.get("token");
-    return typeof token==="string"&&TOKEN_RE.test(token);
-  });
+    return row.get("enabled")===true && typeof token==="string" &&
+      TOKEN_RE.test(token);
+  }).slice(0,MAX_TOKENS);
   if(valid.length===0)return 0;
   const cooldown=db.collection("users").doc(uid)
     .collection("pushCooldowns").doc(roomId+"-"+kind);

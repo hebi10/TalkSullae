@@ -80,3 +80,26 @@ test("room event sends generic data only to verified recipients",async()=>{
   assert.equal((await device.ref.get()).get("enabled"),true);
   assert.equal((await device.ref.get()).get("token"),fresh);
 });
+
+
+test("invalidated tokens do not occupy the three deliverable device slots",async()=>{
+  const uid="push-quota-regression";
+  await db.collection("users").doc(uid).set({nickname:"푸시 재등록"});
+  for(let i=0;i<3;i++){
+    const deviceId="123e4567-e89b-42d3-a456-42661417400"+i;
+    const body={token:token+i,enabled:true,deviceId,revision:1};
+    await registerPushToken(db,{...auth(uid),data:body});
+    const snapshot=await db.collection("users").doc(uid).collection("pushDevices").get();
+    const current=snapshot.docs.find(d=>d.get("token")===token+i);
+    assert.ok(current);
+    await current.ref.update({token:null});
+  }
+  const fourth=await registerPushToken(db,{...auth(uid),data:{
+    token:token+"new",enabled:true,
+    deviceId:"123e4567-e89b-42d3-a456-426614174010",revision:1
+  }});
+  assert.equal(fourth.applied,true);
+  const devices=await db.collection("users").doc(uid).collection("pushDevices").get();
+  assert.equal(devices.size,4);
+  assert.equal(devices.docs.filter(d=>typeof d.get("token")==="string").length,1);
+});
