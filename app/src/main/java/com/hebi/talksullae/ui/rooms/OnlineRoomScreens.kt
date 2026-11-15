@@ -54,6 +54,7 @@ import com.hebi.talksullae.firebase.CloudMember
 import com.hebi.talksullae.firebase.CloudRoomsRepository
 import com.hebi.talksullae.firebase.OnlineRoomsRepository
 import com.hebi.talksullae.firebase.OnlineRoomsViewModel
+import com.hebi.talksullae.firebase.RoomChatRepository
 
 @Composable
 internal fun OnlineRoomsHost(
@@ -62,6 +63,7 @@ internal fun OnlineRoomsHost(
     onClose: () -> Unit,
     onSignOut: () -> Unit,
     repository: OnlineRoomsRepository? = null,
+    chatRepository: RoomChatRepository? = null,
     entryMode: String = "rooms",
     onRoomDepthChanged: (Boolean) -> Unit = {}
 ) {
@@ -156,7 +158,8 @@ internal fun OnlineRoomsHost(
                 }
                 else -> OnlineRoomChatHost(
                     uid = uid, roomId = room.id, roomName = room.name,
-                    onBack = { vm.closeRoom() }
+                    onBack = { vm.closeRoom() },
+                    repository = chatRepository
                 )
             }
         }
