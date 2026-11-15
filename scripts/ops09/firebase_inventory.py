@@ -46,12 +46,19 @@ def function_names(items):
 
 
 def index_signature(item):
+    group = item.get("collectionGroup")
+    if not group:
+        # Firestore's live Index resource identifies its collection in "name";
+        # Firebase source index config uses the top-level collectionGroup key.
+        name = item.get("name", "")
+        match = re.search(r"/collectionGroups/([^/]+)/indexes/[^/]+$", name)
+        group = match.group(1) if match else None
     fields = tuple(
         (field.get("fieldPath"), field.get("order"))
         for field in item.get("fields", [])
         if field.get("fieldPath") != "__name__"
     )
-    return item.get("collectionGroup"), fields
+    return group, item.get("queryScope", "COLLECTION"), fields
 
 
 def missing_indexes(expected, deployed):
