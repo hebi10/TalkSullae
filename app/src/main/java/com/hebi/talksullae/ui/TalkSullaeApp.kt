@@ -117,6 +117,7 @@ import com.hebi.talksullae.firebase.FirebaseBridge
 import com.hebi.talksullae.firebase.GoogleLogin
 import com.hebi.talksullae.firebase.UserProfile
 import com.hebi.talksullae.firebase.UserProfileRepository
+import com.hebi.talksullae.ui.profile.MyCareerSection
 import com.hebi.talksullae.firebase.ProfileResponseGuard
 import com.hebi.talksullae.firebase.ProfileRequestVersions
 import com.hebi.talksullae.firebase.googleUid
@@ -469,6 +470,7 @@ fun TalkSullaeApp(
                                 onSettings = { route = Settings },
                                 nickname = requireNotNull(onlineProfile).nickname,
                                 actualProfile = onlineProfile,
+                                actualUid = requireNotNull(signedUser).uid,
                                 onEditProfile = {
                                     profileRequestVersions.invalidateSave()
                                     profileError = null
@@ -1003,6 +1005,7 @@ private fun ProfileScreen(
     onSettings: () -> Unit,
     nickname: String,
     actualProfile: UserProfile? = null,
+    actualUid: String? = null,
     onEditProfile: (() -> Unit)? = null
 ) {
     Column(
@@ -1028,6 +1031,9 @@ private fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth().testTag("profile-edit-open")
                 ) { Text("닉네임·아바타 변경") }
             }
+        }
+        if (actualUid != null && actualProfile != null) {
+            MyCareerSection(uid = actualUid)
         }
         ContentCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
