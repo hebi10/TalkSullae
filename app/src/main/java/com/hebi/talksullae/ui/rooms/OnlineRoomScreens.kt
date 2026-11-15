@@ -116,12 +116,14 @@ internal fun OnlineRoomsHost(
         }
     }
 
-    BackHandler(enabled = state.selectedId != null &&
-        !(identityVisible || liarVisible || forbiddenVisible || balanceVisible)) {
-        if (roomSection == "members" || roomSection == "games" || roomSection == "records") {
-            roomSection = "chat"
-        } else {
-            vm.closeRoom()
+    BackHandler(enabled = state.selectedId != null) {
+        when {
+            identityVisible -> identityVisible = false
+            liarVisible -> liarVisible = false
+            forbiddenVisible -> forbiddenVisible = false
+            balanceVisible -> balanceVisible = false
+            roomSection != "chat" -> roomSection = "chat"
+            else -> vm.closeRoom()
         }
     }
 

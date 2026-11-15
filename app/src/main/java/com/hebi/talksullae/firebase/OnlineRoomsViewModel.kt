@@ -41,7 +41,7 @@ internal class OnlineRoomsViewModel(
                     revokeSelectedRoom("이 방의 가입 상태가 변경되어 목록으로 돌아왔습니다.")
                     stateMutable.update { it.copy(entries = result, error = null, loading = false) }
                 } else {
-                    stateMutable.update { it.copy(entries = result, error = null) }
+                    stateMutable.update { it.copy(entries = result, error = null, loading = false) }
                 }
             },
             { message -> stateMutable.update { it.copy(error = message, loading = false) } }
