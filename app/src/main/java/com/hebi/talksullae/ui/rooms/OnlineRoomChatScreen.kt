@@ -1,7 +1,10 @@
 package com.hebi.talksullae.ui.rooms
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +25,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +54,7 @@ import com.hebi.talksullae.firebase.UserSafetyState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun OnlineRoomChatHost(
@@ -96,6 +102,13 @@ internal fun OnlineRoomChatHost(
     var reportCategory by remember { mutableStateOf("abuse") }
     var reportDetails by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val scrollScope = rememberCoroutineScope()
+    val awayFromNewest by remember(listState) {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 1 ||
+                listState.firstVisibleItemScrollOffset > 80
+        }
+    }
     val newestId = state.messages.lastOrNull()?.id
     LaunchedEffect(newestId) {
         if (newestId != null && listState.firstVisibleItemIndex <= 1) {
@@ -103,7 +116,11 @@ internal fun OnlineRoomChatHost(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().imePadding().testTag("online-chat-host")) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            modifier = Modifier.fillMaxHeight().widthIn(max = 760.dp).fillMaxWidth()
+                .imePadding().testTag("online-chat-host")
+        ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -201,6 +218,12 @@ internal fun OnlineRoomChatHost(
             }
         }
 
+        if (awayFromNewest && !state.initialLoading && state.messages.isNotEmpty()) {
+            TextButton(
+                onClick = { scrollScope.launch { listState.animateScrollToItem(0) } },
+                modifier = Modifier.fillMaxWidth().testTag("online-chat-jump-latest")
+            ) { Text("최신 메시지로 이동") }
+        }
         HorizontalDivider()
         safety.error?.let { Text(it,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -262,6 +285,7 @@ internal fun OnlineRoomChatHost(
                     .testTag("online-chat-send")
             )
         }
+        }
     }
 
     reportTarget?.let { message ->
@@ -271,11 +295,14 @@ internal fun OnlineRoomChatHost(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("선택한 메시지와 신고 사유가 운영 담당자에게 전달됩니다.")
-                    Row {
-                        listOf("abuse" to "괴롭힘","child_safety" to "아동 안전",
-                            "other" to "기타").forEach { (key,label) ->
-                            TextButton(onClick = { reportCategory=key }) {
-                                Text(label + if(reportCategory==key)" ✓" else "")
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("abuse" to "괴롭힘", "child_safety" to "아동 안전",
+                            "other" to "기타").forEach { (key, label) ->
+                            OutlinedButton(
+                                onClick = { reportCategory = key },
+                                modifier = Modifier.fillMaxWidth().testTag("report-reason-$key")
+                            ) {
+                                Text(label + if (reportCategory == key) " · 선택됨" else "")
                             }
                         }
                     }
@@ -319,7 +346,7 @@ private fun RoomChatMessageRow(message: RoomChatMessage, isOwn: Boolean) {
         Surface(
             color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.fillMaxWidth(0.88f)
+            modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(0.88f)
         ) {
             Column(
                 modifier = Modifier.padding(12.dp),

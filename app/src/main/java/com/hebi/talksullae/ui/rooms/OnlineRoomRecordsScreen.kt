@@ -3,6 +3,7 @@ package com.hebi.talksullae.ui.rooms
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -198,16 +199,29 @@ internal fun RoomRecordsContent(
             Text(achievementLabels[id]?:id)
         }
         HorizontalDivider()
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)){
-            OutlinedButton(onClick=onPrevious,enabled=canPrevious,
-                modifier=Modifier.testTag("records-previous-season")){
-                Text("이전 시즌")
-            }
-            Text(state.seasonId+" · "+(if(state.closed)"종료" else "진행 중"),
-                modifier=Modifier.weight(1f))
-            OutlinedButton(onClick=onNext,enabled=canNext,
-                modifier=Modifier.testTag("records-next-season")){
-                Text("다음 시즌")
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                state.seasonId + " · " + (if (state.closed) "종료" else "진행 중"),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.testTag("records-season-heading")
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onPrevious, enabled = canPrevious,
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                        .testTag("records-previous-season")
+                ) { Text("이전 시즌") }
+                OutlinedButton(
+                    onClick = onNext, enabled = canNext,
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                        .testTag("records-next-season")
+                ) { Text("다음 시즌") }
             }
         }
         Text("월간 시즌 순위",style=MaterialTheme.typography.titleMedium)
@@ -215,10 +229,15 @@ internal fun RoomRecordsContent(
         state.error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
         if(!state.loading&&state.ranking.isEmpty())Text("해당 시즌의 경기 기록이 없습니다.")
         state.ranking.forEachIndexed{index,item->
-            Row(Modifier.fillMaxWidth().testTag("records-ranked-"+item.uid)){
-                Text("${index+1}위 · "+(names[item.uid]?:"탈퇴한 멤버"),
-                    modifier=Modifier.weight(1f))
-                Text("${item.points}점 · ${item.games}경기 · ${item.wins}승")
+            Column(
+                modifier = Modifier.fillMaxWidth().testTag("records-ranked-" + item.uid),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text("${index + 1}위 · " + (names[item.uid] ?: "탈퇴한 멤버"),
+                    style = MaterialTheme.typography.bodyLarge)
+                Text("${item.points}점 · ${item.games}경기 · ${item.wins}승",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium)
             }
         }
         Text("서로 다른 게임의 원점수는 합산하지 않고 공통 시즌 점수로 환산합니다.",
