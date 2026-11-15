@@ -114,6 +114,7 @@ import com.hebi.talksullae.design.SectionTitle
 import com.hebi.talksullae.design.TalkSullaeTheme
 import com.hebi.talksullae.BuildConfig
 import com.hebi.talksullae.firebase.FirebaseBridge
+import com.hebi.talksullae.firebase.PushDeviceRepository
 import com.hebi.talksullae.firebase.GoogleLogin
 import com.hebi.talksullae.firebase.UserProfile
 import com.hebi.talksullae.firebase.UserProfileRepository
@@ -236,6 +237,19 @@ fun TalkSullaeApp(
                 if (signedUser?.uid == user.uid && profileRequestVersions.isLatestLoad(loadToken)) {
                     profileLoading = false
                 }
+            }
+        }
+    }
+    LaunchedEffect(signedUser?.uid, onlineProfile?.nickname) {
+        val current = signedUser
+        if (current != null && onlineProfile != null) {
+            try {
+                PushDeviceRepository(context.applicationContext)
+                    .reconcileCurrentToken(current.uid)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // A transient FCM failure is retried on the next authenticated app entry.
             }
         }
     }

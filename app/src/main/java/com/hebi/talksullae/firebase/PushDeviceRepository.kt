@@ -86,6 +86,13 @@ internal class PushDeviceRepository(private val context: Context) {
         // Token refresh does not change the user's local opt-in preference.
     }
 
+    suspend fun reconcileCurrentToken(uid: String) {
+        if (FirebaseAuth.getInstance().currentUser?.uid != uid ||
+            !PushDevicePrefs.isEnabled(context, uid)) return
+        val currentToken = messaging.token.await()
+        registerRotatedToken(currentToken, uid)
+    }
+
     suspend fun disableOnSignOut() {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         if (!PushDevicePrefs.isEnabled(context, uid)) return

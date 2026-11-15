@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,6 +78,18 @@ internal fun PushNotificationSettings(uid: String) {
             change(next)
         }
     }
+    LaunchedEffect(uid) {
+        if (enabled) {
+            try {
+                repository.reconcileCurrentToken(uid)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                error = "알림 등록을 갱신하지 못했습니다. 다음 앱 실행 때 다시 확인합니다."
+            }
+        }
+    }
+
     ContentCard(modifier = Modifier.testTag("push-notification-settings")) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

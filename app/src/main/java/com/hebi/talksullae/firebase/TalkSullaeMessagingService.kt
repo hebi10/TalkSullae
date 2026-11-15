@@ -30,7 +30,7 @@ class TalkSullaeMessagingService : FirebaseMessagingService() {
             try {
                 PushDeviceRepository(applicationContext).registerRotatedToken(token, uid)
             } catch (_: Exception) {
-                // Retry the registration when the user next opens notification settings.
+                // The token will be reconciled on the next authenticated app entry or settings visit.
             }
         }
     }
