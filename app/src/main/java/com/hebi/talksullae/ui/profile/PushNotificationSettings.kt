@@ -14,7 +14,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,16 +77,6 @@ internal fun PushNotificationSettings(uid: String) {
             change(next)
         }
     }
-    LaunchedEffect(uid) {
-        if (enabled) {
-            try {
-                repository.setEnabled(true)
-            } catch (_: Exception) {
-                error = "알림 토큰 갱신을 확인하지 못했습니다. 알림을 다시 설정해 주세요."
-            }
-        }
-    }
-
     ContentCard(modifier = Modifier.testTag("push-notification-settings")) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
