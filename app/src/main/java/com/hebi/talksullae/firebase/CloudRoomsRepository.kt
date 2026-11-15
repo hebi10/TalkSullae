@@ -19,7 +19,8 @@ data class CloudRoom(
     val ownerId: String,
     val memberCount: Int,
     val pendingCount: Int,
-    val requiresApproval: Boolean
+    val requiresApproval: Boolean,
+    val activeGameSessionId: String? = null
 )
 
 data class CloudMember(
@@ -84,7 +85,8 @@ internal class CloudRoomsRepository(
                     ownerId = doc.getString("ownerId").orEmpty(),
                     memberCount = doc.getLong("memberCount")?.toInt() ?: 0,
                     pendingCount = doc.getLong("pendingCount")?.toInt() ?: 0,
-                    requiresApproval = doc.getBoolean("requiresApproval") ?: true
+                    requiresApproval = doc.getBoolean("requiresApproval") ?: true,
+                    activeGameSessionId = doc.getString("activeGameSessionId")
                 )
             )
         }

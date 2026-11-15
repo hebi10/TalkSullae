@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -137,6 +138,13 @@ internal fun OnlineRoomsHost(
     var balanceVisible by rememberSaveable { mutableStateOf(false) }
     var recordsVisible by rememberSaveable { mutableStateOf(false) }
     var roomSection by rememberSaveable(uid, entryMode) { mutableStateOf("chat") }
+    val resumeGame: (String) -> Unit = { gameId ->
+        roomSection = "games"
+        identityVisible = gameId == "identity"
+        liarVisible = gameId == "liar"
+        forbiddenVisible = gameId == "forbidden"
+        balanceVisible = gameId == "balance"
+    }
 
     LaunchedEffect(state.selectedId, selected?.status) {
         if (state.selectedId == null || selected?.status != "active") {
@@ -181,6 +189,12 @@ internal fun OnlineRoomsHost(
                 ) {
                     Text("어떤 게임을 할까요?", style = MaterialTheme.typography.titleLarge)
                     Text("게임은 방 안에서 진행되며 결과가 시즌 기록에 반영됩니다.")
+                    room.activeGameSessionId?.let { sessionId ->
+                        ActiveRoomGameBanner(
+                            roomId = room.id, sessionId = sessionId,
+                            onResume = resumeGame
+                        )
+                    }
                     PrimaryAction("너 누구야?", onClick = { identityVisible = true },
                         modifier = Modifier.fillMaxWidth().testTag("live-game-identity"))
                     PrimaryAction("라이어 채팅", onClick = { liarVisible = true },
@@ -190,11 +204,21 @@ internal fun OnlineRoomsHost(
                     PrimaryAction("밸런스 예측", onClick = { balanceVisible = true },
                         modifier = Modifier.fillMaxWidth().testTag("live-game-balance"))
                 }
-                else -> OnlineRoomChatHost(
-                    uid = uid, roomId = room.id, roomName = room.name,
-                    onBack = { vm.closeRoom() },
-                    repository = chatRepository
-                )
+                else -> Column(modifier = Modifier.fillMaxSize()) {
+                    room.activeGameSessionId?.let { sessionId ->
+                        ActiveRoomGameBanner(
+                            roomId = room.id, sessionId = sessionId,
+                            onResume = resumeGame
+                        )
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        OnlineRoomChatHost(
+                            uid = uid, roomId = room.id, roomName = room.name,
+                            onBack = { vm.closeRoom() },
+                            repository = chatRepository
+                        )
+                    }
+                }
             }
         }
         return
