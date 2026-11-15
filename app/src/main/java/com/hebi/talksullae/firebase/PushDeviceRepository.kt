@@ -6,6 +6,8 @@ import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
 import java.util.UUID
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 internal object PushDevicePrefs {
@@ -43,10 +45,11 @@ internal object PushDevicePrefs {
 }
 
 internal class PushDeviceRepository(private val context: Context) {
+    companion object { private val registrationMutex = Mutex() }
     private val functions get() = FirebaseFunctions.getInstance("asia-northeast3")
     private val messaging get() = FirebaseMessaging.getInstance()
 
-    suspend fun setEnabled(enabled: Boolean) {
+    suspend fun setEnabled(enabled: Boolean) = registrationMutex.withLock {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
             ?: error("Google 로그인 상태를 확인해 주세요.")
         val deviceId = PushDevicePrefs.deviceId(context)
@@ -68,18 +71,18 @@ internal class PushDeviceRepository(private val context: Context) {
         }
     }
 
-    suspend fun registerRotatedToken(token: String, uid: String) {
-        if (!PushDevicePrefs.isEnabled(context, uid)) return
-        if (FirebaseAuth.getInstance().currentUser?.uid != uid) return
+    suspend fun registerRotatedToken(token: String, uid: String) = registrationMutex.withLock {
+        if (!PushDevicePrefs.isEnabled(context, uid)) return@withLock
+        if (FirebaseAuth.getInstance().currentUser?.uid != uid) return@withLock
         val revision = PushDevicePrefs.revision(context, uid)
-        if (revision == 0L) return
+        if (revision == 0L) return@withLock
         val response = functions.getHttpsCallable("registerPushToken").call(
             mapOf(
                 "token" to token, "deviceId" to PushDevicePrefs.deviceId(context),
                 "revision" to revision, "enabled" to true
             )
-        ).await().data as? Map<*, *> ?: return
-        if (response["applied"] != true) return
+        ).await().data as? Map<*, *> ?: return@withLock
+        if (response["applied"] != true) return@withLock
         // Token refresh does not change the user's local opt-in preference.
     }
 
