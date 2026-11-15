@@ -1,5 +1,8 @@
 package com.hebi.talksullae
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -58,13 +61,14 @@ class OnlineInviteFlowTest {
         val code = "a".repeat(20) + "." + "B".repeat(43)
         val repo = PreviewRepository()
         var handled = 0
+        var pending by mutableStateOf(InviteLinkCodec.read(InviteLinkCodec.encode(code)))
         compose.setContent {
             TalkSullaeTheme {
                 OnlineRoomsHost(
                     uid = "invite-test-user", accountName = "실제닉네임",
                     onClose = {}, onSignOut = {}, repository = repo,
-                    incomingInviteCode = InviteLinkCodec.read(InviteLinkCodec.encode(code)),
-                    onInviteCodeHandled = { handled++ }
+                    incomingInviteCode = pending,
+                    onInviteCodeHandled = { pending = null; handled++ }
                 )
             }
         }
