@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -293,7 +295,11 @@ internal fun OnlineRoomChatHost(
             onDismissRequest = { if(!safety.working)reportTarget=null },
             title = { Text("채팅 메시지 신고") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                        .testTag("chat-report-scrollable-form"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text("선택한 메시지와 신고 사유가 운영 담당자에게 전달됩니다.")
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf("abuse" to "괴롭힘", "child_safety" to "아동 안전",
