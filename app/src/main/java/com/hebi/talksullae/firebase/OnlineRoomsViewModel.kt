@@ -108,8 +108,8 @@ internal class OnlineRoomsViewModel(
 
     private fun action(successMessage: String, block: suspend () -> Unit) {
         if (stateMutable.value.working) return
+        stateMutable.update { it.copy(working = true, error = null, info = null) }
         viewModelScope.launch {
-            stateMutable.update { it.copy(working = true, error = null, info = null) }
             try {
                 block()
                 if (successMessage.isNotEmpty()) {

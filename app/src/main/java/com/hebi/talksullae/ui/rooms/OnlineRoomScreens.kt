@@ -353,11 +353,14 @@ internal fun OnlineRoomsHost(
                 PrimaryAction(
                     "실제 방 생성",
                     modifier = Modifier.fillMaxWidth().testTag("online-create-submit"),
-                    enabled = valid && !state.working,
+                    enabled = valid && !state.working && state.createdRoomId == null,
                     onClick = {
                         vm.createRoom(roomName, description, approval)
                     }
                 )
+            }
+            if (state.createdRoomId != null) {
+                Text("방 생성은 완료됐습니다. 방 목록과 동기화하는 중입니다.")
             }
             HorizontalDivider()
             SectionTitle("초대 코드로 가입")
