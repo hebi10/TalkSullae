@@ -126,7 +126,7 @@ async function notifyOneUser(db,uid,roomId,kind,skipUid,messaging,now=Date.now){
         const latest=await tx.get(doc.ref);
         if(latest.exists&&latest.get("token")===messages[index].token){
           tx.update(doc.ref,{
-            enabled:false,token:null,updatedAt:FieldValue.serverTimestamp()
+            token:null,updatedAt:FieldValue.serverTimestamp()
           });
         }
       });
