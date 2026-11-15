@@ -517,6 +517,7 @@ internal fun OnlineRoomsHost(
                         else "가입하면 바로 방에 참여할 수 있습니다."
                     )
                     Text("승인 전에는 방의 채팅·멤버 정보·게임 기록을 볼 수 없습니다.")
+                    state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {
