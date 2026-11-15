@@ -2,6 +2,7 @@ package com.hebi.talksullae
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -27,6 +28,7 @@ class OnlineInviteFlowTest {
     private class PreviewRepository : OnlineRoomsRepository {
         var previewCalls = 0
         var acceptedCalls = 0
+        var failNextPreview = false
         private fun listener() = object : ListenerRegistration {
             override fun remove() = Unit
         }
@@ -44,6 +46,10 @@ class OnlineInviteFlowTest {
         override suspend fun createInvitation(roomId: String): Invitation = error("not used")
         override suspend fun previewInvitation(code: String): InvitationPreview {
             previewCalls++
+            if (failNextPreview) {
+                failNextPreview = false
+                error("일시적인 연결 오류")
+            }
             return InvitationPreview("a".repeat(20), "친구 게임방", "우리만의 방",
                 3, true, System.currentTimeMillis()+60_000)
         }
@@ -61,12 +67,14 @@ class OnlineInviteFlowTest {
         val repo = PreviewRepository()
         var handled = 0
         var pending by mutableStateOf(InviteLinkCodec.read(InviteLinkCodec.encode(code)))
+        var deliveryId by mutableLongStateOf(1L)
         compose.setContent {
             TalkSullaeTheme {
                 OnlineRoomsHost(
                     uid = "invite-test-user", accountName = "실제닉네임",
                     onClose = {}, onSignOut = {}, repository = repo,
                     incomingInviteCode = pending,
+                    incomingInviteDeliveryId = deliveryId,
                     onInviteCodeHandled = { pending = null; handled++ }
                 )
             }
@@ -78,4 +86,29 @@ class OnlineInviteFlowTest {
         assertEquals(1, repo.acceptedCalls)
         assertEquals(1, handled)
     }
+
+    @Test fun sameExternalInviteRedeliveryRetriesAfterNetworkFailure() {
+        val code = "a".repeat(20) + "." + "B".repeat(43)
+        val repo = PreviewRepository().apply { failNextPreview = true }
+        var pending by mutableStateOf<String?>(code)
+        var deliveryId by mutableLongStateOf(1L)
+        compose.setContent {
+            TalkSullaeTheme {
+                OnlineRoomsHost(
+                    uid = "retry-invite-user", accountName = "실제닉네임",
+                    onClose = {}, onSignOut = {}, repository = repo,
+                    incomingInviteCode = pending,
+                    incomingInviteDeliveryId = deliveryId,
+                    onInviteCodeHandled = { pending = null }
+                )
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(1, repo.previewCalls)
+        compose.runOnIdle { deliveryId++ }
+        compose.waitForIdle()
+        compose.onNodeWithTag("live-invite-confirm").assertExists()
+        assertEquals(2, repo.previewCalls)
+    }
+
 }

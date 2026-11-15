@@ -70,6 +70,7 @@ internal fun OnlineRoomsHost(
     entryMode: String = "rooms",
     onRoomDepthChanged: (Boolean) -> Unit = {},
     incomingInviteCode: String? = null,
+    incomingInviteDeliveryId: Long = 0L,
     onInviteCodeHandled: () -> Unit = {}
 ) {
     val repo = remember(repository) { repository ?: CloudRoomsRepository() }
@@ -98,20 +99,19 @@ internal fun OnlineRoomsHost(
     var description by rememberSaveable { mutableStateOf("") }
     var approval by rememberSaveable { mutableStateOf(true) }
     var joinCode by remember { mutableStateOf("") }
-    var lastPresentedInvite by remember(uid) { mutableStateOf<String?>(null) }
-    LaunchedEffect(incomingInviteCode) {
-        if (incomingInviteCode == null) lastPresentedInvite = null
-    }
-    LaunchedEffect(incomingInviteCode, uid, state.working, state.pendingJoinCode) {
+    // Each external delivery is a separate attempt, even if the code repeats.
+    // Do not automatically loop-retry the same failed request.
+    var lastAttemptedDelivery by remember(uid) { mutableStateOf<Pair<String, Long>?>(null) }
+    LaunchedEffect(incomingInviteCode, incomingInviteDeliveryId, uid,
+        state.working, state.pendingJoinCode) {
         val incoming = incomingInviteCode
-        if (incoming != null && !state.working &&
-            lastPresentedInvite != incoming && state.pendingJoinCode != incoming
+        val key = incoming?.let { it to incomingInviteDeliveryId }
+        if (incoming != null && key != null && !state.working &&
+            lastAttemptedDelivery != key && state.pendingJoinCode != incoming
         ) {
             vm.closeRoom()
             joinCode = incoming
-            if (vm.previewInvite(incoming)) {
-                lastPresentedInvite = incoming
-            }
+            if (vm.previewInvite(incoming)) lastAttemptedDelivery = key
         }
     }
     LaunchedEffect(state.createdRoomId, state.entries) {

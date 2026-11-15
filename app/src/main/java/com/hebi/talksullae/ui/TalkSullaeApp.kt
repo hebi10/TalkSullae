@@ -152,6 +152,7 @@ fun TalkSullaeApp(
     initialDarkTheme: Boolean = true,
     onDarkThemeChanged: (Boolean) -> Unit = {},
     incomingInviteCode: String? = null,
+    incomingInviteDeliveryId: Long = 0L,
     onInviteCodeHandled: () -> Unit = {}
 ) {
     var isDark by rememberSaveable { mutableStateOf(initialDarkTheme) }
@@ -461,6 +462,7 @@ fun TalkSullaeApp(
                                 entryMode = if (mainTab == "records") "records" else "rooms",
                                 onRoomDepthChanged = { onlineDepth = it },
                                 incomingInviteCode = incomingInviteCode,
+                                incomingInviteDeliveryId = incomingInviteDeliveryId,
                                 onInviteCodeHandled = onInviteCodeHandled
                             )
                             else -> ProfileScreen(

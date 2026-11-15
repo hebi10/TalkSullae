@@ -27,3 +27,5 @@
 
 - LIVE-01 → LIVE-02 → LIVE-03 순서대로 최신 main에 정합화한 후 **각 PR 최신 HEAD의 필수 Android/Firebase/OPS CI 및 Codex P1/P2 0건**이 확인될 때만 병합합니다.
 - Firebase 운영 Functions/Rules/Indexes/Scheduler 배포, Play internal/closed 승격, AAB 업로드, 스토어 정책·이미지 변경 없음.
+
+- 외부 링크의 새 전달(onNewIntent)은 동일 코드여도 독립된 전달 식별자로 다시 검증합니다. 일시적 네트워크 실패는 동일 전달 안에서 무제한 자동 재시도하지 않습니다.

@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.content.Intent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import com.hebi.talksullae.ui.entry.InviteLinkCodec
 import androidx.activity.ComponentActivity
@@ -15,9 +16,14 @@ import com.hebi.talksullae.ui.TalkSullaeApp
 
 class MainActivity : ComponentActivity() {
     private var pendingInviteCode by mutableStateOf<String?>(null)
+    private var inviteDeliveryId by mutableLongStateOf(0L)
 
     private fun readInvite(intent: Intent?) {
-        pendingInviteCode = InviteLinkCodec.read(intent?.dataString)
+        val code = InviteLinkCodec.read(intent?.dataString)
+        if (code != null) {
+            pendingInviteCode = code
+            inviteDeliveryId++
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -36,6 +42,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             TalkSullaeApp(
                 incomingInviteCode = pendingInviteCode,
+                incomingInviteDeliveryId = inviteDeliveryId,
                 onInviteCodeHandled = {
                     pendingInviteCode = null
                     intent?.let { it.data = null }
