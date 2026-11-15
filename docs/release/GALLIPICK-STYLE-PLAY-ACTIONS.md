@@ -7,7 +7,19 @@
 
 ## 배포 구조
 
-GalliPick과 같은 QA → 고정키 서명 AAB → 내부 테스트 → 비공개 테스트 순서를 채택합니다. **QA는 main/PR에서 자동 실행하지만, 실제 Play 게시와 승격은 서로 다른 수동 승인으로만 진행됩니다.** 운영 Firebase 배포는 Play와 별도 승인 대상입니다.
+QA → 고정키 서명 AAB → 내부 테스트 → 비공개 테스트 순서로 진행합니다. 한 배치에 내부 게시와 비공개 승격을 각각 승인했다면, [테스트 배포 워크플로](https://github.com/hebi10/TalkSullae/actions/workflows/play-internal.yml)를 한 번 실행해 전체 단계를 진행할 수 있습니다. 운영 Firebase 반영은 Play와 별도 승인 대상입니다.
+
+## 단일 실행
+
+1. 워크플로의 `check` 모드에서 기존 내부 트랙과 비공개 트랙 ID 후보를 조회합니다. Play Console의 비공개 트랙과 대조한 정확한 ID를 `closed_track`에 입력하거나 저장소 변수 `PLAY_CLOSED_TRACK`에 지정합니다.
+2. 운영 Firebase의 릴리스 호환성과 기존 설치본 동작을 확인합니다. `main`에서 `deploy-and-promote`를 선택하고, 릴리스 승인·비공개 승격 승인·Firebase 호환성 확인을 선택합니다.
+3. 실행이 최신 main과 Android·배포 정책 CI를 검사합니다. 운영 Callable의 경로를 읽기 전용으로 확인하고, 2-D QA·Play 사전 점검을 통과하면 기존 고정키로 AAB를 서명합니다. Callable 응답 확인은 Rules·색인·구버전 호환성 검사를 대신하지 않습니다.
+4. `play-internal` 보호 환경에서 내부 테스트를 게시하고, `play-closed` 보호 환경에서 동일한 버전코드와 AAB SHA-256을 Play API에서 다시 확인해 기존 비공개 트랙으로 승격합니다. 버전코드·파일 해시·소스 SHA·배치 ID는 실행이 전달합니다.
+5. Actions에서 `talksullae-play-internal-api-result`와 `talksullae-play-closed-api-result-*`를 확인합니다. 내부 게시까지 성공하고 비공개 단계에서 중단되면 원인을 해결한 뒤 같은 실행의 실패 잡을 재실행합니다. 커밋 결과가 불명확하면 다시 실행하기 전에 Play Console에서 상태를 확인합니다.
+
+현재 Play WIF 제공자는 `main`의 `play-internal.yml` 경로를 허용합니다. 단일 실행도 이 경로를 사용하므로 별도 비공개 워크플로를 IAM 허용 목록에 추가할 필요가 없습니다.
+
+## 독립 단계 실행
 
 | 단계 | GitHub Actions | 자동 여부 | Play 변경 |
 |---|---|---|---|

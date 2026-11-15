@@ -64,6 +64,9 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: talksullae-play-publisher
+      queue: max
     permissions:
       contents: read
       id-token: write

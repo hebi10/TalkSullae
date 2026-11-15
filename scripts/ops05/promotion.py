@@ -40,7 +40,7 @@ def release_code(value):
     return int(value)
 
 
-def parse_request(env):
+def parse_exact_source(env):
     require(env.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
             and env.get("GITHUB_REF") == "refs/heads/main"
             and env.get("GITHUB_REPOSITORY") == env.get("EXPECTED_REPO"),
@@ -48,18 +48,31 @@ def parse_request(env):
     sha = env.get("EXPECTED_MAIN_SHA", "")
     require(bool(re.fullmatch("[a-f0-9]{40}", sha)) and env.get("GITHUB_SHA") == sha,
             "Approved main SHA does not match the selected workflow")
+    return {"repo": env["GITHUB_REPOSITORY"], "sha": sha}
+
+
+def is_closed_track(value):
+    return (isinstance(value, str) and bool(re.fullmatch(r"[a-z][a-z0-9._-]{0,49}", value))
+            and value not in FORBIDDEN_TRACKS)
+
+
+def parse_source(env):
+    source = parse_exact_source(env)
     require(bool(re.fullmatch(r"20\d{2}-\d{2}-\d{2}-[A-Za-z0-9-]{2,48}", env.get("BATCH_ID", ""))),
             "KST release batch ID is missing or malformed")
     package = env.get("APP_PACKAGE", "")
     require(bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+", package)),
             "Untrusted Play package identifier")
-    internal = env.get("INTERNAL_TRACK", "")
     closed = env.get("CLOSED_TRACK", "")
-    require(internal in ("internal", "qa"), "The exact Play internal/qa track must be selected")
-    require(bool(re.fullmatch(r"[a-z][a-z0-9._-]{0,49}", closed))
-            and closed not in FORBIDDEN_TRACKS and closed != internal,
-            "Only an existing non-production closed testing track is allowed")
+    require(is_closed_track(closed), "Only an existing non-production closed testing track is allowed")
     code = release_code(env.get("VERSION_CODE", ""))
+    return dict(source, package=package, batch=env["BATCH_ID"], closed=closed, code=code)
+
+
+def parse_request(env):
+    source = parse_source(env)
+    internal = env.get("INTERNAL_TRACK", "")
+    require(internal in ("internal", "qa"), "The exact Play internal/qa track must be selected")
     digest = env.get("AAB_SHA256", "")
     require(bool(re.fullmatch("[a-f0-9]{64}", digest)), "Exact uploaded AAB SHA-256 is required")
     mode = env.get("MODE", "")
@@ -68,12 +81,10 @@ def parse_request(env):
         require(env.get("FINAL_BATCH_APPROVED") == "true"
                 and env.get("APPROVAL_PHRASE") == APPROVAL,
                 "Separate promotion approval is required")
-        if package == "com.hebi.homecrew":
+        if source["package"] == "com.hebi.homecrew":
             require(env.get("HOMECREW_FINAL_APPROVAL") == "HOMECREW_FINAL_RELEASE_APPROVED",
                     "HomeCrew full-release approval is required")
-    return dict(repo=env["GITHUB_REPOSITORY"], sha=sha, package=package,
-                batch=env["BATCH_ID"], internal=internal, closed=closed,
-                code=code, sha256=digest, mode=mode)
+    return dict(source, internal=internal, sha256=digest, mode=mode)
 
 
 def verify_main(req, env):
@@ -90,24 +101,12 @@ def list_value(response, key):
     return items
 
 
-def make_plan(tracks, bundles, req):
+def closed_state(tracks, req):
     require(len({x.get("track") for x in tracks}) == len(tracks), "Duplicate Play track identifiers")
-    selected = [x for x in tracks if x.get("track") == req["internal"]]
     destination = [x for x in tracks if x.get("track") == req["closed"]]
-    require(len(selected) == 1 and len(destination) == 1,
-            "Source internal or destination closed track does not exist")
-    matching = [b for b in bundles if str(b.get("versionCode")) == str(req["code"])]
-    require(len(matching) == 1, "The requested versionCode is not a unique existing AAB")
-    require(str(matching[0].get("sha256", "")).lower() == req["sha256"],
-            "Play AAB SHA-256 differs from the approved internal artifact")
-    source_releases = selected[0].get("releases", [])
+    require(len(destination) == 1, "Destination closed track does not exist")
     closed_releases = destination[0].get("releases", [])
-    require(isinstance(source_releases, list) and isinstance(closed_releases, list),
-            "Malformed Play track releases")
-    exact = [r for r in source_releases if isinstance(r, dict)
-             and r.get("status") == "completed"
-             and r.get("versionCodes") == [str(req["code"])]]
-    require(len(exact) == 1, "Exactly one completed internal release with only this AAB code is required")
+    require(isinstance(closed_releases, list), "Malformed closed track releases")
     current_codes = []
     for release in closed_releases:
         require(isinstance(release, dict) and release.get("status") == "completed",
@@ -118,11 +117,26 @@ def make_plan(tracks, bundles, req):
         current_codes.extend(release_code(x) for x in codes)
     if req["code"] in current_codes:
         require(len(current_codes) == 1, "Closed track already has the version alongside other releases")
-        state = "already_completed"
-    else:
-        require(not current_codes or max(current_codes) < req["code"],
-                "Promotion would downgrade an existing closed release")
-        state = "ready"
+        return "already_completed"
+    require(not current_codes or max(current_codes) < req["code"],
+            "Promotion would downgrade an existing closed release")
+    return "ready"
+
+
+def make_plan(tracks, bundles, req):
+    state = closed_state(tracks, req)
+    selected = [x for x in tracks if x.get("track") == req["internal"]]
+    require(len(selected) == 1, "Source internal track does not exist")
+    matching = [b for b in bundles if str(b.get("versionCode")) == str(req["code"])]
+    require(len(matching) == 1, "The requested versionCode is not a unique existing AAB")
+    require(str(matching[0].get("sha256", "")).lower() == req["sha256"],
+            "Play AAB SHA-256 differs from the approved internal artifact")
+    source_releases = selected[0].get("releases", [])
+    require(isinstance(source_releases, list), "Malformed internal track releases")
+    exact = [r for r in source_releases if isinstance(r, dict)
+             and r.get("status") == "completed"
+             and r.get("versionCodes") == [str(req["code"])]]
+    require(len(exact) == 1, "Exactly one completed internal release with only this AAB code is required")
     original = exact[0]
     name = original.get("name", str(req["code"]))
     require(isinstance(name, str) and 0 < len(name) <= 150, "Invalid internal release name")

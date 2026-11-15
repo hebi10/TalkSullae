@@ -52,8 +52,8 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: talksullae-play-closed-publisher
-  cancel-in-progress: false
+  group: talksullae-play-publisher
+  queue: max
 env:
   EXPECTED_REPO: 'hebi10/TalkSullae'
   APP_PACKAGE: 'com.hebi.talksullae'

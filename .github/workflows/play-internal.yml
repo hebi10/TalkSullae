@@ -9,6 +9,9 @@ on:
   pull_request:
     paths:
       - '.github/workflows/play-internal.yml'
+      - 'scripts/ops05/**'
+      - 'scripts/release/*play_testing_promotion.py'
+      - 'scripts/release/*check_firebase_callables.py'
       - 'scripts/release/play_internal.py'
       - 'scripts/release/test_play_internal.py'
       - 'scripts/release/check_internal_readiness.py'
@@ -21,17 +24,29 @@ on:
         required: true
         default: false
       mode:
-        description: 'check Play app/track, build signed AAB, or deploy after full QA'
+        description: 'Check tracks, build only, deploy internally, or deploy and promote to closed'
         required: true
         default: check
         type: choice
-        options: [check, build, deploy]
+        options: [check, build, deploy, deploy-and-promote]
+      closed_track:
+        description: 'Exact existing closed track ID; defaults to the PLAY_CLOSED_TRACK variable'
+        type: string
+        required: false
+      closed_promotion_approved:
+        description: 'Approve promotion of this same internal AAB to the selected closed track'
+        type: boolean
+        default: false
+      firebase_compatibility_verified:
+        description: 'Verify production Firebase compatibility for this release and installed clients before approving'
+        type: boolean
+        default: false
 permissions:
   contents: read
 
 concurrency:
-  group: talksullae-play-internal-publisher
-  cancel-in-progress: false
+  group: talksullae-play-publisher
+  queue: max
 
 jobs:
   guard-tests:
@@ -112,10 +127,15 @@ jobs:
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       mode: ${{ steps.verify.outputs.mode }}
       code: ${{ steps.verify.outputs.code }}
       version: ${{ steps.verify.outputs.version }}
+      batch: ${{ steps.verify.outputs.batch }}
+      closed-track: ${{ steps.verify.outputs.closed-track }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -125,6 +145,10 @@ jobs:
         env:
           REQUESTED_MODE: ${{ inputs.mode }}
           REQUESTED_APPROVED: ${{ inputs.ops01_release_approved }}
+          CLOSED_APPROVED: ${{ inputs.closed_promotion_approved }}
+          CLOSED_TRACK: ${{ inputs.closed_track || vars.PLAY_CLOSED_TRACK }}
+          FIREBASE_VERIFIED: ${{ inputs.firebase_compatibility_verified }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -137,10 +161,32 @@ jobs:
             exit 1
           fi
           MODE="$REQUESTED_MODE"
-          case "$MODE" in check|build|deploy) ;; *)
-            echo 'Only check, build or deploy may be requested.' >&2; exit 1;; esac
+          case "$MODE" in check|build|deploy|deploy-and-promote) ;; *)
+            echo 'Unrecognized testing release mode.' >&2; exit 1;; esac
           if [[ "$MODE" != "check" && "$REQUESTED_APPROVED" != "true" ]]; then
             echo 'Explicit release batch approval is required before signed build or upload.' >&2
+            exit 1
+          fi
+          if [[ "$MODE" == deploy || "$MODE" == deploy-and-promote ]]; then
+            if [[ "$FIREBASE_VERIFIED" != true ]]; then
+              echo 'Verify the operating Firebase backend before publishing the app.' >&2
+              exit 1
+            fi
+          fi
+          if [[ "$MODE" == deploy-and-promote && "$CLOSED_APPROVED" != true ]]; then
+            echo 'Explicit approval of closed testing promotion is required.' >&2
+            exit 1
+          fi
+          if [[ "$MODE" == deploy-and-promote ]]; then
+            if [[ ! "$CLOSED_TRACK" =~ ^[a-z][a-z0-9._-]{0,49}$ ]]; then
+              echo 'Select an existing closed track ID. Check mode can list the candidates.' >&2
+              exit 1
+            fi
+            echo "closed-track=$CLOSED_TRACK" >> "$GITHUB_OUTPUT"
+          fi
+          actual="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          if [[ "$actual" != "$GITHUB_SHA" || "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
+            echo 'The selected main source has changed.' >&2
             exit 1
           fi
           python3 - <<'PY'
@@ -155,6 +201,26 @@ jobs:
           print('Source version:', name, 'code:', code)
           PY
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "batch=$(TZ=Asia/Seoul date +%F)-talksullae" >> "$GITHUB_OUTPUT"
+
+      - name: Verify exact source Android and release-policy CI
+        if: steps.verify.outputs.mode == 'deploy' || steps.verify.outputs.mode == 'deploy-and-promote'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for workflow in android.yml ops08-final-policy.yml; do
+            result="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$GITHUB_SHA&branch=main&per_page=100" \
+              --jq '[.workflow_runs[] | select(.head_branch == "main" and (.event == "push" or .event == "workflow_dispatch"))] | .[0] | select(.) | [.head_sha, .conclusion] | join(" ")')"
+            if [[ "$result" != "$GITHUB_SHA success" ]]; then
+              echo "Latest main CI must pass for $workflow before Play publishing." >&2
+              exit 1
+            fi
+          done
+
+      - name: Probe production Firebase callable routing before Play publishing
+        if: steps.verify.outputs.mode == 'deploy' || steps.verify.outputs.mode == 'deploy-and-promote'
+        run: python3 scripts/release/check_firebase_callables.py
 
   qa:
     needs: source
@@ -216,6 +282,13 @@ jobs:
           token_format: access_token
           access_token_scopes: https://www.googleapis.com/auth/androidpublisher
           create_credentials_file: false
+      - name: List possible closed track IDs without changing Play
+        if: needs.source.outputs.mode == 'check'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+        run: python3 scripts/release/play_testing_promotion.py inspect
       - name: Check Play app and internal track; require an existing track in deploy mode
         env:
           PLAY_INTERNAL_TRACK: auto
@@ -226,11 +299,22 @@ jobs:
         run: |
           set -euo pipefail
           extra=()
-          if [[ "$RELEASE_MODE" == deploy ]]; then
-            extra+=(--require-existing-qa)
+          if [[ "$RELEASE_MODE" == deploy || "$RELEASE_MODE" == deploy-and-promote ]]; then
+            extra+=(--require-existing-qa --version-code "$RELEASE_VERSION_CODE")
           fi
           python3 scripts/release/play_internal.py check --track "$PLAY_INTERNAL_TRACK" \
-            --version-code "$RELEASE_VERSION_CODE" "${extra[@]}" --report play-preflight.json
+            "${extra[@]}" --report play-preflight.json
+      - name: Check the exact closed target before internal publishing
+        if: needs.source.outputs.mode == 'deploy-and-promote'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+          BATCH_ID: ${{ needs.source.outputs.batch }}
+          VERSION_CODE: ${{ needs.source.outputs.code }}
+          CLOSED_TRACK: ${{ needs.source.outputs.closed-track }}
+          CLOSED_APPROVED: ${{ inputs.closed_promotion_approved }}
+        run: python3 scripts/release/play_testing_promotion.py preflight
       - name: Archive safe preflight result
         if: always()
         uses: actions/upload-artifact@v4
@@ -301,12 +385,12 @@ jobs:
     needs: [source, qa, signed-aab, play-preflight]
     if: >-
       github.event_name == 'workflow_dispatch' && inputs.ops01_release_approved == true &&
-      (
-      needs.source.outputs.mode == 'deploy' &&
+      inputs.firebase_compatibility_verified == true &&
+      (needs.source.outputs.mode == 'deploy' ||
+       (needs.source.outputs.mode == 'deploy-and-promote' && inputs.closed_promotion_approved == true)) &&
       needs.qa.result == 'success' &&
       needs.signed-aab.result == 'success' &&
       needs.play-preflight.result == 'success'
-      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -333,11 +417,12 @@ jobs:
           meta = json.loads((output/'manifest.json').read_text(encoding='utf-8'))
           bundle = output/'app-release.aab'
           expected = os.environ.get('PLAY_UPLOAD_CERT_SHA256','').replace(':','').lower()
+          assert len(expected) == 64 and all(c in '0123456789abcdef' for c in expected), 'Missing pinned signer'
           assert meta['package'] == 'com.hebi.talksullae', 'Wrong Play package'
           assert meta['sourceSha'] == os.environ['GITHUB_SHA'], 'Source changed after QA'
           assert meta['versionCode'] == int(os.environ['VERSION_CODE']), 'Version mismatch'
           assert meta['signerCertificateSha256'] == expected, 'Signer mismatch'
-          assert meta['signed'] and meta['bundletoolValidated'] and meta['firebaseConfigured'], 'Invalid provenance'
+          assert all(meta[key] is True for key in ('signed', 'bundletoolValidated', 'firebaseConfigured')), 'Invalid provenance'
           assert hashlib.sha256(bundle.read_bytes()).hexdigest() == meta['aabSha256'], 'Artifact hash mismatch'
           assert (output/'ko-KR.txt').is_file(), 'Missing localized release notes'
           print('Source, signer, Firebase, version and signed bundle provenance verified')
@@ -378,11 +463,18 @@ jobs:
           create_credentials_file: false
       - name: Upload and commit ONLY approved internal testing release
         env:
+          GH_TOKEN: ${{ github.token }}
           PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
           PLAY_INTERNAL_TRACK: auto
           CODE: ${{ needs.source.outputs.code }}
           VERSION: ${{ needs.source.outputs.version }}
         run: |
+          set -euo pipefail
+          actual="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          if [[ "$actual" != "$GITHUB_SHA" ]]; then
+            echo 'main advanced before publishing; start from the latest verified source.' >&2
+            exit 1
+          fi
           python3 scripts/release/play_internal.py deploy --track "$PLAY_INTERNAL_TRACK" \
             --bundle play-dist/app-release.aab --version-code "$CODE" \
             --version "$VERSION" --notes-file play-dist/ko-KR.txt \
@@ -393,5 +485,73 @@ jobs:
         with:
           name: talksullae-play-internal-api-result
           path: play-result.json
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 14
+
+  closed-publish:
+    needs: [source, internal-publish]
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.ops01_release_approved == true &&
+      inputs.closed_promotion_approved == true && inputs.firebase_compatibility_verified == true &&
+      needs.source.outputs.mode == 'deploy-and-promote' &&
+      needs.internal-publish.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: play-closed
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: talksullae-internal-signed-aab
+          path: play-dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: talksullae-play-internal-api-result
+      - name: Authenticate WIF from the authorized TalkSullae workflow
+        if: vars.PLAY_WORKLOAD_IDENTITY_PROVIDER != '' && vars.PLAY_SERVICE_ACCOUNT != ''
+        id: wif
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Authenticate approved Play service account JSON
+        if: steps.wif.outcome == 'skipped'
+        id: json
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Promote the completed internal release and verify closed track readback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
+          PLAY_UPLOAD_CERT_SHA256: ${{ vars.PLAY_UPLOAD_CERT_SHA256 }}
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+          BATCH_ID: ${{ needs.source.outputs.batch }}
+          VERSION_CODE: ${{ needs.source.outputs.code }}
+          CLOSED_TRACK: ${{ needs.source.outputs.closed-track }}
+          CLOSED_APPROVED: ${{ inputs.closed_promotion_approved }}
+        run: >-
+          python3 scripts/release/play_testing_promotion.py promote
+          --manifest play-dist/manifest.json --internal-receipt play-result.json
+      - name: Archive closed testing commit and readback receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-play-closed-api-result-${{ github.run_attempt }}
+          path: ops05-output/receipt.json
           if-no-files-found: ignore
           retention-days: 14

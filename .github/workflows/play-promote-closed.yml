@@ -23,8 +23,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: talksullae-play-closed-publisher
-  cancel-in-progress: false
+  group: talksullae-play-publisher
+  queue: max
 
 jobs:
   guard-tests:
