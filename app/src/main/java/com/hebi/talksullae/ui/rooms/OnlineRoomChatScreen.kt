@@ -126,6 +126,10 @@ internal fun OnlineRoomChatHost(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 color = MaterialTheme.colorScheme.error
             )
+            TextButton(
+                onClick = vm::retryRead,
+                modifier = Modifier.fillMaxWidth().testTag("online-chat-retry-read")
+            ) { Text("채팅 다시 연결") }
         }
 
         state.historyError?.let { error ->

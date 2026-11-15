@@ -102,6 +102,20 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
             .values
             .sortedWith(compareBy<RoomChatMessage> { it.createdAtMillis ?: Long.MAX_VALUE }.thenBy { it.id })
 
+    fun retryRead() {
+        val room = activeRoomId ?: return
+        val draft = mutable.value.draft
+        val pending = mutable.value.pending
+        val sending = mutable.value.sending
+        val sendError = mutable.value.sendError
+        listener?.remove()
+        listener = null
+        start(room)
+        mutable.update {
+            it.copy(draft = draft, pending = pending, sending = sending, sendError = sendError)
+        }
+    }
+
     fun updateDraft(value: String) {
         if (mutable.value.pending == null) {
             mutable.update { it.copy(draft = value, sendError = null, info = null) }
