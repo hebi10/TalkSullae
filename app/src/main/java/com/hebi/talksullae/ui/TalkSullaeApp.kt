@@ -96,6 +96,7 @@ import com.hebi.talksullae.data.RoomPreviewMode
 import com.hebi.talksullae.ui.entry.CreateRoomScreen
 import com.hebi.talksullae.ui.entry.OnboardingScreen
 import com.hebi.talksullae.ui.entry.WelcomeScreen
+import com.hebi.talksullae.ui.entry.UserProfileEditorScreen
 import com.hebi.talksullae.ui.rooms.InviteScreen
 import com.hebi.talksullae.ui.rooms.MembersScreen
 import com.hebi.talksullae.data.DemoCatalog
@@ -113,6 +114,9 @@ import com.hebi.talksullae.design.SectionTitle
 import com.hebi.talksullae.design.TalkSullaeTheme
 import com.hebi.talksullae.firebase.FirebaseBridge
 import com.hebi.talksullae.firebase.GoogleLogin
+import com.hebi.talksullae.firebase.UserProfile
+import com.hebi.talksullae.firebase.UserProfileRepository
+import com.hebi.talksullae.firebase.ProfileResponseGuard
 import com.hebi.talksullae.firebase.googleUid
 import com.hebi.talksullae.ui.rooms.OnlineRoomsHost
 import com.hebi.talksullae.ui.safety.AccountDeletionScreen
@@ -135,6 +139,9 @@ private const val Invite = "invite"
 private const val Settings = "settings"
 private const val SafetyReport = "safety-report"
 private const val AccountDeletion = "account-deletion"
+private const val ProfileSetup = "profile-setup"
+private const val ProfileEditor = "profile-editor"
+private const val ProfileLoadError = "profile-load-error"
 
 private data class NavItem(val id: String, val title: String, val icon: ImageVector)
 
@@ -152,6 +159,13 @@ fun TalkSullaeApp(
     var signedUser by remember { mutableStateOf<FirebaseUser?>(auth?.currentUser) }
     var loginBusy by remember { mutableStateOf(false) }
     var loginError by remember { mutableStateOf<String?>(null) }
+    val profileRepository = remember(configured) { if (configured) UserProfileRepository() else null }
+    var onlineProfile by remember { mutableStateOf<UserProfile?>(null) }
+    var profileLoading by remember { mutableStateOf(signedUser != null) }
+    var profileSaving by remember { mutableStateOf(false) }
+    var profileError by remember { mutableStateOf<String?>(null) }
+    var profileRetry by remember { mutableStateOf(0) }
+    var profileRequestToken by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
     DisposableEffect(auth) {
         val listener = FirebaseAuth.AuthStateListener { signedUser = it.currentUser }
@@ -165,6 +179,48 @@ fun TalkSullaeApp(
         reportModel?.accountChanged(reportGoogleUid)
     }
     var mainTab by rememberSaveable { mutableStateOf("rooms") }
+    LaunchedEffect(signedUser?.uid, profileRetry) {
+        val user = signedUser
+        val loadToken = ++profileRequestToken
+        profileSaving = false
+        if (user == null) {
+            onlineProfile = null
+            profileLoading = false
+            profileError = null
+            if (route == ProfileSetup || route == ProfileEditor || route == ProfileLoadError) {
+                route = Welcome
+            }
+        } else {
+            profileLoading = true
+            profileError = null
+            try {
+                val saved = requireNotNull(profileRepository).load(user.uid)
+                if (signedUser?.uid != user.uid || loadToken != profileRequestToken) {
+                    return@LaunchedEffect
+                }
+                onlineProfile = saved
+                if (saved == null) {
+                    route = ProfileSetup
+                } else if (route == Welcome || route == Onboarding ||
+                    route == ProfileSetup || route == ProfileLoadError
+                ) {
+                    route = Main
+                    mainTab = "rooms"
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (signedUser?.uid == user.uid && loadToken == profileRequestToken) {
+                    profileError = e.localizedMessage ?: "프로필을 확인할 수 없습니다."
+                    route = ProfileLoadError
+                }
+            } finally {
+                if (signedUser?.uid == user.uid && loadToken == profileRequestToken) {
+                    profileLoading = false
+                }
+            }
+        }
+    }
     var roomTab by rememberSaveable { mutableStateOf("chat") }
     var gameId by rememberSaveable { mutableStateOf("identity") }
     var gamePhase by rememberSaveable { mutableStateOf("lobby") }
@@ -190,6 +246,14 @@ fun TalkSullaeApp(
     val goBack: () -> Unit = {
         when (route) {
             Onboarding -> route = Welcome
+            ProfileEditor -> {
+                profileRequestToken++
+                profileSaving = false
+                route = Main
+                mainTab = "profile"
+            }
+            ProfileLoadError -> profileRetry++
+            ProfileSetup -> Unit
             Create, Settings -> route = Main
             SafetyReport -> if (reportModel?.close() == true) route = Settings
             AccountDeletion -> route = Settings
@@ -202,7 +266,8 @@ fun TalkSullaeApp(
             else -> route = Main
         }
     }
-    BackHandler(enabled = route != Main && route != Welcome) { goBack() }
+    BackHandler(enabled = route != Main && route != Welcome && route != ProfileSetup &&
+        route != ProfileLoadError) { goBack() }
 
     val currentRoom = previewRooms.firstOrNull { it.id == selectedRoom } ?: previewRooms.first()
     val selectedGame = DemoCatalog.games.firstOrNull { it.id == gameId } ?: DemoCatalog.games.first()
@@ -226,20 +291,25 @@ fun TalkSullaeApp(
                         Settings -> "설정"
                         SafetyReport -> "안전 신고"
                         AccountDeletion -> "계정 삭제"
+                        ProfileSetup -> "닉네임 설정"
+                        ProfileEditor -> "프로필 편집"
+                        ProfileLoadError -> "프로필 확인"
                         else -> "톡술래"
                     },
                     subtitle = when (route) {
                         Room -> if (editingRoomChat) null else "UI 미리보기"
                         Game -> "게임 흐름 미리보기 · 실제 플레이 아님"
                         Online -> "초대 코드 · 멤버 관리"
-                        Welcome, Onboarding, SafetyReport, AccountDeletion -> null
+                        Welcome, Onboarding, SafetyReport, AccountDeletion,
+                        ProfileSetup, ProfileEditor, ProfileLoadError -> null
                         else -> "채팅으로 즐기는 추리 게임 · 데모"
                     },
-                    onBack = if (route == Main || route == Welcome) null else goBack
+                    onBack = if (route == Main || route == Welcome || route == ProfileSetup ||
+                        route == ProfileLoadError) null else goBack
                 )
             },
             bottomBar = {
-                if (route == Main) {
+                if (route == Main && !profileLoading) {
                     MainNavigation(current = mainTab, onSelect = { mainTab = it })
                 }
             }
@@ -248,7 +318,75 @@ fun TalkSullaeApp(
                 modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
                     .background(MaterialTheme.colorScheme.background)
             ) {
-                when (route) {
+                if (profileLoading && signedUser != null) {
+                    Column(
+                        Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator()
+                        Text("프로필 확인 중…")
+                    }
+                } else when (route) {
+                    ProfileLoadError -> Column(
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(profileError ?: "프로필을 확인할 수 없습니다.")
+                        PrimaryAction(
+                            "다시 시도",
+                            onClick = { profileRetry++ },
+                            modifier = Modifier.fillMaxWidth().testTag("profile-retry")
+                        )
+                    }
+                    ProfileSetup, ProfileEditor -> UserProfileEditorScreen(
+                        current = if (route == ProfileEditor) onlineProfile else null,
+                        firstSetup = route == ProfileSetup,
+                        saving = profileSaving,
+                        error = profileError,
+                        onSave = { nickname, avatar ->
+                            val savedRoute = route
+                            val requestUid = signedUser?.uid
+                            if (requestUid == null) {
+                                profileError = "Google 로그인 후 프로필을 저장해 주세요."
+                            } else {
+                                val requestToken = ++profileRequestToken
+                                scope.launch {
+                                    profileSaving = true
+                                    profileError = null
+                                    try {
+                                        val updated = requireNotNull(profileRepository).save(nickname, avatar)
+                                        if (ProfileResponseGuard.isCurrent(
+                                                requestUid, signedUser?.uid,
+                                                savedRoute, route,
+                                                requestToken, profileRequestToken
+                                            )
+                                        ) {
+                                            onlineProfile = updated
+                                            route = Main
+                                            mainTab = if (savedRoute == ProfileSetup) "rooms" else "profile"
+                                        }
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        if (ProfileResponseGuard.isCurrent(
+                                                requestUid, signedUser?.uid,
+                                                savedRoute, route,
+                                                requestToken, profileRequestToken
+                                            )
+                                        ) {
+                                            profileError = e.localizedMessage ?: "프로필을 저장할 수 없습니다."
+                                        }
+                                    } finally {
+                                        if (profileRequestToken == requestToken) {
+                                            profileSaving = false
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    )
                     Welcome -> WelcomeScreen(
                         onlineConfigured = configured && activity != null,
                         onContinue = { pendingInvitePreview = false; route = Onboarding },
@@ -269,9 +407,10 @@ fun TalkSullaeApp(
                                 loginBusy = true
                                 loginError = null
                                 try {
-                                    GoogleLogin(activity).signIn()
-                                    route = Main
-                                    mainTab = "rooms"
+                                    val user = GoogleLogin(activity).signIn()
+                                    signedUser = user
+                                    profileLoading = true
+                                    profileRetry++
                                 } catch (_: GetCredentialCancellationException) {
                                     loginError = "Google 로그인을 완료하지 못했습니다. 다시 시도해 주세요."
                                 } catch (e: CancellationException) {
@@ -303,7 +442,13 @@ fun TalkSullaeApp(
                             darkTheme = isDark,
                             onThemeChange = { isDark = it },
                             onSettings = { route = Settings },
-                            nickname = previewNickname
+                            nickname = onlineProfile?.nickname ?: previewNickname,
+                            actualProfile = if (signedUser != null) onlineProfile else null,
+                            onEditProfile = if (signedUser != null && onlineProfile != null) ({
+                                profileRequestToken++
+                                profileError = null
+                                route = ProfileEditor
+                            }) else null
                         )
                     }
                     Room -> DemoRoomLayout(
@@ -355,13 +500,13 @@ fun TalkSullaeApp(
                         if (user != null) {
                             OnlineRoomsHost(
                                 uid = user.uid,
-                                accountName = user.displayName ?: "Google 계정",
+                                accountName = onlineProfile?.nickname ?: "닉네임 설정 필요",
                                 onClose = { route = Main },
                                 onSignOut = {
                                     if (activity != null) {
                                         scope.launch {
                                             GoogleLogin(activity).signOut()
-                                            route = Main
+                                            route = Welcome
                                         }
                                     }
                                 }
@@ -797,17 +942,33 @@ private fun ProfileScreen(
     darkTheme: Boolean,
     onThemeChange: (Boolean) -> Unit,
     onSettings: () -> Unit,
-    nickname: String
+    nickname: String,
+    actualProfile: UserProfile? = null,
+    onEditProfile: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PreviewNotice()
+        if (actualProfile == null) PreviewNotice()
         SectionTitle("내 프로필")
         ContentCard {
-            Text("${nickname} · 데모 미리보기", style = MaterialTheme.typography.titleMedium)
-            Text("로그인 및 개인 통계는 연결 전입니다.", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                if (actualProfile != null) "${actualProfile.avatar} · $nickname"
+                else "$nickname · 데모 미리보기",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                if (actualProfile != null) "친구에게 표시되는 닉네임입니다."
+                else "로그인 및 개인 통계는 연결 전입니다.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            if (onEditProfile != null) {
+                OutlinedButton(
+                    onClick = onEditProfile,
+                    modifier = Modifier.fillMaxWidth().testTag("profile-edit-open")
+                ) { Text("닉네임·아바타 변경") }
+            }
         }
         ContentCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
