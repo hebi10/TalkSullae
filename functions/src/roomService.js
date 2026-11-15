@@ -3,8 +3,9 @@ const { HttpsError } = require("firebase-functions/v2/https");
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 const {
   ROOM_CAPACITY, PENDING_CAPACITY, INVITE_DURATION_MS,
-  roomDraft, roomIdValue, parseJoinCode, authUid, memberName
+  roomDraft, roomIdValue, parseJoinCode, authUid
 } = require("./policy");
+const {memberDisplayName} = require("./userProfile");
 
 const now = () => FieldValue.serverTimestamp();
 const hashToken = value => createHash("sha256").update(value).digest("hex");
@@ -34,7 +35,10 @@ async function createRoom(db, request) {
   const memberRef = roomRef.collection("members").doc(uid);
   const indexRef = userIndex(db,uid,roomRef.id);
   await db.runTransaction(async tx=>{
-    const deletion=await tx.get(db.collection("accountDeletionJobs").doc(uid));
+    const [deletion,profile]=await Promise.all([
+      tx.get(db.collection("accountDeletionJobs").doc(uid)),
+      tx.get(db.collection("users").doc(uid))
+    ]);
     if(deletion.exists){
       throw new HttpsError("permission-denied","계정 삭제 요청 중에는 방을 만들 수 없습니다.");
     }
@@ -42,7 +46,8 @@ async function createRoom(db, request) {
       ...draft,ownerId:uid,status:"active",
       memberCount:1,pendingCount:0,activeInviteHash:null,createdAt:now()
     });
-    tx.create(memberRef,{displayName:memberName(request.auth),status:"active",joinedAt:now()});
+    tx.create(memberRef,{displayName:memberDisplayName(profile,request.auth),
+      avatar:profile.exists?profile.get("avatar"):"부엉이",status:"active",joinedAt:now()});
     tx.create(indexRef,{roomName:draft.name,status:"active",updatedAt:now()});
   });
   return {roomId:roomRef.id};
@@ -73,9 +78,10 @@ async function requestJoin(db, request) {
   const memberRef = roomRef.collection("members").doc(uid);
   const indexRef = userIndex(db,uid,roomId);
   return db.runTransaction(async tx=>{
-    const [room,invite,member,deletion] = await Promise.all([
+    const [room,invite,member,deletion,profile] = await Promise.all([
       tx.get(roomRef),tx.get(inviteRef),tx.get(memberRef),
-      tx.get(db.collection("accountDeletionJobs").doc(uid))
+      tx.get(db.collection("accountDeletionJobs").doc(uid)),
+      tx.get(db.collection("users").doc(uid))
     ]);
     if(deletion.exists){
       throw new HttpsError("permission-denied","계정 삭제 요청 중에는 방에 가입할 수 없습니다.");
@@ -98,7 +104,8 @@ async function requestJoin(db, request) {
       throw new HttpsError("resource-exhausted", "방 정원이 가득 찼습니다.");
     }
     const status = pending ? "pending" : "active";
-    tx.set(memberRef,{status,displayName:memberName(request.auth),joinedAt:now()});
+    tx.set(memberRef,{status,displayName:memberDisplayName(profile,request.auth),
+      avatar:profile.exists?profile.get("avatar"):"부엉이",joinedAt:now()});
     tx.set(indexRef,{status,roomName:room.data().name,updatedAt:now()});
     tx.update(roomRef,pending
       ? {pendingCount:FieldValue.increment(1)}

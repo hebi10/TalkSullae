@@ -130,6 +130,12 @@ service cloud.firestore {
       }
     }
 
+    // Only the authenticated user may read the profile; all writes are server-only.
+    match /users/{userId} {
+      allow get: if signedIn() && request.auth.uid == userId;
+      allow list, create, update, delete: if false;
+    }
+
     match /userSafety/{userId} {
       allow read, write: if false;
       match /blocks/{targetUid} {

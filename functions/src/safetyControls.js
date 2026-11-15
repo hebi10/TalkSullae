@@ -258,6 +258,7 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
     });
   }
   await db.recursiveDelete(userRooms);
+  await db.collection("users").doc(uid).delete();
   await db.recursiveDelete(db.collection("userSafety").doc(uid));
   const reported=await db.collection("safetyReports").where("actorUid","==",uid).get();
   for(const d of reported.docs){
