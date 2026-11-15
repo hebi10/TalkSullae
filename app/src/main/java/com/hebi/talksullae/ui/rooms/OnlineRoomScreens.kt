@@ -2,6 +2,7 @@ package com.hebi.talksullae.ui.rooms
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -81,9 +82,10 @@ internal fun OnlineRoomsHost(
         }
     }
     val vm: OnlineRoomsViewModel = viewModel(key = "online-$uid", factory = factory)
+    val contextForRotation = LocalContext.current as? Activity
     DisposableEffect(vm) {
         vm.start()
-        onDispose { vm.stop() }
+        onDispose { vm.stop(preserveInvite = (contextForRotation?.isChangingConfigurations == true)) }
     }
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -96,12 +98,16 @@ internal fun OnlineRoomsHost(
     var description by rememberSaveable { mutableStateOf("") }
     var approval by rememberSaveable { mutableStateOf(true) }
     var joinCode by remember { mutableStateOf("") }
-    LaunchedEffect(incomingInviteCode, uid, state.working) {
-        if (incomingInviteCode != null && !state.working) {
+    var lastPresentedInvite by remember(uid) { mutableStateOf<String?>(null) }
+    LaunchedEffect(incomingInviteCode, uid, state.working, state.pendingJoinCode) {
+        val incoming = incomingInviteCode
+        if (incoming != null && !state.working &&
+            lastPresentedInvite != incoming && state.pendingJoinCode != incoming
+        ) {
             vm.closeRoom()
-            joinCode = incomingInviteCode
-            if (vm.previewInvite(incomingInviteCode)) {
-                onInviteCodeHandled()
+            joinCode = incoming
+            if (vm.previewInvite(incoming)) {
+                lastPresentedInvite = incoming
             }
         }
     }
@@ -491,7 +497,12 @@ internal fun OnlineRoomsHost(
 
     state.joinPreview?.let { preview ->
         AlertDialog(
-            onDismissRequest = { if (!state.working) vm.dismissJoinPreview() },
+            onDismissRequest = {
+                if (!state.working) {
+                    vm.dismissJoinPreview()
+                    onInviteCodeHandled()
+                }
+            },
             title = { Text("초대 확인") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -507,14 +518,20 @@ internal fun OnlineRoomsHost(
             },
             confirmButton = {
                 TextButton(
-                    onClick = vm::confirmJoin,
+                    onClick = {
+                        vm.confirmJoin()
+                        onInviteCodeHandled()
+                    },
                     enabled = !state.working,
                     modifier = Modifier.testTag("live-invite-confirm")
                 ) { Text("가입 신청") }
             },
             dismissButton = {
                 TextButton(
-                    onClick = vm::dismissJoinPreview,
+                    onClick = {
+                        vm.dismissJoinPreview()
+                        onInviteCodeHandled()
+                    },
                     enabled = !state.working
                 ) { Text("취소") }
             }

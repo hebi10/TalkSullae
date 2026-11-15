@@ -59,11 +59,20 @@ internal class OnlineRoomsViewModel(
         start()
     }
 
-    fun stop() {
+    fun stop(preserveInvite: Boolean = false) {
         listListener?.remove()
         listListener = null
         closeRoomListeners()
-        stateMutable.value = OnlineRoomsState()
+        val old = stateMutable.value
+        stateMutable.value = if (preserveInvite && old.pendingJoinCode != null) {
+            OnlineRoomsState(
+                joinPreview = old.joinPreview,
+                pendingJoinCode = old.pendingJoinCode,
+                loading = true
+            )
+        } else {
+            OnlineRoomsState()
+        }
     }
 
     fun openRoom(roomId: String) {
