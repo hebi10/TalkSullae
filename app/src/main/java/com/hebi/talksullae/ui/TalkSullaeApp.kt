@@ -118,6 +118,7 @@ import com.hebi.talksullae.firebase.GoogleLogin
 import com.hebi.talksullae.firebase.UserProfile
 import com.hebi.talksullae.firebase.UserProfileRepository
 import com.hebi.talksullae.ui.profile.MyCareerSection
+import com.hebi.talksullae.ui.profile.PushNotificationSettings
 import com.hebi.talksullae.firebase.ProfileResponseGuard
 import com.hebi.talksullae.firebase.ProfileRequestVersions
 import com.hebi.talksullae.firebase.googleUid
@@ -619,6 +620,7 @@ fun TalkSullaeApp(
                         }
                     )
                     Settings -> SettingsScreen(
+                        notificationUid = signedUser?.uid,
                         darkTheme = isDark,
                         onThemeChange = { isDark = it },
                         onSafetyReport = { route = SafetyReport },
@@ -1051,6 +1053,7 @@ private fun ProfileScreen(
 
 @Composable
 private fun SettingsScreen(
+    notificationUid: String? = null,
     darkTheme: Boolean,
     onThemeChange: (Boolean) -> Unit,
     onSafetyReport: () -> Unit,
@@ -1072,7 +1075,11 @@ private fun SettingsScreen(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PreviewNotice("알림 설정은 준비 중입니다. 사용자 차단과 채팅 신고는 온라인 방의 메시지에서 이용할 수 있습니다.")
+        if (notificationUid != null) {
+            PushNotificationSettings(uid = notificationUid)
+        } else {
+            PreviewNotice("사용자 차단과 채팅 신고는 로그인 후 온라인 방에서 이용할 수 있습니다.")
+        }
         ContentCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("다크 모드", modifier = Modifier.weight(1f))
