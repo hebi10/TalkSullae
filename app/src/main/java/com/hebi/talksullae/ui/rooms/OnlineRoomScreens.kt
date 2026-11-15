@@ -99,6 +99,9 @@ internal fun OnlineRoomsHost(
     var approval by rememberSaveable { mutableStateOf(true) }
     var joinCode by remember { mutableStateOf("") }
     var lastPresentedInvite by remember(uid) { mutableStateOf<String?>(null) }
+    LaunchedEffect(incomingInviteCode) {
+        if (incomingInviteCode == null) lastPresentedInvite = null
+    }
     LaunchedEffect(incomingInviteCode, uid, state.working, state.pendingJoinCode) {
         val incoming = incomingInviteCode
         if (incoming != null && !state.working &&
