@@ -184,7 +184,8 @@ fun TalkSullaeApp(
         reportModel?.accountChanged(reportGoogleUid)
     }
     var mainTab by rememberSaveable { mutableStateOf("rooms") }
-    LaunchedEffect(incomingInviteCode, signedUser?.uid, onlineProfile?.nickname) {
+    LaunchedEffect(incomingInviteCode, incomingInviteDeliveryId,
+        signedUser?.uid, onlineProfile?.nickname) {
         if (incomingInviteCode != null) {
             if (signedUser == null && configured) {
                 route = Onboarding
