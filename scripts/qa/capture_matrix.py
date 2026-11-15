@@ -64,7 +64,7 @@ def find_by_text(root, label):
         current = node
         while current is not None and current.attrib.get("clickable") != "true":
             current = parents.get(current)
-        target = current or node
+        target = current if current is not None else node
         bounds = node_bounds(target)
         if bounds:
             matching.append((0 if text == label or desc == label else 1, bounds))
