@@ -117,6 +117,7 @@ import com.hebi.talksullae.firebase.GoogleLogin
 import com.hebi.talksullae.firebase.UserProfile
 import com.hebi.talksullae.firebase.UserProfileRepository
 import com.hebi.talksullae.firebase.ProfileResponseGuard
+import com.hebi.talksullae.firebase.ProfileRequestVersions
 import com.hebi.talksullae.firebase.googleUid
 import com.hebi.talksullae.ui.rooms.OnlineRoomsHost
 import com.hebi.talksullae.ui.safety.AccountDeletionScreen
@@ -165,7 +166,7 @@ fun TalkSullaeApp(
     var profileSaving by remember { mutableStateOf(false) }
     var profileError by remember { mutableStateOf<String?>(null) }
     var profileRetry by remember { mutableStateOf(0) }
-    var profileRequestToken by remember { mutableStateOf(0L) }
+    val profileRequestVersions = remember { ProfileRequestVersions() }
     val scope = rememberCoroutineScope()
     DisposableEffect(auth) {
         val listener = FirebaseAuth.AuthStateListener { signedUser = it.currentUser }
@@ -181,7 +182,7 @@ fun TalkSullaeApp(
     var mainTab by rememberSaveable { mutableStateOf("rooms") }
     LaunchedEffect(signedUser?.uid, profileRetry) {
         val user = signedUser
-        val loadToken = ++profileRequestToken
+        val loadToken = profileRequestVersions.beginLoad()
         profileSaving = false
         if (user == null) {
             onlineProfile = null
@@ -195,7 +196,7 @@ fun TalkSullaeApp(
             profileError = null
             try {
                 val saved = requireNotNull(profileRepository).load(user.uid)
-                if (signedUser?.uid != user.uid || loadToken != profileRequestToken) {
+                if (signedUser?.uid != user.uid || !profileRequestVersions.isLatestLoad(loadToken)) {
                     return@LaunchedEffect
                 }
                 onlineProfile = saved
@@ -210,12 +211,12 @@ fun TalkSullaeApp(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (signedUser?.uid == user.uid && loadToken == profileRequestToken) {
+                if (signedUser?.uid == user.uid && profileRequestVersions.isLatestLoad(loadToken)) {
                     profileError = e.localizedMessage ?: "프로필을 확인할 수 없습니다."
                     route = ProfileLoadError
                 }
             } finally {
-                if (signedUser?.uid == user.uid && loadToken == profileRequestToken) {
+                if (signedUser?.uid == user.uid && profileRequestVersions.isLatestLoad(loadToken)) {
                     profileLoading = false
                 }
             }
@@ -247,7 +248,7 @@ fun TalkSullaeApp(
         when (route) {
             Onboarding -> route = Welcome
             ProfileEditor -> {
-                profileRequestToken++
+                profileRequestVersions.invalidateSave()
                 profileSaving = false
                 route = Main
                 mainTab = "profile"
@@ -351,7 +352,7 @@ fun TalkSullaeApp(
                             if (requestUid == null) {
                                 profileError = "Google 로그인 후 프로필을 저장해 주세요."
                             } else {
-                                val requestToken = ++profileRequestToken
+                                val requestToken = profileRequestVersions.beginSave()
                                 scope.launch {
                                     profileSaving = true
                                     profileError = null
@@ -360,7 +361,7 @@ fun TalkSullaeApp(
                                         if (ProfileResponseGuard.isCurrent(
                                                 requestUid, signedUser?.uid,
                                                 savedRoute, route,
-                                                requestToken, profileRequestToken
+                                                requestToken, profileRequestVersions.saveVersion
                                             )
                                         ) {
                                             onlineProfile = updated
@@ -373,13 +374,13 @@ fun TalkSullaeApp(
                                         if (ProfileResponseGuard.isCurrent(
                                                 requestUid, signedUser?.uid,
                                                 savedRoute, route,
-                                                requestToken, profileRequestToken
+                                                requestToken, profileRequestVersions.saveVersion
                                             )
                                         ) {
                                             profileError = e.localizedMessage ?: "프로필을 저장할 수 없습니다."
                                         }
                                     } finally {
-                                        if (profileRequestToken == requestToken) {
+                                        if (profileRequestVersions.isLatestSave(requestToken)) {
                                             profileSaving = false
                                         }
                                     }
@@ -445,7 +446,7 @@ fun TalkSullaeApp(
                             nickname = onlineProfile?.nickname ?: previewNickname,
                             actualProfile = if (signedUser != null) onlineProfile else null,
                             onEditProfile = if (signedUser != null && onlineProfile != null) ({
-                                profileRequestToken++
+                                profileRequestVersions.invalidateSave()
                                 profileError = null
                                 route = ProfileEditor
                             }) else null
