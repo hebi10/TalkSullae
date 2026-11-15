@@ -146,6 +146,12 @@ service cloud.firestore {
       }
     }
 
+    // Moderator requests use server-only callable Functions. No client can
+    // list or edit private evidence, moderation decisions or audit receipts.
+    match /moderationAudit/{auditId} {
+      allow read, write: if false;
+    }
+
     match /accountDeletionJobs/{userId} {
       allow read, write: if false;
     }
