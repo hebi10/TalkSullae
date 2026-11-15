@@ -2,10 +2,10 @@ package com.hebi.talksullae.ui.rooms
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -82,7 +82,7 @@ internal fun OnlineRoomsHost(
         }
     }
     val vm: OnlineRoomsViewModel = viewModel(key = "online-$uid", factory = factory)
-    val contextForRotation = LocalContext.current as? Activity
+    val contextForRotation = LocalActivity.current
     DisposableEffect(vm) {
         vm.start()
         onDispose { vm.stop(preserveInvite = (contextForRotation?.isChangingConfigurations == true)) }
