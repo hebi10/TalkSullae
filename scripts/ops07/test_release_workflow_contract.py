@@ -65,6 +65,32 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("bundleRelease", signed)
         self.assertNotIn("  push:", signed)
 
+    def test_one_dispatch_requires_both_approvals_and_reuses_verified_internal_aab(self):
+        internal = workflow("play-internal.yml")
+        self.assertIn("options: [check, build, deploy, deploy-and-promote]", internal)
+        self.assertIn("needs: [source, internal-publish]", internal)
+        closed = internal.split("\n  closed-publish:\n", 1)[1]
+        self.assertIn("github.event_name == 'workflow_dispatch'", closed)
+        self.assertIn("inputs.ops01_release_approved == true", closed)
+        self.assertIn("inputs.closed_promotion_approved == true", closed)
+        self.assertIn("inputs.firebase_compatibility_verified == true", closed)
+        self.assertIn("environment: play-closed", closed)
+        self.assertIn("name: talksullae-play-internal-api-result", closed)
+        self.assertIn("play_testing_promotion.py promote", closed)
+        self.assertNotIn("bundleRelease", closed)
+        self.assertNotIn("play_internal.py deploy", closed)
+
+    def test_closed_preflight_and_production_compatibility_gate_internal_publish(self):
+        internal = workflow("play-internal.yml")
+        preflight, publish = internal.split("\n  internal-publish:\n", 1)
+        publish = publish.split("\n  closed-publish:\n", 1)[0]
+        self.assertIn("play_testing_promotion.py preflight", preflight)
+        self.assertIn("play_testing_promotion.py inspect", preflight)
+        self.assertIn("check_firebase_callables.py", preflight)
+        self.assertIn("needs.play-preflight.result == 'success'", publish)
+        self.assertIn("inputs.firebase_compatibility_verified == true", publish)
+        self.assertIn('gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main"', publish)
+
     def test_closed_stage_defaults_to_actual_internal_and_requires_real_closed(self):
         closed = workflow("play-closed-release.yml")
         self.assertRegex(

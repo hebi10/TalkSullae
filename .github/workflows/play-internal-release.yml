@@ -49,8 +49,8 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: talksullae-play-internal-publisher
-  cancel-in-progress: false
+  group: talksullae-play-publisher
+  queue: max
 env:
   EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
   BUILD_RUN_ID: ${{ inputs.build_run_id }}

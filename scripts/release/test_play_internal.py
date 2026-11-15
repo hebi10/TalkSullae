@@ -17,6 +17,7 @@ class FakeClient:
         self.calls = []
         self.assigned = False
         self.readback_ok = True
+        self.readback_status = "completed"
         self.fail_track_update = False
 
     def create_edit(self):
@@ -28,7 +29,9 @@ class FakeClient:
 
     def list_tracks(self, edit):
         if self.assigned and self.readback_ok:
-            return [{"track": self.internal_track, "releases": [{"versionCodes": ["2"]}]}]
+            return [{"track": self.internal_track, "releases": [
+                {"versionCodes": ["2"], "status": self.readback_status}
+            ]}]
         if self.has_qa:
             return [{"track": self.internal_track, "releases": [{"versionCodes": [str(self.prior)]}]}]
         return [{"track": "alpha", "releases": []}]
@@ -172,6 +175,9 @@ class InternalPlayTests(unittest.TestCase):
             result = deploy(fake, "qa", path, 2, "0.3.0", "내부 테스트")
         self.assertTrue(result["api_committed"])
         self.assertEqual(result["verification"], "internal_qa_track_assigned")
+        commits = [path for method, path, _ in fake.calls if method == "POST" and ":commit" in path]
+        self.assertEqual(len(commits), 1)
+        self.assertTrue(commits[0].endswith(":commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW"))
         self.assertEqual([x[1] for x in fake.calls if x[0] == "PUT"],
                          [fake.calls[1][1]] if len(fake.calls) > 1 else [])
         self.assertTrue(all("/tracks/qa" in x[1] for x in fake.calls if x[0] == "PUT"))
@@ -187,6 +193,15 @@ class InternalPlayTests(unittest.TestCase):
                 deploy(fake, "qa", path, 2, "0.3.0", "내부 테스트", report=report)
         self.assertTrue(report["api_committed"])
         self.assertEqual(report["verification"], "not_confirmed")
+
+    def test_draft_version_is_not_completed_internal_readback(self):
+        fake = FakeClient()
+        fake.readback_status = "draft"
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "app.aab"
+            bundle.write_bytes(b"x" * 15000)
+            with self.assertRaisesRegex(PlaySafetyError, "readback not confirmed"):
+                deploy(fake, "qa", bundle, 2, "0.5.0", "내부 테스트")
 
     def test_invalid_bundle_refused(self):
         fake = FakeClient()

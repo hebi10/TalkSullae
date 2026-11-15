@@ -113,7 +113,7 @@ def deploy(client, track, bundle, code, version, notes, report=None):
         report["upload_stage"] = "edit_validation_requested"
         client.request("POST", edit + ":validate")
         report["upload_stage"] = "edit_commit_requested"
-        client.request("POST", edit + ":commit")
+        client.request("POST", edit + ":commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW")
         committed = True
         report["api_committed"] = True
         report["upload_stage"] = "edit_committed"
@@ -125,7 +125,8 @@ def deploy(client, track, bundle, code, version, notes, report=None):
     try:
         matches = [t for t in client.list_tracks(readback) if t.get("track") == selected]
         if len(matches) != 1 or not any(
-            code in [release_code(v) for v in release.get("versionCodes", [])]
+            release.get("status") == "completed"
+            and release.get("versionCodes") == [str(code)]
             for release in matches[0].get("releases", [])
         ):
             raise PlaySafetyError("Internal edit committed but track readback not confirmed")
