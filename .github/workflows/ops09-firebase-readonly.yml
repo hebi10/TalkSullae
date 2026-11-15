@@ -1,0 +1,91 @@
+name: OPS-09 Firebase production inventory (read-only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ops09-firebase-readonly.yml'
+      - 'scripts/ops09/**'
+      - 'docs/release/OPS-09-firebase-readonly.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ops09-firebase-readonly.yml'
+      - 'scripts/ops09/**'
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Exact reviewed main commit SHA (40 lowercase hex characters)
+        required: true
+        type: string
+      project_id:
+        description: Verified Firebase/GCP project ID, matching the protected variable
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  script-tests:
+    name: OPS-09 read-only contract tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify inventory parser and no-mutation safety contract
+        run: python3 -m unittest discover -s scripts/ops09 -p 'test_*.py' -v
+
+  inspect-firebase:
+    name: OPS-09 verified Firebase cloud resource inventory
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'hebi10/TalkSullae' && github.ref == 'refs/heads/main'
+    needs: [script-tests]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    environment: firebase-audit
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      TARGET_PROJECT: ${{ inputs.project_id }}
+      PINNED_PROJECT: ${{ vars.FIREBASE_AUDIT_PROJECT_ID }}
+      READONLY_PROVIDER: ${{ vars.FIREBASE_AUDIT_WIF_PROVIDER }}
+      READONLY_ACCOUNT: ${{ vars.FIREBASE_AUDIT_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require exact main commit, explicit project, and isolated read-only identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || exit 1
+          [[ "$GITHUB_REPOSITORY" == 'hebi10/TalkSullae' ]] || exit 1
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$EXPECTED_MAIN_SHA" == "$GITHUB_SHA" ]] || exit 1
+          test -n "$PINNED_PROJECT"
+          [[ "$TARGET_PROJECT" == "$PINNED_PROJECT" ]] || exit 1
+          [[ "$TARGET_PROJECT" =~ ^[a-z][a-z0-9-]{5,62}$ ]] || exit 1
+          test -n "$READONLY_PROVIDER"
+          test -n "$READONLY_ACCOUNT"
+          echo 'Source SHA and isolated read-only audit target verified.'
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.FIREBASE_AUDIT_WIF_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_AUDIT_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Read Cloud Functions, Firestore database/index/rules and Scheduler metadata
+        run: |
+          python3 scripts/ops09/firebase_inventory.py \
+            --project "$TARGET_PROJECT" \
+            --report ops09-output/inventory.json
+      - name: Preserve sanitized audit result (no credentials or user data)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-firebase-ops09-readonly
+          path: ops09-output/inventory.json
+          retention-days: 30
+          if-no-files-found: warn

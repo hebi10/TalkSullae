@@ -45,7 +45,7 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(audit.missing_indexes(src, server), ["safetyReports"])
 
     def test_rules_checksum_normalization_and_mismatch(self):
-        self.assertTrue(audit.same_rules("rules\\r\\n", "rules\n"))
+        self.assertTrue(audit.same_rules("rules\r\n", "rules\n"))
         self.assertFalse(audit.same_rules("allow read: if false;", "allow read: if true;"))
 
     def test_full_parity_does_not_claim_release_or_client_compatibility(self):
