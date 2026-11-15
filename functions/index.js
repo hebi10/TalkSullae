@@ -16,6 +16,9 @@ const forbiddenChat = require("./src/game/forbiddenChatService");
 const safetyControls = require("./src/safetyControls");
 const retention = require("./src/retention");
 const push=require("./src/pushService");
+const moderation=require("./src/moderationService");
+const monitoring=require("./src/safetyMonitoring");
+const logger=require("firebase-functions/logger");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -32,6 +35,8 @@ exports.submitSafetyReport = onCall(config, request=>submitSafetyReport(db,reque
 
 exports.sendRoomMessage = onCall(config, request=>sendRoomMessage(db,request));
 exports.registerPushToken = onCall(config, request=>push.registerPushToken(db,request));
+exports.getModerationInbox = onCall(config, request=>moderation.getModerationInbox(db,request));
+exports.setModerationStatus = onCall(config, request=>moderation.setModerationStatus(db,request));
 
 exports.createGameSession = onCall(config, request=>gameSession.createGameSession(db,request));
 exports.gameSessionAction = onCall(config, request=>gameSession.gameSessionAction(db,request));
@@ -89,4 +94,17 @@ exports.notifyMemberApproval = onDocumentUpdated({
   if(before?.status!=="pending"||after?.status!=="active")return;
   await push.notifyApprovedMember(
     db,event.params.roomId,event.params.uid,getMessaging());
+});
+
+
+// Operator-only, counts-only 2-hour audit. Alerts are configured separately.
+exports.auditSafetyBacklog = onSchedule({
+  schedule:"every 120 minutes",region:"asia-northeast3",maxInstances:1,
+  timeZone:"Asia/Seoul"
+},async ()=>{
+  const summary=await monitoring.inspectSafetyBacklog(db);
+  if(summary.reportsOver24Hours>0||summary.deletionManualReview>0||
+     summary.deletionNeedsAttention>0||summary.scanCapReached){
+    logger.warn("talksullae_safety_backlog_counts",summary);
+  }
 });
