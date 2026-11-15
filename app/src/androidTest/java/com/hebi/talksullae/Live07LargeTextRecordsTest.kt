@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import com.hebi.talksullae.design.TalkSullaeTheme
 import com.hebi.talksullae.ui.rooms.RoomRecordsContent
@@ -44,8 +45,8 @@ class Live07LargeTextRecordsTest {
             }
         }
         rule.onNodeWithTag("records-season-heading").assertExists()
-        rule.onNodeWithTag("records-previous-season").assertIsEnabled().performClick()
-        rule.onNodeWithTag("records-next-season").assertIsEnabled().performClick()
+        rule.onNodeWithTag("records-previous-season").performScrollTo().assertIsEnabled().performClick()
+        rule.onNodeWithTag("records-next-season").performScrollTo().assertIsEnabled().performClick()
         rule.runOnIdle {
             assertEquals(1, previous)
             assertEquals(1, next)
