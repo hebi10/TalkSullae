@@ -1,6 +1,11 @@
 name: Play internal-testing guarded publisher
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
   pull_request:
     paths:
       - '.github/workflows/play-internal.yml'
@@ -41,7 +46,7 @@ jobs:
         run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
 
   audit:
-    if: github.event_name == 'push' && !contains(github.event.head_commit.message, '[deploy-internal]')
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -104,8 +109,7 @@ jobs:
   source:
     if: >-
       github.repository == 'hebi10/TalkSullae' &&
-      (github.event_name == 'workflow_dispatch' ||
-      contains(github.event.head_commit.message, '[deploy-internal]'))
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -120,6 +124,7 @@ jobs:
         id: verify
         env:
           REQUESTED_MODE: ${{ inputs.mode }}
+          REQUESTED_APPROVED: ${{ inputs.ops01_release_approved }}
         shell: bash
         run: |
           set -euo pipefail
@@ -127,15 +132,17 @@ jobs:
             echo 'Play testing deployment is forbidden from feature branches.' >&2
             exit 1
           fi
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            MODE=deploy
-            [[ "$(git log -1 --format=%B)" == *'[deploy-internal]'* ]] ||
-              { echo 'Release intent was not explicit.' >&2; exit 1; }
-          else
-            MODE="$REQUESTED_MODE"
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo 'Signed Play actions require a manual workflow dispatch.' >&2
+            exit 1
           fi
+          MODE="$REQUESTED_MODE"
           case "$MODE" in check|build|deploy) ;; *)
             echo 'Only check, build or deploy may be requested.' >&2; exit 1;; esac
+          if [[ "$MODE" != "check" && "$REQUESTED_APPROVED" != "true" ]]; then
+            echo 'Explicit release batch approval is required before signed build or upload.' >&2
+            exit 1
+          fi
           python3 - <<'PY'
           import os, sys
           from pathlib import Path
