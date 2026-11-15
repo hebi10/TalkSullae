@@ -54,7 +54,8 @@ fun WelcomeScreen(onlineConfigured: Boolean, onContinue: () -> Unit, onInvitePre
             Text("방을 만들고 초대 코드로 친구를 모아 가입 요청과 멤버를 관리하세요.")
         }
         PreviewNotice(
-            if (onlineConfigured) "Google 계정으로 로그인하면 온라인 방을 이용할 수 있습니다. 채팅과 게임은 데모에서 미리 볼 수 있습니다."
+            if (onlineConfigured && !allowPreview) "Google 계정으로 로그인해 친구들과 실제 채팅과 게임을 시작할 수 있습니다."
+            else if (onlineConfigured) "Google 계정으로 로그인하면 온라인 방을 이용할 수 있습니다. 채팅과 게임은 데모에서 미리 볼 수 있습니다."
             else "이 빌드는 기기에서 데모를 체험할 수 있습니다."
         )
         PrimaryAction(
