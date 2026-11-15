@@ -1,6 +1,11 @@
 name: 2-D Android and Firebase multi-environment QA
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
   pull_request:
     paths:
       - 'app/**'

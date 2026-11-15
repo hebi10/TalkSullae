@@ -29,13 +29,12 @@ on:
         description: 'Actual existing internal testing API track ID'
         required: true
         type: choice
-        default: qa
+        default: internal
         options: [internal, qa]
       closed_track:
         description: 'Exact existing closed track API ID (e.g., alpha)'
         required: true
         type: string
-        default: alpha
       final_batch_approved:
         description: 'Every planned task and release QA finished; separate closed promotion approved'
         required: true

@@ -70,6 +70,23 @@ class ProfileThemeCaptureTest(unittest.TestCase):
             capture_matrix.ensure_profile_screen()
         click.assert_called_once_with((10, 50, 100, 120))
 
+    def test_scrolls_visible_profile_when_theme_switch_is_below_fold(self):
+        profile = ET.fromstring(
+            '<hierarchy><node text="내 프로필" bounds="[10,80][180,130]" /></hierarchy>'
+        )
+        with (
+            patch.object(capture_matrix, "hierarchy", side_effect=[profile, theme_tree()]),
+            patch.object(capture_matrix, "adb") as adb,
+            patch.object(capture_matrix, "click_bounds") as click,
+            patch.object(capture_matrix, "dismiss_launcher_dialog"),
+            patch.object(capture_matrix.time, "sleep"),
+        ):
+            capture_matrix.ensure_profile_screen()
+        adb.assert_called_once_with(
+            "shell", "input", "swipe", "500", "1850", "500", "520", "280"
+        )
+        click.assert_not_called()
+
     def test_profile_capture_rejects_missing_switch_even_after_navigation_retries(self):
         with (
             patch.object(capture_matrix, "hierarchy", return_value=ET.fromstring("<hierarchy />")),

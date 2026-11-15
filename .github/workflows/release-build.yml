@@ -43,7 +43,7 @@ jobs:
       EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
       BATCH_ID: ${{ inputs.batch_id }}
       FINAL_BATCH_APPROVED: ${{ inputs.final_batch_approved }}
-      REQUIRED_CI_JSON: '["Android verification"]'
+      REQUIRED_CI_JSON: '["Android verification","2-D Android and Firebase multi-environment QA","OPS-08 final main source and release policy verification"]'
       RELEASE_TAG: ${{ inputs.release_tag }}
       VERSION_CODE: ${{ inputs.version_code }}
       BUILD_WORKFLOW: 'play-internal.yml'
@@ -94,6 +94,7 @@ jobs:
           set -euo pipefail
           args=(-f ref=main)
           args+=(-f "inputs[mode]=build")
+          args+=(-f "inputs[ops01_release_approved]=true")
           gh api --method POST "repos/$GITHUB_REPOSITORY/actions/workflows/$BUILD_WORKFLOW/dispatches" "${args[@]}"
           actual="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
           if [[ "$actual" != "$EXPECTED_MAIN_SHA" ]]; then

@@ -146,18 +146,24 @@ def png_left_edge_luminance(png):
 
 
 def ensure_profile_screen():
-    """Verify the actual profile before capturing; retry only the bottom-tab navigation."""
-    for attempt in range(6):
+    """Find the actual profile switch even if the scrollable card is below the fold."""
+    for attempt in range(9):
         dismiss_launcher_dialog()
         root = hierarchy()
         if find_profile_theme_switch(root) is not None:
             return
+        if find_by_text(root, "내 프로필") is not None:
+            # Large font sizes and tablet content can place the theme toggle
+            # outside UIAutomator's visible hierarchy; scroll the profile.
+            adb("shell", "input", "swipe", "500", "1850", "500", "520", "280")
+            time.sleep(0.7)
+            continue
         bounds = find_by_text(root, "마이")
         if bounds is not None:
             click_bounds(bounds)
         else:
             time.sleep(0.8)
-    raise RuntimeError("Profile screen did not expose the labelled theme switch after navigation retries")
+    raise RuntimeError("Profile screen did not expose the labelled theme switch after navigation and scrolling")
 
 
 def toggle_dark_mode():
