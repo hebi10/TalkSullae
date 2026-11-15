@@ -2,11 +2,11 @@
 
 친구들이 각자의 스마트폰에서 고정된 방에 참여해 익명 채팅과 심리·추리게임을 즐기고, 기록을 함께 쌓는 Android 앱입니다.
 
-> 현재 상태: **2-D Android·Firebase 자동 QA 완료 / Google Play 비공개 테스트 미배포**. Google 로그인·온라인 방 관리는 코드로 구현했으나 실제 계정 2명 E2E 검증이 남아 있습니다. 실시간 채팅·게임·시즌은 데모 단계입니다.
+> 소스 현황: **LIVE-01~06 main 병합, LIVE-07~08 화면·통합 QA 진행**. Google Play 내부 테스트에 마지막으로 API 게시가 확인된 버전은 `0.4.1 (5)`입니다. `0.5.0 (6)`은 새 소스 **릴리스 후보**로 서명 AAB·Play 업로드/테스터 설치·운영 Firebase 변경은 아직 수행되지 않았습니다. 실제 Google 계정 다중 기기 E2E도 미검증입니다.
 
 ## 프로젝트 방향
 - Android: Kotlin + Jetpack Compose (구현됨)
-- 서버: Firebase Authentication · Firestore · Cloud Functions (방·권한 구현), FCM (후속)
+- 서버: Firebase Authentication · Firestore · Cloud Functions (방·게임·전적·신고/삭제), FCM (소스 구현·운영 미검증)
 - 초대: 카카오톡 공유 링크 + Android App Links (카카오톡 자체 채팅방 연동 아님)
 - 핵심 게임: 너 누구야?, 라이어 채팅, 금지어 채팅, 밸런스 예측
 - 일반 채팅과 게임 채팅 분리, 익명 매핑 서버 관리, 방장 권한 검증
@@ -30,7 +30,7 @@
 - [Google Drive 화면 설계 v1.0](https://docs.google.com/document/d/1d7A0zC76o42YfEy2HtHzU9IK4HYRJeQEIFr8x1zc9Ps/edit)
 
 ## 현재 범위
-2-A 공통 Android UI·로컬 데모와 Android CI가 구현됐습니다. Firebase 운영 연결·실시간 채팅·게임 로직·Play 배포는 후속 단계입니다.
+Google 로그인·지속형 온라인 방·실제 채팅·4종 게임·시즌 전적·안전 신고·계정 삭제·선택형 알림의 코드가 구현됐고 Firebase Emulator 통합 QA를 운영하고 있습니다. 로컬 데모는 Firebase 미설정 디버그 QA에서만 접근할 수 있습니다. 실제 서비스에는 운영 Firebase 배포 및 Play 설치본 실기기 검증이 필요합니다.
 
 ## Android 2-A 공통 UI 개발 기반
 
@@ -56,3 +56,9 @@
 - 릴리스 및 인증 정보는 GitHub Actions Secrets/Variables에서만 주입합니다. GitHub에 서명키·토큰·Firebase 설정값을 넣지 않습니다.
 - [2-D QA·배포 미완료 추적](https://github.com/hebi10/TalkSullae/issues/11) · [2-D 원본 캡처](https://drive.google.com/file/d/1KzuuCJAPzn6J-Os0pUlGwDZGShiPDsFu/view)
 
+
+## LIVE-07/08 출시 준비
+
+- [LIVE-07 화면 반응형·접근성](docs/qa/LIVE-07-accessibility-responsive.md): 채팅/랭킹/신고 글꼴 200%·폰/태블릿 레이아웃 개선
+- [LIVE-08 서버·Android 통합 QA 및 출시 게이트](docs/release/LIVE-08-release-readiness.md): Firebase Emulator 다중 사용자 경로와 GAME-06 게임 정산, 서명 AAB/운영 Firebase/Play 현장 점검
+- `0.5.0 (versionCode 6)`은 기존 Play 내부 테스트 `0.4.1 (5)`보다 높은 소스 버전입니다. 실제 서명·게시·검토·테스터 설치가 완료된 것은 아닙니다.
