@@ -7,6 +7,7 @@ const {saveMyProfile} = require("./src/userProfile");
 const { submitSafetyReport } = require("./src/safetyReport");
 const { sendRoomMessage } = require("./src/chatService");
 const gameSession = require("./src/game/sessionService");
+const {getMyCareer} = require("./src/game/careerService");
 const identityChat = require("./src/game/identityChatService");
 const liarChat = require("./src/game/liarChatService");
 const forbiddenChat = require("./src/game/forbiddenChatService");
@@ -31,6 +32,7 @@ exports.sendRoomMessage = onCall(config, request=>sendRoomMessage(db,request));
 exports.createGameSession = onCall(config, request=>gameSession.createGameSession(db,request));
 exports.gameSessionAction = onCall(config, request=>gameSession.gameSessionAction(db,request));
 exports.getMyGameSession = onCall(config, request=>gameSession.getMyGameSession(db,request));
+exports.getMyCareer = onCall(config, request=>getMyCareer(db,request));
 exports.findActiveGameSession = onCall(config, request=>gameSession.findActiveGameSession(db,request));
 exports.findRecentCompletedGameSession = onCall(config,
   request=>gameSession.findRecentCompletedGameSession(db,request));
