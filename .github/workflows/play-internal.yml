@@ -103,13 +103,13 @@ jobs:
           token_format: access_token
           access_token_scopes: https://www.googleapis.com/auth/androidpublisher
           create_credentials_file: false
-      - name: Discover existing internal track and verify version (no release)
+      - name: Inspect existing internal track (read-only, no new-version allocation)
         if: steps.readiness.outputs.can_check_play == 'true'
         env:
           PLAY_ACCESS_TOKEN: ${{ steps.wif.outputs.access_token || steps.json.outputs.access_token }}
         run: |
           python3 scripts/release/play_internal.py check --track auto \
-            --version-code "${{ steps.readiness.outputs.version_code }}" --report play-internal-preflight.json
+            --report play-internal-preflight.json
       - name: Save non-secret readiness report
         if: always()
         uses: actions/upload-artifact@v4

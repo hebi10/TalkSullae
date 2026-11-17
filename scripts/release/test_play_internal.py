@@ -58,6 +58,17 @@ class InternalPlayTests(unittest.TestCase):
                 with self.assertRaises(PlaySafetyError):
                     track_name(name)
 
+    def test_read_only_audit_accepts_already_published_source_version(self):
+        fake = FakeClient(prior=6, internal_track="qa")
+        report = check_preflight(fake, "auto")
+        self.assertEqual(report["current_max_code"], 6)
+        self.assertIsNone(report["requested_version_code"])
+        self.assertTrue(report["internal_track_exists"])
+        self.assertEqual(fake.calls, [])
+        self.assertEqual(len(fake.deleted), 1)
+        with self.assertRaisesRegex(PlaySafetyError, "Source versionCode must exceed"):
+            check_preflight(FakeClient(prior=6, internal_track="qa"), "auto", 6)
+
     def test_auto_checks_existing_internal_alias(self):
         fake = FakeClient(prior=3, internal_track="internal")
         report = check_preflight(fake, "auto", 4, require_existing_qa=True)
