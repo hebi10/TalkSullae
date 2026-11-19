@@ -1,34 +1,33 @@
 name: Android emulator UI checks
 
 on:
-  push:
-    branches: [feat/2a-compose-foundation]
-    paths:
-      - 'app/**'
-      - '.github/workflows/android-device.yml'
-      - 'build.gradle.kts'
-      - 'gradle/**'
-      - 'gradlew'
-      - 'settings.gradle.kts'
-  pull_request:
-    paths:
-      - 'app/**'
-      - '.github/workflows/android-device.yml'
-      - 'build.gradle.kts'
-      - 'gradle/**'
-      - 'gradlew'
-      - 'settings.gradle.kts'
   workflow_dispatch:
+    inputs:
+      expected_source_sha:
+        description: 'Exact selected commit SHA for optional targeted PR device QA'
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
   group: emulator-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
+  validate-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Require exact selected source revision
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+        run: |
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ && "$EXPECTED_SOURCE_SHA" == "$GITHUB_SHA" ]] || { echo "::error::Selected source SHA mismatch"; exit 1; }
+
   emulator:
+    needs: validate-source
     name: Compose navigation on Android emulator
     runs-on: ubuntu-latest
     timeout-minutes: 40
