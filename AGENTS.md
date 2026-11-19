@@ -34,3 +34,12 @@
 - `qa-2d.yml`은 정확한 최종 main SHA에 수동 실행하며 기존 `workflow_call` 재사용의 전체 QA 선택 기능도 보존한다.
 - `android-device.yml`의 별도 API 35 기기 계측은 고위험 PR에 필요한 경우 명시적 SHA로 수동 실행한다.
 - `release-build.yml`은 동일 main SHA의 자동 CI뿐 아니라 `workflow_dispatch` 이벤트로 완료된 2-D 전체 QA 성공을 추가로 검증한다. Firebase 규칙·채팅·게임 엔진의 선별 사전 테스트를 생략하지 않는다.
+
+
+## OPS-09 — 내부 테스트 배포 1회 승인 (2026-11-19)
+- 사용자가 **내부 테스트 배포**를 명시적으로 요청하면 별도의 단계별 재승인 없이 `.github/workflows/internal-release-once.yml`의 1회 승인으로 **현재 main 기본 CI 확인 → 최종 Android 전체 QA → 기존 OPS-03 서명 AAB 빌드 → 기존 OPS-04 Google Play 내부 테스트 업로드**를 순차 실행할 수 있다. 이는 이 문서의 OPS-02 제4절에서 내부 테스트용 빌드 및 게시 승인을 각각 요구한 부분의 명시적인 예외다.
+- `internal_release_approved=true`, 정확한 동결 `main` SHA, 앱별 release_tag/versionCode, 안전한 QA·빌드 증빙이 필수이며 어느 단계든 누락·실패·SHA 변경이 발생하면 즉시 다음 단계를 차단한다.
+- 전체 QA는 배치 종료 후 이 승인된 파이프라인에서 **앱당 1회만** 수행한다. PR·중간 병합에서 3환경 계측을 중복하지 않으며 민감 데이터 삭제·복구·권한·결제 변경의 선별 PR 검증은 유지한다.
+- 새 파이프라인은 기존 OPS-03·OPS-04 검증 스크립트, 기존 서명 인증서·Play 계정, 서명 AAB SHA-256·versionCode·applicationId 및 Play 업로드 승인 문구를 변경하지 않는다. 실제 업로드 수락·Console 제공·테스터 설치 여부는 각각 구분해 보고한다.
+- **비공개 테스트 승격, 정식 출시, Play 이미지/등록정보 업로드, Firebase 서버 배포는 이 승인에 포함되지 않으며 별도 승인**이 필요하다.
+- 앱의 실제 Google Play 게시 작업은 사용자가 이후 내부 배포를 승인한 경우에만 실행한다. 워크플로를 추가·병합하는 작업 자체는 배포 승인이 아니다.
