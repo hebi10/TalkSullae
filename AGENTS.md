@@ -28,3 +28,9 @@
 
 ### 앱별 보존 지침
 - 채팅 추리 게임의 멀티플레이 상태, Firebase 보안 규칙 및 기존 게임 엔진 API를 보존한다. `.github/workflows/android.yml`, `android-device.yml`, `firebase-security.yml`의 검증을 유지하고 `play-internal.yml`·`play-promote-closed.yml`의 수동 승인 경계를 지킨다.
+
+## CI-DEDUP-20261119 — PR 경량 CI와 Android 최종 계측 분리
+- PR/main에서는 `android.yml`, `firebase-security.yml`, `qa-2d.yml`의 Android 단위·빌드·Firebase 보안 검사를 유지한다. `qa-2d.yml`의 API 29·35·36·태블릿 전수 계측은 PR/main에서 자동 실행하지 않는다.
+- `qa-2d.yml`은 정확한 최종 main SHA에 수동 실행하며 기존 `workflow_call` 재사용의 전체 QA 선택 기능도 보존한다.
+- `android-device.yml`의 별도 API 35 기기 계측은 고위험 PR에 필요한 경우 명시적 SHA로 수동 실행한다.
+- `release-build.yml`은 동일 main SHA의 자동 CI뿐 아니라 `workflow_dispatch` 이벤트로 완료된 2-D 전체 QA 성공을 추가로 검증한다. Firebase 규칙·채팅·게임 엔진의 선별 사전 테스트를 생략하지 않는다.
