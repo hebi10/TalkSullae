@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
@@ -57,6 +59,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun OnlineRoomChatHost(
@@ -111,7 +114,15 @@ internal fun OnlineRoomChatHost(
                 listState.firstVisibleItemScrollOffset > 80
         }
     }
-    val newestId = state.messages.lastOrNull()?.id
+    var displayNow by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            displayNow = System.currentTimeMillis()
+            delay(30_000L)
+        }
+    }
+    val visibleMessages = state.messages.filter { it.expiresAtMillis == null || it.expiresAtMillis > displayNow }
+    val newestId = state.pending?.requestId ?: visibleMessages.lastOrNull()?.id
     LaunchedEffect(newestId) {
         if (newestId != null && listState.firstVisibleItemIndex <= 1) {
             listState.animateScrollToItem(0)
@@ -134,7 +145,7 @@ internal fun OnlineRoomChatHost(
 
         if (state.fromCache) {
             Text(
-                "저장된 메시지를 표시 중입니다. 네트워크 상태에 따라 최신 내용이 아닐 수 있습니다.",
+                "방 접근 권한을 확인할 수 없어 채팅을 숨겼습니다. 연결되면 다시 표시합니다.",
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 style = MaterialTheme.typography.bodySmall
             )
@@ -174,7 +185,23 @@ internal fun OnlineRoomChatHost(
             contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(state.messages.asReversed(), key = { it.id }) { message ->
+            state.pending?.let { pending ->
+                item(key = "pending-${pending.requestId}") {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        if (state.sending) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Text("전송 확인 필요", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error)
+                        Surface(color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.padding(start = 8.dp).widthIn(max = 560.dp).fillMaxWidth(0.82f)) {
+                            Text(pending.text, modifier = Modifier.padding(12.dp)
+                                .testTag("online-chat-pending-message"))
+                        }
+                    }
+                }
+            }
+            items(visibleMessages.asReversed(), key = { it.id }) { message ->
                 if (message.senderUid in safety.blocked) {
                     Column(Modifier.fillMaxWidth().padding(8.dp)) {
                         Text("차단한 사용자의 메시지입니다.")
@@ -204,7 +231,7 @@ internal fun OnlineRoomChatHost(
                     }
                 }
             }
-            if (!state.initialLoading && state.messages.isEmpty() && state.readError == null) {
+            if (!state.initialLoading && visibleMessages.isEmpty() && state.pending == null && state.readError == null && !state.fromCache) {
                 item(key = "empty-chat") { Text("아직 메시지가 없습니다. 첫 메시지를 보내 보세요.") }
             }
             if (state.canLoadOlder) {
@@ -260,7 +287,7 @@ internal fun OnlineRoomChatHost(
                 .testTag("online-chat-input"),
             label = { Text("메시지") },
             maxLines = 5,
-            enabled = state.pending == null && !state.initialLoading && state.readError == null,
+            enabled = true,
             supportingText = { Text("${RoomChatInputPolicy.normalize(state.draft).length}/1000자") },
             shape = RoundedCornerShape(8.dp)
         )
@@ -269,7 +296,8 @@ internal fun OnlineRoomChatHost(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                TextButton(onClick = vm::retrySend, modifier = Modifier.weight(1f)) {
+                TextButton(onClick = vm::retrySend, modifier = Modifier.weight(1f),
+                    enabled = !state.fromCache && state.readError == null && !state.initialLoading) {
                     Text("같은 메시지 재시도")
                 }
                 TextButton(onClick = vm::abandonFailedSend, modifier = Modifier.weight(1f)) {
@@ -281,7 +309,7 @@ internal fun OnlineRoomChatHost(
                 label = if (state.sending) "메시지 전송 중…" else "전송",
                 onClick = vm::send,
                 enabled = !state.sending && !state.initialLoading &&
-                    state.readError == null && state.pending == null &&
+                    !state.fromCache && state.readError == null && state.pending == null &&
                     RoomChatInputPolicy.error(state.draft) == null,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
                     .testTag("online-chat-send")
@@ -350,7 +378,7 @@ private fun RoomChatMessageRow(message: RoomChatMessage, isOwn: Boolean) {
         horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start
     ) {
         Surface(
-            color = MaterialTheme.colorScheme.surface,
+            color = if (isOwn) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(0.88f)
         ) {
