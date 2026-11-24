@@ -29,6 +29,8 @@ const baseConfig = {region:"asia-northeast3",maxInstances:10,memory:"256MiB"};
 const config = {...baseConfig,enforceAppCheck:process.env.TALKSULLAE_ENFORCE_APP_CHECK==="true"};
 
 exports.createRoom = onCall(config, request=>guardRoomOperation(db,request,"createRoom",room.createRoom));
+exports.updateRoom = onCall(config, request=>guardRoomOperation(db,request,"updateRoom",room.updateRoom));
+exports.archiveRoom = onCall(config, request=>guardRoomOperation(db,request,"archiveRoom",room.archiveRoom));
 exports.saveMyProfile = onCall(config, request=>saveMyProfile(db,request));
 exports.createInvitation = onCall(config, request=>guardRoomOperation(db,request,"createInvitation",room.createInvitation));
 exports.previewInvitation = onCall(config, request=>guardRoomOperation(db,request,"previewInvitation",room.previewInvitation));

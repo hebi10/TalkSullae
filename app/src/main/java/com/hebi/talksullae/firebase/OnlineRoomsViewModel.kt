@@ -138,6 +138,21 @@ internal class OnlineRoomsViewModel(
             stateMutable.update { it.copy(createdRoomId = newRoomId) }
         }
 
+    fun updateRoom(roomId: String, name: String, description: String, approval: Boolean, expectedRevision: Long) {
+        if (stateMutable.value.selectedId != roomId || stateMutable.value.selectedRoom?.ownerId != uid) return
+        action("방 정보를 수정했습니다.") {
+            repository.updateRoom(roomId, name, description, approval, expectedRevision)
+        }
+    }
+
+    fun archiveRoom(roomId: String) {
+        if (stateMutable.value.selectedId != roomId || stateMutable.value.selectedRoom?.ownerId != uid) return
+        action("방을 종료했습니다.") {
+            repository.archiveRoom(roomId)
+            if (stateMutable.value.selectedId == roomId) closeRoom()
+        }
+    }
+
     fun generateInvitation(roomId: String) =
         action("초대 코드가 생성됐습니다. 신뢰하는 친구에게만 공유해 주세요.") {
             val result = repository.createInvitation(roomId)

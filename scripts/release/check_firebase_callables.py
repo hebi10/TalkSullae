@@ -7,6 +7,8 @@ from verify_aab import PROJECT
 
 APP_CRITICAL_CALLABLES = (
     "createRoom",
+    "updateRoom",
+    "archiveRoom",
     "saveMyProfile",
     "previewInvitation",
     "getMyCareer",

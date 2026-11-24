@@ -138,6 +138,15 @@ internal fun OnlineRoomsHost(
     val selected = state.entries.firstOrNull { it.id == state.selectedId }
     val isOwner = room?.ownerId == uid
     var confirmInviteRoomId by remember { mutableStateOf<String?>(null) }
+    var editRoomId by remember { mutableStateOf<String?>(null) }
+    var archiveRoomId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.selectedId, isOwner) {
+        if (!isOwner || editRoomId != state.selectedId) editRoomId = null
+        if (!isOwner || archiveRoomId != state.selectedId) archiveRoomId = null
+    }
+    LaunchedEffect(state.info) {
+        if (state.info == "방 정보를 수정했습니다.") editRoomId = null
+    }
     var inviteNow by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(state.selectedId, state.invite) {
         while (true) {
@@ -446,6 +455,10 @@ internal fun OnlineRoomsHost(
             Text("참가 ${room.memberCount}명 · 승인 대기 ${room.pendingCount}명")
             Text(if (isOwner) "내 역할: 방장" else "내 역할: 멤버")
             if (isOwner) {
+                OutlinedButton(onClick = { vm.clearNotice(); editRoomId = room.id },
+                    enabled = !state.working, modifier = Modifier.fillMaxWidth().testTag("room-edit-open")) {
+                    Text("방 정보 수정")
+                }
                 val hasCurrentCode = room.activeInviteHash != null &&
                     (room.activeInviteExpiresAtMillis == null || room.activeInviteExpiresAtMillis > inviteNow)
                 val currentInvite = state.invite?.takeIf { it.isCurrent(room, inviteNow) }
@@ -549,7 +562,37 @@ internal fun OnlineRoomsHost(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 shape = RoundedCornerShape(8.dp)
             ) { Text("이 방 나가기") }
+            if (isOwner) {
+                OutlinedButton(onClick = { archiveRoomId = room.id },
+                    enabled = !state.working && room.activeGameSessionId == null,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("room-archive-open")) {
+                    Text("방 종료", color = MaterialTheme.colorScheme.error)
+                }
+                if (room.activeGameSessionId != null) Text("진행 중인 게임을 종료한 뒤 방을 종료할 수 있습니다.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
         }
+    }
+
+    if (room != null && isOwner && editRoomId == room.id) {
+        OnlineRoomEditDialog(room, state.working, state.error,
+            onDismiss = { if (!state.working) { editRoomId = null; vm.clearNotice() } },
+            onSave = { name, description, approval, revision ->
+                vm.updateRoom(room.id, name, description, approval, revision)
+            })
+    }
+    if (room != null && isOwner && archiveRoomId == room.id) {
+        AlertDialog(onDismissRequest = { archiveRoomId = null },
+            title = { Text("방을 종료하시겠습니까?") },
+            text = { Text("모든 멤버와 가입 대기자의 방 접근 권한 및 초대 코드가 종료됩니다. 채팅과 게임 기록은 보존 정책에 따라 관리되며 즉시 영구 삭제되지는 않습니다. 앱에서 되돌릴 수 없습니다.") },
+            confirmButton = {
+                TextButton(onClick = { archiveRoomId = null; vm.archiveRoom(room.id) },
+                    enabled = !state.working && room.activeGameSessionId == null,
+                    modifier = Modifier.testTag("room-archive-confirm")) {
+                    Text("방 종료", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { archiveRoomId = null }) { Text("취소") } })
     }
 
     confirmInviteRoomId?.let { roomId ->
@@ -649,5 +692,6 @@ private fun membershipLabel(status: String) = when (status) {
     "rejected" -> "가입 거절"
     "removed" -> "강퇴됨"
     "left" -> "탈퇴"
+    "archived" -> "종료된 방"
     else -> "정보 확인 중"
 }
