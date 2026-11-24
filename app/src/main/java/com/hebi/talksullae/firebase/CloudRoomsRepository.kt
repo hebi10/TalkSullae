@@ -4,6 +4,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
+import java.security.MessageDigest
 
 data class CloudRoomIndex(
     val id: String,
@@ -20,17 +21,28 @@ data class CloudRoom(
     val memberCount: Int,
     val pendingCount: Int,
     val requiresApproval: Boolean,
-    val activeGameSessionId: String? = null
+    val activeGameSessionId: String? = null,
+    val activeInviteHash: String? = null,
+    val activeInviteExpiresAtMillis: Long? = null
 )
 
 data class CloudMember(
     val uid: String,
     val name: String,
-    val status: String
+    val status: String,
+    val avatar: String? = null
 )
 
 data class JoinResult(val roomId: String, val status: String)
-data class Invitation(val code: String, val expiresAtMillis: Long)
+data class Invitation(val code: String, val expiresAtMillis: Long) {
+    fun isCurrent(room: CloudRoom, nowMillis: Long): Boolean {
+        if (expiresAtMillis <= nowMillis || !code.startsWith(room.id + ".")) return false
+        val token = code.substringAfter('.')
+        val hash = MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        return hash == room.activeInviteHash
+    }
+}
 data class InvitationPreview(
     val roomId: String,
     val roomName: String,
@@ -86,7 +98,9 @@ internal class CloudRoomsRepository(
                     memberCount = doc.getLong("memberCount")?.toInt() ?: 0,
                     pendingCount = doc.getLong("pendingCount")?.toInt() ?: 0,
                     requiresApproval = doc.getBoolean("requiresApproval") ?: true,
-                    activeGameSessionId = doc.getString("activeGameSessionId")
+                    activeGameSessionId = doc.getString("activeGameSessionId"),
+                    activeInviteHash = doc.getString("activeInviteHash"),
+                    activeInviteExpiresAtMillis = doc.getTimestamp("activeInviteExpiresAt")?.toDate()?.time
                 )
             )
         }
@@ -99,7 +113,8 @@ internal class CloudRoomsRepository(
                     CloudMember(
                         uid = it.id,
                         name = it.getString("displayName").orEmpty(),
-                        status = it.getString("status").orEmpty()
+                        status = it.getString("status").orEmpty(),
+                        avatar = it.getString("avatar")
                     )
                 }.filter { it.status == "active" || it.status == "pending" })
             }

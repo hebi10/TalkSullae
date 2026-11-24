@@ -48,6 +48,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hebi.talksullae.design.PrimaryAction
+import com.hebi.talksullae.design.ProfileAvatar
 import com.hebi.talksullae.firebase.FirestoreRoomChatRepository
 import com.hebi.talksullae.firebase.RoomChatInputPolicy
 import com.hebi.talksullae.firebase.RoomChatMessage
@@ -399,12 +400,16 @@ private fun RoomChatMessageRow(message: RoomChatMessage, isOwn: Boolean) {
     }
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start
+        horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Top
     ) {
+        if (!isOwn) {
+            ProfileAvatar(message.senderAvatar, Modifier.padding(end = 8.dp, top = 8.dp).size(28.dp))
+        }
         Surface(
             color = if (isOwn) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(0.88f)
+            modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(if (isOwn) 0.88f else 0.94f)
         ) {
             Column(
                 modifier = Modifier.padding(12.dp),

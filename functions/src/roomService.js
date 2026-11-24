@@ -65,7 +65,7 @@ async function createInvitation(db, request) {
     const [room,actor] = await Promise.all([tx.get(roomRef),tx.get(actorRef)]);
     requireOwner(room,actor,uid);
     tx.create(roomRef.collection("invites").doc(hash),{createdBy:uid,expiresAt,createdAt:now()});
-    tx.update(roomRef,{activeInviteHash:hash});
+    tx.update(roomRef,{activeInviteHash:hash,activeInviteExpiresAt:expiresAt});
   });
   return {code:`${roomId}.${token}`,expiresAt:expiresAt.toMillis()};
 }
@@ -224,7 +224,7 @@ async function leaveRoom(db, request) {
     tx.update(memberRef,{status:"left",updatedAt:now()});
     tx.set(indexRef,{status:"left",roomName:room.data().name,updatedAt:now()});
     if (isOwner) {
-      tx.update(roomRef,{status:"archived",activeInviteHash:null,memberCount:0});
+      tx.update(roomRef,{status:"archived",activeInviteHash:null,activeInviteExpiresAt:null,memberCount:0});
     } else {
       tx.update(roomRef,active
         ? {memberCount:FieldValue.increment(-1)}
