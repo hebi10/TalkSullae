@@ -10,6 +10,7 @@ const { submitSafetyReport } = require("./src/safetyReport");
 const { sendRoomMessage, deleteRoomMessage, markRoomChatRead } = require("./src/chatService");
 const gameSession = require("./src/game/sessionService");
 const {getMyCareer} = require("./src/game/careerService");
+const {getRoomFriendRecords} = require("./src/game/friendRecordService");
 const identityChat = require("./src/game/identityChatService");
 const liarChat = require("./src/game/liarChatService");
 const forbiddenChat = require("./src/game/forbiddenChatService");
@@ -50,6 +51,7 @@ exports.createGameSession = onCall(config, request=>gameSession.createGameSessio
 exports.gameSessionAction = onCall(config, request=>gameSession.gameSessionAction(db,request));
 exports.getMyGameSession = onCall(config, request=>gameSession.getMyGameSession(db,request));
 exports.getMyCareer = onCall(config, request=>getMyCareer(db,request));
+exports.getRoomFriendRecords = onCall(config, request=>guardRoomOperation(db,request,"getRoomFriendRecords",getRoomFriendRecords));
 exports.findActiveGameSession = onCall(config, request=>gameSession.findActiveGameSession(db,request));
 exports.findRecentCompletedGameSession = onCall(config,
   request=>gameSession.findRecentCompletedGameSession(db,request));

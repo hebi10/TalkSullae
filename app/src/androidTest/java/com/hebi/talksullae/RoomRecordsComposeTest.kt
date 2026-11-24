@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.hebi.talksullae.design.TalkSullaeTheme
 import com.hebi.talksullae.ui.rooms.RecentGameRecord
 import com.hebi.talksullae.ui.rooms.RoomRecordEvent
@@ -57,5 +58,18 @@ class RoomRecordsComposeTest {
         }
         compose.onNodeWithTag("records-previous-season").performClick()
         compose.runOnIdle{assertEquals(1,previous)}
+    }
+
+    @Test fun friendEntryOpensOnlySelectedMember(){
+        var chosen=""
+        compose.setContent {
+            TalkSullaeTheme {
+                RoomRecordsContent("친구방",sample(), mapOf("owner" to "민지","friend" to "지훈"),
+                    onPrevious={},onNext={},canPrevious=true,canNext=false,onBack={},
+                    friendNames=mapOf("friend" to "지훈"),onFriendClick={chosen=it})
+            }
+        }
+        compose.onNodeWithTag("friend-records-open-friend").performScrollTo().performClick()
+        compose.runOnIdle{assertEquals("friend",chosen)}
     }
 }
