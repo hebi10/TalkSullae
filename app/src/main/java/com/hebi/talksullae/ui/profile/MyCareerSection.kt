@@ -81,6 +81,10 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
             Text("획득한 시즌점 " + career.totalSeasonPoints + "점")
             if (career.achievements.isNotEmpty()) {
                 Text("업적 " + career.achievements.size + "개")
+                val labels = mapOf("first_game" to "첫 게임 완료", "games_10" to "10경기 참가",
+                    "wins_5" to "5승 달성", "streak_3" to "3연승", "streak_5" to "5연승",
+                    "liar_wins_5" to "라이어 5승", "identity_wins_10" to "정체 추리 10승")
+                career.achievements.mapNotNull { labels[it] }.forEach { Text(it) }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf(
@@ -88,7 +92,10 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
                     "forbidden" to "금지어", "balance" to "밸런스 예측"
                 ).forEach { (id, label) ->
                     val game = career.games[id]
-                    Text(label + " · " + (game?.plays ?: 0) + "경기 · " + (game?.wins ?: 0) + "승")
+                    val plays = game?.plays ?: 0L
+                    val wins = game?.wins ?: 0L
+                    val rate = if (plays == 0L) "기록 없음" else "${((wins.toDouble() / plays) * 100).toInt().coerceIn(0,100)}% 승률"
+                    Text("$label · ${plays}경기 · ${wins}승 · $rate")
                 }
             }
         }

@@ -130,12 +130,14 @@ internal fun OnlineBalanceGameHost(
                 .testTag("balance-refresh")){Text("게임 다시 확인")}
         }
         if(session!=null){
-            Text("상태: ${phase?.name ?: "확인 중"} · ${if(mode=="async")"비동기" else "실시간"}",
+            Text("상태: ${gamePhaseLabel(phase)} · ${if(mode=="async")"비동기" else "실시간"}",
                 style=MaterialTheme.typography.titleMedium)
-            remaining?.let{Text("남은 시간 약 ${it}초 · 서버 기준")}
+            remaining?.let{GameDeadlineStatus(it)}
             if(session.fromCache)Text("캐시 상태입니다. 서버 연결을 확인해 주세요.")
             if(phase==GamePhase.WAITING||phase==GamePhase.READY){
                 Text("참가 ${session.participants.size}명 · 최소 2명, 최대 10명")
+                Text(lobbyReadinessLabel(session.participants.size, session.participants.count { it.ready }, 2, phase, session.fromCache),
+                    style = MaterialTheme.typography.bodySmall)
                 session.participants.forEach{player->
                     Row(Modifier.fillMaxWidth()){
                         Text(names[player.uid]?:"친구",Modifier.weight(1f))
@@ -153,9 +155,9 @@ internal fun OnlineBalanceGameHost(
                         enabled=!state.busy&&state.pending==null,
                         modifier=Modifier.fillMaxWidth().testTag("balance-ready"))
                 }
-                if(uid==ownerId&&phase==GamePhase.READY){
+                if(uid==ownerId){
                     PrimaryAction("밸런스 게임 시작",onClick={vm.action("start")},
-                        enabled=!state.busy&&state.pending==null,
+                        enabled = phase == GamePhase.READY && !session.fromCache && !state.busy&&state.pending==null,
                         modifier=Modifier.fillMaxWidth().testTag("balance-start"))
                 }
             }
@@ -215,6 +217,7 @@ internal fun OnlineBalanceGameHost(
                 Text(session.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.",
                     modifier=Modifier.testTag("balance-result"))
                 if(phase==GamePhase.FINISHED){
+                    OutlinedButton(onClick=onBack,modifier=Modifier.fillMaxWidth()){Text("방으로 돌아가기")}
                     OutlinedButton(
                         onClick=vm::refresh,enabled=!state.busy,
                         modifier=Modifier.fillMaxWidth().testTag("balance-next-refresh")

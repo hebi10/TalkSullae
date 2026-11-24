@@ -63,13 +63,14 @@ internal fun ActiveRoomGameBanner(
             Row(modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(label, style = MaterialTheme.typography.titleSmall)
-                Text(session.phase.wireValue, style = MaterialTheme.typography.bodySmall)
+                Text(gamePhaseLabel(session.phase), style = MaterialTheme.typography.bodySmall)
             }
             if (snapshot?.fromCache == true) {
                 Text("저장된 게임 상태입니다. 서버 연결 후 최신 단계가 표시됩니다.")
             }
             TextButton(
                 onClick = { onResume(session.gameId) },
+                enabled = snapshot?.fromCache == false,
                 modifier = Modifier.testTag("active-game-resume")
             ) { Text("진행 중 게임 이어하기") }
         }
