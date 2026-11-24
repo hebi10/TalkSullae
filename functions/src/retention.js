@@ -33,4 +33,31 @@ async function expireDueMessages(db,now=Date.now){
   return counts;
 }
 
-module.exports={DAY_MS,ROOM_CHAT_DAYS,GAME_CHAT_DAYS,expiry,expireDueMessages};
+// Quota documents can be renewed by a concurrent request. Recheck expiry
+// inside a transaction instead of deleting based on an old query snapshot.
+async function expireRoomOperationLimits(db,now=Date.now){
+  const cutoff=now();
+  let removed=0;
+  for(let page=0;page<10;page++){
+    const due=await db.collection("roomOperationLimits")
+      .where("expiresAt","<=",Timestamp.fromMillis(cutoff)).limit(100).get();
+    if(due.empty)break;
+    const deleted=await db.runTransaction(async tx=>{
+      const current=await Promise.all(due.docs.map(doc=>tx.get(doc.ref)));
+      let count=0;
+      for(const doc of current){
+        const expiresAt=doc.exists?doc.get("expiresAt"):null;
+        if(expiresAt instanceof Timestamp && expiresAt.toMillis()<=cutoff){
+          tx.delete(doc.ref);
+          count++;
+        }
+      }
+      return count;
+    });
+    removed+=deleted;
+    if(due.size<100 || deleted===0)break;
+  }
+  return removed;
+}
+
+module.exports={DAY_MS,ROOM_CHAT_DAYS,GAME_CHAT_DAYS,expiry,expireDueMessages,expireRoomOperationLimits};

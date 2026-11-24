@@ -61,7 +61,10 @@ exports.processAccountDeletionQueue = onSchedule({
 }, async()=>{await safetyControls.processAccountDeletionQueue(db);});
 exports.expireDueMessages = onSchedule({
   schedule:"every 60 minutes",region:"asia-northeast3",maxInstances:1
-}, async()=>{await retention.expireDueMessages(db);});
+}, async()=>{
+  await retention.expireDueMessages(db);
+  await retention.expireRoomOperationLimits(db);
+});
 exports.expireGameSessionDeadlines = onSchedule({
   schedule:"* * * * *",region:"asia-northeast3",maxInstances:1,
   timeZone:"Asia/Seoul"
