@@ -18,7 +18,8 @@ internal data class RoomChatMessage(
     val text: String,
     val createdAtMillis: Long?,
     val expiresAtMillis: Long? = null,
-    val senderAvatar: String? = null
+    val senderAvatar: String? = null,
+    val deleted: Boolean = false
 )
 
 internal data class RoomChatPage(
@@ -55,6 +56,8 @@ internal interface RoomChatRepository {
         onError: (String) -> Unit
     ): ListenerRegistration
 
+    fun watchDeletionRevision(roomId: String, onRevision: (Long) -> Unit, onError: (String) -> Unit): ListenerRegistration? = null
+    suspend fun deleteMessage(roomId: String, messageId: String): Unit = error("삭제 기능을 사용할 수 없습니다.")
     suspend fun loadOlder(roomId: String, cursor: DocumentSnapshot): RoomChatPage
     suspend fun sendMessage(roomId: String, requestId: String, text: String): String
 }
@@ -81,7 +84,8 @@ internal class FirestoreRoomChatRepository(
             text = text,
             createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time,
             expiresAtMillis = snapshot.getTimestamp("expiresAt")?.toDate()?.time,
-            senderAvatar = snapshot.getString("senderAvatar")
+            senderAvatar = snapshot.getString("senderAvatar"),
+            deleted = snapshot.getTimestamp("deletedAt") != null
         )
     }
 
@@ -102,6 +106,21 @@ internal class FirestoreRoomChatRepository(
                 )
             )
         }
+    }
+
+    override fun watchDeletionRevision(roomId: String, onRevision: (Long) -> Unit, onError: (String) -> Unit): ListenerRegistration =
+        db.collection("rooms").document(roomId).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot,error ->
+            if (error != null) onError("방 권한을 다시 확인해 주세요.")
+            else if (snapshot != null && !snapshot.metadata.isFromCache) {
+                if (!snapshot.exists() || snapshot.getString("status") != "active") onError("방에 접근할 수 없습니다.")
+                else onRevision(snapshot.getLong("chatDeletionRevision") ?: 0L)
+            }
+        }
+
+    override suspend fun deleteMessage(roomId: String, messageId: String) {
+        val result = functions.getHttpsCallable("deleteRoomMessage")
+            .call(mapOf("roomId" to roomId, "messageId" to messageId)).await().data as? Map<*, *>
+        check(result?.get("deleted") == true) { "메시지 삭제 결과를 확인할 수 없습니다." }
     }
 
     override suspend fun loadOlder(roomId: String, cursor: DocumentSnapshot): RoomChatPage {

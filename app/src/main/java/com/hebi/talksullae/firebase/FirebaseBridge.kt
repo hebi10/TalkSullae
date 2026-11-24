@@ -75,6 +75,7 @@ class GoogleLogin(private val activity: Activity) {
                 PushDeviceRepository(activity).disableOnSignOut()
             }
             FirebaseAuth.getInstance().signOut()
+            EncryptedRoomDraftStore.clearAll(activity)
         }
         runCatching {
             CredentialManager.create(activity).clearCredentialState(ClearCredentialStateRequest())

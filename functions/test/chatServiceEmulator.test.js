@@ -4,7 +4,7 @@ const {before, after, test} = require("node:test");
 const assert = require("node:assert/strict");
 const {initializeApp, deleteApp} = require("firebase-admin/app");
 const {getFirestore, Timestamp} = require("firebase-admin/firestore");
-const {sendRoomMessage} = require("../src/chatService");
+const {sendRoomMessage,deleteRoomMessage} = require("../src/chatService");
 const {createRoom, requestJoin, createInvitation, changeMember} = require("../src/roomService");
 
 let app;
@@ -105,4 +105,25 @@ test("concurrent identical retries create one document", async () => {
   assert.equal(responses[0].messageId, responses[1].messageId);
   const list = await db.collection("rooms").doc(roomId).collection("messages").get();
   assert.equal(list.size, 1);
+});
+
+test("only the author can delete a message and retries never resurrect its text", async () => {
+  const roomId = await roomWithOwner();
+  const invite = await createInvitation(db,{...auth("owner"),data:{roomId}});
+  await requestJoin(db,{...auth("delete-guest"),data:{code:invite.code}});
+  await changeMember(db,{...auth("owner"),data:{roomId,targetUid:"delete-guest",action:"approve"}});
+  const req = message(roomId,10,"삭제 전 원문");
+  const {messageId} = await sendRoomMessage(db,req);
+  const data={roomId,messageId};
+  await assert.rejects(deleteRoomMessage(db,{...auth("delete-guest"),data}),e=>e.code==="permission-denied");
+  const first=await deleteRoomMessage(db,{...auth("owner"),data});
+  assert.equal(first.deduplicated,false);
+  const second=await deleteRoomMessage(db,{...auth("owner"),data});
+  assert.equal(second.deduplicated,true);
+  await sendRoomMessage(db,req);
+  const roomRef=db.collection("rooms").doc(roomId);
+  const messageRef=roomRef.collection("messages").doc(messageId);
+  assert.equal((await messageRef.get()).get("text"),"삭제된 메시지입니다.");
+  assert.ok((await messageRef.get()).get("deletedAt"));
+  assert.equal((await roomRef.get()).get("chatDeletionRevision"),1);
 });

@@ -27,10 +27,14 @@ internal data class RoomChatState(
     val readError: String? = null,
     val historyError: String? = null,
     val sendError: String? = null,
-    val info: String? = null
+    val info: String? = null,
+    val deletingId: String? = null
 )
 
-internal class RoomChatViewModel(private val repository: RoomChatRepository) : ViewModel() {
+internal class RoomChatViewModel(
+    private val repository: RoomChatRepository,
+    private val draftStore: RoomChatDraftStore? = null
+) : ViewModel() {
     private val mutable = MutableStateFlow(RoomChatState())
     val state: StateFlow<RoomChatState> = mutable
     private var listener: ListenerRegistration? = null
@@ -40,16 +44,22 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
     private var oldestCursor: DocumentSnapshot? = null
     private var firstPageReceived = false
     private var readGeneration = 0L
+    private var historyGeneration = 0L
+    private var deletionListener: ListenerRegistration? = null
+    private var lastDeletionRevision: Long? = null
 
     fun start(roomId: String) {
         if (activeRoomId == roomId && listener != null) return
         stop()
         activeRoomId = roomId
-        mutable.value = RoomChatState()
+        val saved = draftStore?.load(roomId)
+        mutable.value = RoomChatState(draft = saved?.draft.orEmpty(), pending = saved?.pending,
+            sendError = if (saved?.pending != null) "이전 전송 결과를 확인해 주세요. 같은 메시지 재시도로 중복 저장을 방지합니다." else null)
         val generation = readGeneration
         listener = repository.watchRecent(roomId, { page ->
             if (activeRoomId == roomId && generation == readGeneration) {
                 if (page.fromCache) {
+                    historyGeneration++
                     recent = emptyList()
                     older = emptyList()
                     oldestCursor = null
@@ -78,6 +88,7 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
             }
         }, { message ->
             if (activeRoomId == roomId && generation == readGeneration) {
+                historyGeneration++
                 recent = emptyList()
                 older = emptyList()
                 oldestCursor = null
@@ -92,10 +103,31 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
                 }
             }
         })
+        deletionListener = repository.watchDeletionRevision(roomId, { revision ->
+            if (activeRoomId == roomId && generation == readGeneration) {
+                val previous = lastDeletionRevision
+                lastDeletionRevision = revision
+                if (previous != null && revision != previous) retryRead()
+            }
+        }, { error ->
+            if (activeRoomId == roomId && generation == readGeneration) {
+                historyGeneration++
+                recent = emptyList()
+                older = emptyList()
+                oldestCursor = null
+                firstPageReceived = false
+                mutable.update { it.copy(messages = emptyList(), canLoadOlder = false,
+                    loadingOlder = false, initialLoading = false, readError = error) }
+            }
+        })
     }
 
     fun stop() {
         readGeneration++
+        historyGeneration++
+        deletionListener?.remove()
+        deletionListener = null
+        lastDeletionRevision = null
         listener?.remove()
         listener = null
         activeRoomId = null
@@ -130,18 +162,24 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
     fun updateDraft(value: String) {
         mutable.update { it.copy(draft = value, info = null,
             sendError = if (it.pending == null) null else it.sendError) }
+        activeRoomId?.let { room ->
+            if (!persist(room, mutable.value)) mutable.update { it.copy(info = "이 기기에 초안을 저장하지 못했습니다.") }
+        }
     }
+
+    private fun persist(roomId: String, state: RoomChatState, durable: Boolean = false): Boolean =
+        draftStore?.save(roomId, StoredRoomDraft(state.draft, state.pending), durable) ?: true
 
     fun loadOlder() {
         val roomId = activeRoomId ?: return
         val cursor = oldestCursor ?: return
         if (!mutable.value.canLoadOlder || mutable.value.loadingOlder || mutable.value.fromCache) return
-        val generation = readGeneration
+        val generation = historyGeneration
         mutable.update { it.copy(loadingOlder = true, historyError = null) }
         viewModelScope.launch {
             try {
                 val page = repository.loadOlder(roomId, cursor)
-                if (activeRoomId != roomId || generation != readGeneration || mutable.value.fromCache || mutable.value.readError != null || page.fromCache) return@launch
+                if (activeRoomId != roomId || generation != historyGeneration || mutable.value.fromCache || mutable.value.readError != null || page.fromCache) return@launch
                 older = (older + page.messages).associateBy { it.id }.values.toList()
                 if (page.oldestSnapshot != null) oldestCursor = page.oldestSnapshot
                 mutable.update {
@@ -153,11 +191,11 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
                     )
                 }
             } catch (_: Exception) {
-                if (activeRoomId == roomId && generation == readGeneration && !mutable.value.fromCache) {
+                if (activeRoomId == roomId && generation == historyGeneration && !mutable.value.fromCache) {
                     mutable.update { it.copy(historyError = "이전 메시지를 불러오지 못했습니다. 다시 시도해 주세요.") }
                 }
             } finally {
-                if (activeRoomId == roomId && generation == readGeneration) mutable.update { it.copy(loadingOlder = false) }
+                if (activeRoomId == roomId && generation == historyGeneration) mutable.update { it.copy(loadingOlder = false) }
             }
         }
     }
@@ -176,7 +214,12 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
             requestId = UUID.randomUUID().toString(),
             text = RoomChatInputPolicy.normalize(draft)
         )
-        mutable.update { it.copy(pending = pending, draft = "", sendError = null, info = null) }
+        val next = mutable.value.copy(pending = pending, draft = "", sendError = null, info = null)
+        if (!persist(roomId, next, durable = true)) {
+            mutable.update { it.copy(sendError = "전송 복구 정보를 저장할 수 없어 전송하지 않았습니다.") }
+            return
+        }
+        mutable.value = next
         submit(roomId, pending)
     }
 
@@ -188,7 +231,9 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
     }
 
     fun abandonFailedSend() {
+        val roomId = activeRoomId ?: return
         if (mutable.value.sending || mutable.value.pending == null) return
+        val previous = mutable.value
         mutable.update {
             it.copy(
                 draft = if (it.draft.isBlank()) it.pending?.text.orEmpty() else it.draft,
@@ -196,6 +241,32 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
                 sendError = null,
                 info = "이전 메시지의 서버 처리 여부는 확인되지 않았습니다. 새로 보내면 중복될 수 있습니다."
             )
+        }
+        if (!persist(roomId, mutable.value, durable = true)) {
+            mutable.value = previous.copy(sendError = "기기에 저장된 전송 정보를 변경하지 못했습니다.")
+        }
+    }
+
+    fun deleteMessage(messageId: String) {
+        val roomId = activeRoomId ?: return
+        if (mutable.value.deletingId != null || mutable.value.fromCache || mutable.value.readError != null) return
+        mutable.update { it.copy(deletingId = messageId, info = null) }
+        viewModelScope.launch {
+            try {
+                repository.deleteMessage(roomId, messageId)
+                if (activeRoomId == roomId) {
+                    fun tombstone(messages: List<RoomChatMessage>) = messages.map {
+                        if (it.id == messageId) it.copy(text = "삭제된 메시지입니다.", deleted = true) else it
+                    }
+                    recent = tombstone(recent)
+                    older = tombstone(older)
+                    mutable.update { it.copy(messages = merge(), info = "메시지를 삭제했습니다.") }
+                }
+            } catch (_: Exception) {
+                if (activeRoomId == roomId) mutable.update { it.copy(info = "메시지를 삭제하지 못했습니다. 다시 확인해 주세요.") }
+            } finally {
+                if (activeRoomId == roomId) mutable.update { it.copy(deletingId = null) }
+            }
         }
     }
 
@@ -205,6 +276,7 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
         viewModelScope.launch {
             try {
                 repository.sendMessage(roomId, pending.requestId, pending.text)
+                draftStore?.complete(roomId, pending.requestId)
                 if (activeRoomId == roomId && mutable.value.pending == pending) {
                     mutable.update {
                         it.copy(
