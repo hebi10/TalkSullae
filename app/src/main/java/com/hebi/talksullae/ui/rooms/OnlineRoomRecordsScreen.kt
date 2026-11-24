@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -27,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -179,6 +183,8 @@ internal fun RoomRecordsContent(
     onPrevious:()->Unit,onNext:()->Unit,
     canPrevious:Boolean,canNext:Boolean,onBack:()->Unit
 ) {
+    var selectedGame by rememberSaveable(roomName) { mutableStateOf("all") }
+    var filterExpanded by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding()
             .padding(horizontal=16.dp,vertical=12.dp).testTag("room-records-screen"),
@@ -228,12 +234,12 @@ internal fun RoomRecordsContent(
         if(state.loading)CircularProgressIndicator()
         state.error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
         if(!state.loading&&state.ranking.isEmpty())Text("해당 시즌의 경기 기록이 없습니다.")
-        state.ranking.forEachIndexed{index,item->
+        competitionRanks(state.ranking).forEach{(rank,item)->
             Column(
                 modifier = Modifier.fillMaxWidth().testTag("records-ranked-" + item.uid),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text("${index + 1}위 · " + (names[item.uid] ?: "탈퇴한 멤버"),
+                Text("${rank}위 · " + (names[item.uid] ?: "탈퇴한 멤버"),
                     style = MaterialTheme.typography.bodyLarge)
                 Text("${item.points}점 · ${item.games}경기 · ${item.wins}승",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -244,8 +250,22 @@ internal fun RoomRecordsContent(
             style=MaterialTheme.typography.bodySmall)
         HorizontalDivider()
         Text("나의 최근 경기",style=MaterialTheme.typography.titleMedium)
-        if(state.recentGames.isEmpty())Text("아직 정산된 경기가 없습니다.")
-        state.recentGames.forEach{item->
+        Box {
+            OutlinedButton(onClick={filterExpanded=true},modifier=Modifier.fillMaxWidth().testTag("records-game-filter")){
+                Text(if(selectedGame=="all")"모든 게임" else gameLabels[selectedGame].orEmpty())
+            }
+            DropdownMenu(expanded=filterExpanded,onDismissRequest={filterExpanded=false}){
+                (listOf("all" to "모든 게임")+gameLabels.toList()).forEach{(id,label)->
+                    DropdownMenuItem(text={Text(label)},onClick={
+                        selectedGame=id
+                        filterExpanded=false
+                    },modifier=Modifier.testTag("records-filter-$id"))
+                }
+            }
+        }
+        val recent=state.recentGames.filter{selectedGame=="all"||it.gameId==selectedGame}
+        if(recent.isEmpty())Text(if(selectedGame=="all")"아직 정산된 경기가 없습니다." else "선택한 게임의 최근 기록이 없습니다.")
+        recent.forEach{item->
             Text((gameLabels[item.gameId]?:item.gameId)+
                 " · "+item.seasonId+
                 " · "+(if(item.win)"승리" else "패배/기권")+
@@ -258,5 +278,16 @@ internal fun RoomRecordsContent(
             Text(event.seasonId+" · "+(gameLabels[event.gameId]?:event.gameId)+
                 " · "+event.participants+"명")
         }
+    }
+}
+
+internal fun competitionRanks(items: List<SeasonRank>): List<Pair<Int, SeasonRank>> {
+    val sorted = items.sortedWith(compareByDescending<SeasonRank> { it.points }.thenBy { it.uid })
+    var rank = 0
+    var previous: Long? = null
+    return sorted.mapIndexed { index, item ->
+        if (item.points != previous) rank = index + 1
+        previous = item.points
+        rank to item
     }
 }

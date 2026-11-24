@@ -129,15 +129,16 @@ internal fun OnlineLiarGameHost(
         }
 
         if (snap != null) {
-            Text("상태: " + (phase?.name ?: "확인 중") + " · 라운드 " + snap.session.round,
+            Text("상태: " + (gamePhaseLabel(phase)) + " · 라운드 " + snap.session.round,
                 style = MaterialTheme.typography.titleMedium)
-            remaining?.let { Text("남은 시간 약 " + it + "초 · 서버 기준",
-                style = MaterialTheme.typography.bodySmall) }
+            remaining?.let { GameDeadlineStatus(it) }
             if (snap.fromCache) {
                 Text("캐시 상태입니다. 서버 동기화를 확인해 주세요.")
             }
             if (phase == GamePhase.WAITING || phase == GamePhase.READY) {
                 Text("참가 " + snap.participants.size + "명 / 4~10명")
+                Text(lobbyReadinessLabel(snap.participants.size, snap.participants.count { it.ready }, 4, phase, snap.fromCache),
+                    style = MaterialTheme.typography.bodySmall)
                 snap.participants.forEach { player ->
                     Row(modifier = Modifier.fillMaxWidth()) {
                         Text(names[player.uid] ?: "친구", modifier = Modifier.weight(1f))
@@ -155,9 +156,9 @@ internal fun OnlineLiarGameHost(
                         enabled = !state.busy && state.pendingAction == null,
                         modifier = Modifier.fillMaxWidth().testTag("liar-ready"))
                 }
-                if (uid == ownerId && phase == GamePhase.READY) {
+                if (uid == ownerId) {
                     PrimaryAction("라이어 게임 시작", onClick = { vm.action("start") },
-                        enabled = !state.busy && state.pendingAction == null,
+                        enabled = phase == GamePhase.READY && !snap.fromCache && !state.busy && state.pendingAction == null,
                         modifier = Modifier.fillMaxWidth().testTag("liar-start"))
                 }
             }
@@ -269,6 +270,9 @@ internal fun OnlineLiarGameHost(
                 Text("라이어 공개·최종 결과", style = MaterialTheme.typography.titleMedium)
                 Text(snap.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.",
                     modifier = Modifier.testTag("liar-result"))
+            }
+            if (phase == GamePhase.FINISHED) {
+                PrimaryAction("방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
             }
             if (phase == GamePhase.CANCELLED) Text("게임이 취소됐습니다.")
 

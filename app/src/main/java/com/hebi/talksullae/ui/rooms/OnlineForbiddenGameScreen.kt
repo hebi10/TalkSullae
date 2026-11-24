@@ -111,12 +111,14 @@ internal fun OnlineForbiddenGameHost(
                 modifier=Modifier.fillMaxWidth()){Text("게임 다시 확인")}
         }
         if(snap!=null){
-            Text("상태: ${phase?.name ?: "확인 중"} · 라운드 ${snap.session.round}",
+            Text("상태: ${gamePhaseLabel(phase)} · 라운드 ${snap.session.round}",
                 style=MaterialTheme.typography.titleMedium)
-            remaining?.let{Text("남은 시간 약 ${it}초 · 서버 기준")}
+            remaining?.let{GameDeadlineStatus(it)}
             if(snap.fromCache)Text("저장된 상태입니다. 서버 동기화를 확인해 주세요.")
             if(phase==GamePhase.WAITING||phase==GamePhase.READY){
                 Text("참가 ${snap.participants.size}명 · 최소 3명, 최대 10명")
+                Text(lobbyReadinessLabel(snap.participants.size, snap.participants.count { it.ready }, 3, phase, snap.fromCache),
+                    style = MaterialTheme.typography.bodySmall)
                 snap.participants.forEach{player->
                     Row(Modifier.fillMaxWidth()){
                         Text(names[player.uid]?:"친구",Modifier.weight(1f))
@@ -134,9 +136,9 @@ internal fun OnlineForbiddenGameHost(
                         enabled=!state.busy&&state.pendingAction==null,
                         modifier=Modifier.fillMaxWidth().testTag("forbidden-ready"))
                 }
-                if(uid==ownerId&&phase==GamePhase.READY){
+                if(uid==ownerId){
                     PrimaryAction("금지어 게임 시작",onClick={vm.action("start")},
-                        enabled=!state.busy&&state.pendingAction==null,
+                        enabled = phase == GamePhase.READY && !snap.fromCache && !state.busy&&state.pendingAction==null,
                         modifier=Modifier.fillMaxWidth().testTag("forbidden-start"))
                 }
             }
@@ -198,6 +200,9 @@ internal fun OnlineForbiddenGameHost(
                 Text("금지어 결과",style=MaterialTheme.typography.titleMedium)
                 Text(snap.publicState["publishedResult"] as? String ?: "결과 집계 중",
                     modifier=Modifier.testTag("forbidden-result"))
+            }
+            if (phase == GamePhase.FINISHED) {
+                PrimaryAction("방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
             }
             if(phase==GamePhase.CANCELLED)Text("게임이 취소됐습니다.")
             if(uid==ownerId&&phase!=GamePhase.FINISHED&&phase!=GamePhase.CANCELLED){

@@ -152,11 +152,10 @@ internal fun OnlineIdentityGameHost(
                     }
                 }
             }
-            Text("상태: ${phase?.name ?: "확인 중"} · 라운드 ${snapshot.session.round}",
+            Text("상태: ${gamePhaseLabel(phase)} · 라운드 ${snapshot.session.round}",
                 style = MaterialTheme.typography.titleMedium)
             remaining?.let {
-                Text("남은 시간 약 ${it}초 · 서버 마감 기준",
-                    style = MaterialTheme.typography.bodySmall)
+                GameDeadlineStatus(it)
             }
             if (snapshot.fromCache) {
                 Text("캐시 화면입니다. 서버 동기화를 확인해 주세요.",
@@ -165,6 +164,8 @@ internal fun OnlineIdentityGameHost(
 
             if (phase == GamePhase.WAITING || phase == GamePhase.READY) {
                 Text("참가 ${snapshot.participants.size}명 / 최대 10명 · 최소 4명")
+                Text(lobbyReadinessLabel(snapshot.participants.size, snapshot.participants.count { it.ready }, 4, phase, snapshot.fromCache),
+                    style = MaterialTheme.typography.bodySmall)
                 snapshot.participants.forEach { participant ->
                     Row(modifier = Modifier.fillMaxWidth()) {
                         Text(names[participant.uid] ?: "친구", modifier = Modifier.weight(1f))
@@ -182,9 +183,9 @@ internal fun OnlineIdentityGameHost(
                         enabled = !state.busy && state.pendingAction == null,
                         modifier = Modifier.fillMaxWidth().testTag("identity-ready"))
                 }
-                if (uid == ownerId && phase == GamePhase.READY) {
+                if (uid == ownerId) {
                     PrimaryAction("게임 시작", onClick = { vm.action("start") },
-                        enabled = !state.busy && state.pendingAction == null,
+                        enabled = phase == GamePhase.READY && !snapshot.fromCache && !state.busy && state.pendingAction == null,
                         modifier = Modifier.fillMaxWidth().testTag("identity-start"))
                 }
             }
@@ -257,6 +258,9 @@ internal fun OnlineIdentityGameHost(
                 Text("정체 공개·결과", style = MaterialTheme.typography.titleMedium)
                 Text(snapshot.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.")
                 if (phase == GamePhase.REVEAL) Text("곧 게임이 최종 종료됩니다.")
+            }
+            if (phase == GamePhase.FINISHED) {
+                PrimaryAction("방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
             }
             if (phase == GamePhase.CANCELLED) Text("게임이 취소됐습니다.")
 
