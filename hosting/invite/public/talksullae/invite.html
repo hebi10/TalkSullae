@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>톡술래 친구 초대</title>
+  <link rel="stylesheet" href="/talksullae/invite.css">
+  <script defer src="/talksullae/invite.js"></script>
+</head>
+<body>
+  <main>
+    <h1>톡술래 친구 초대</h1>
+    <p>초대받은 친구 방에 참여하세요. 앱을 설치한 뒤 초대 코드를 입력하거나 이 페이지에서 앱을 열 수 있습니다.</p>
+    <p id="message" role="status" aria-live="polite">초대 링크를 확인하고 있습니다.</p>
+    <section id="invite" hidden>
+      <label for="code">초대 코드</label>
+      <input id="code" type="text" readonly autocomplete="off" spellcheck="false">
+      <button id="copy" type="button">초대 코드 복사</button>
+      <a id="open">톡술래 앱 열기</a>
+    </section>
+    <a id="install" href="https://play.google.com/store/apps/details?id=com.hebi.talksullae" rel="noreferrer">Google Play에서 설치</a>
+    <p>테스트 버전은 등록된 테스터만 설치할 수 있습니다. 설치 후 이 페이지로 돌아오거나 복사한 코드를 앱의 초대 코드 입력란에 붙여 넣으세요.</p>
+    <p>초대 코드는 신뢰하는 친구에게만 공유하세요. 실제 가입 및 만료 여부는 앱 로그인 후 서버가 확인합니다.</p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,47 @@
+{
+  "hosting": {
+    "public": "build/invite-hosting",
+    "ignore": [
+      "firebase.invite-hosting.json",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/talksullae/invite",
+        "destination": "/talksullae/invite.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "Referrer-Policy",
+            "value": "no-referrer"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Content-Security-Policy",
+            "value": "default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/.well-known/assetlinks.json",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      }
+    ]
+  }
+}
