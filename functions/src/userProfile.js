@@ -4,7 +4,7 @@ const {FieldValue} = require("firebase-admin/firestore");
 const {HttpsError} = require("firebase-functions/v2/https");
 const {authUid,memberName} = require("./policy");
 
-const AVATARS = new Set(["부엉이","토끼","고양이"]);
+const AVATARS = new Set(["부엉이","토끼","고양이","강아지","곰","여우","판다","펭귄"]);
 const MAX_ROOMS = 100;
 
 function validateProfile(input) {

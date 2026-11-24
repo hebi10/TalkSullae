@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,6 +60,11 @@ import com.hebi.talksullae.firebase.CloudRoomsRepository
 import com.hebi.talksullae.firebase.OnlineRoomsRepository
 import com.hebi.talksullae.firebase.OnlineRoomsViewModel
 import com.hebi.talksullae.firebase.RoomChatRepository
+import com.hebi.talksullae.design.ProfileAvatar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun OnlineRoomsHost(
@@ -131,6 +137,14 @@ internal fun OnlineRoomsHost(
     val room = state.selectedRoom
     val selected = state.entries.firstOrNull { it.id == state.selectedId }
     val isOwner = room?.ownerId == uid
+    var confirmInviteRoomId by remember { mutableStateOf<String?>(null) }
+    var inviteNow by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(state.selectedId, state.invite) {
+        while (true) {
+            inviteNow = System.currentTimeMillis()
+            delay(15_000L)
+        }
+    }
     var chatVisible by rememberSaveable { mutableStateOf(false) }
     var identityVisible by rememberSaveable { mutableStateOf(false) }
     var liarVisible by rememberSaveable { mutableStateOf(false) }
@@ -432,23 +446,35 @@ internal fun OnlineRoomsHost(
             Text("참가 ${room.memberCount}명 · 승인 대기 ${room.pendingCount}명")
             Text(if (isOwner) "내 역할: 방장" else "내 역할: 멤버")
             if (isOwner) {
+                val hasCurrentCode = room.activeInviteHash != null &&
+                    (room.activeInviteExpiresAtMillis == null || room.activeInviteExpiresAtMillis > inviteNow)
+                val currentInvite = state.invite?.takeIf { it.isCurrent(room, inviteNow) }
+                if (hasCurrentCode && currentInvite == null) {
+                    Text("이전에 발급한 코드가 있습니다. 새로 발급하면 기존 코드는 사용할 수 없습니다.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 PrimaryAction(
-                    "새 초대 코드 발급 (이전 코드 폐기)",
-                    onClick = { vm.generateInvitation(room.id) },
-                    modifier = Modifier.fillMaxWidth(),
+                    if (hasCurrentCode) "초대 코드 재발급" else "친구 초대 코드 발급",
+                    onClick = {
+                        if (hasCurrentCode) confirmInviteRoomId = room.id
+                        else vm.generateInvitation(room.id)
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("live-invite-generate"),
                     enabled = !state.working
                 )
-                state.invite?.let { invite ->
+                currentInvite?.let { invite ->
                     ContentCard {
-                        Text("24시간 유효한 초대 코드입니다. 다른 사람에게 공개하지 마세요.")
+                        Text("만료: " + SimpleDateFormat("M월 d일 HH:mm", Locale.KOREA).format(Date(invite.expiresAtMillis)))
+                        Text("신뢰하는 친구에게만 공유해 주세요.", style = MaterialTheme.typography.bodySmall)
                         SelectionContainer {
                             Text(invite.code, style = MaterialTheme.typography.bodySmall)
                         }
                         val link = InviteLinkCodec.encode(invite.code)
-                        Text("초대는 24시간 뒤 만료되며 새 코드를 발급하면 이전 코드는 무효가 됩니다.")
+                        Text("새 코드를 발급하면 이전 코드는 무효가 됩니다.", style = MaterialTheme.typography.bodySmall)
                         if (link != null) {
                             OutlinedButton(
                                 onClick = {
+                                    if (!invite.isCurrent(room, System.currentTimeMillis())) return@OutlinedButton
                                     val send = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
                                         putExtra(
@@ -463,6 +489,7 @@ internal fun OnlineRoomsHost(
                             ) { Text("카카오톡 등으로 초대 공유") }
                             OutlinedButton(
                                 onClick = {
+                                    if (!invite.isCurrent(room, System.currentTimeMillis())) return@OutlinedButton
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     clipboard.setPrimaryClip(ClipData.newPlainText("톡술래 초대 링크", link))
                                 },
@@ -471,6 +498,7 @@ internal fun OnlineRoomsHost(
                         }
                         OutlinedButton(
                             onClick = {
+                                if (!invite.isCurrent(room, System.currentTimeMillis())) return@OutlinedButton
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 clipboard.setPrimaryClip(ClipData.newPlainText("톡술래 초대 코드", invite.code))
                             },
@@ -484,7 +512,9 @@ internal fun OnlineRoomsHost(
             state.members.forEach { member ->
                 ContentCard {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ProfileAvatar(member.avatar, Modifier.size(36.dp))
                             Text(
                                 member.name,
                                 modifier = Modifier.weight(1f),
@@ -519,6 +549,23 @@ internal fun OnlineRoomsHost(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 shape = RoundedCornerShape(8.dp)
             ) { Text("이 방 나가기") }
+        }
+    }
+
+    confirmInviteRoomId?.let { roomId ->
+        if (room?.id == roomId && isOwner) {
+            AlertDialog(
+                onDismissRequest = { confirmInviteRoomId = null },
+                title = { Text("초대 코드 재발급") },
+                text = { Text("이전 초대 코드는 즉시 무효가 됩니다. 새 코드를 발급할까요?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmInviteRoomId = null
+                        vm.generateInvitation(roomId)
+                    }, enabled = !state.working) { Text("재발급") }
+                },
+                dismissButton = { TextButton(onClick = { confirmInviteRoomId = null }) { Text("취소") } }
+            )
         }
     }
 
