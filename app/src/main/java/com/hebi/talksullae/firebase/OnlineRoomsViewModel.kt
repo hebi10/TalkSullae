@@ -141,7 +141,10 @@ internal class OnlineRoomsViewModel(
     fun generateInvitation(roomId: String) =
         action("초대 코드가 생성됐습니다. 신뢰하는 친구에게만 공유해 주세요.") {
             val result = repository.createInvitation(roomId)
-            stateMutable.update { it.copy(invite = result) }
+            stateMutable.update { state ->
+                if (state.selectedId == roomId && state.selectedRoom?.ownerId == uid) state.copy(invite = result)
+                else state
+            }
         }
 
     fun previewInvite(value: String): Boolean {

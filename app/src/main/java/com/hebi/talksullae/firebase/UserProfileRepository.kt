@@ -8,7 +8,7 @@ import kotlinx.coroutines.tasks.await
 data class UserProfile(val nickname: String, val avatar: String)
 
 object NicknamePolicy {
-    val avatars = listOf("부엉이", "토끼", "고양이")
+    val avatars = listOf("부엉이", "토끼", "고양이", "강아지", "곰", "여우", "판다", "펭귄")
 
     fun normalize(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFC).trim()
 

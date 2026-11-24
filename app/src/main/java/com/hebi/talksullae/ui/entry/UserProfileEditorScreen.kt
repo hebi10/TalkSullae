@@ -2,6 +2,8 @@ package com.hebi.talksullae.ui.entry
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -22,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.hebi.talksullae.design.PrimaryAction
+import com.hebi.talksullae.design.ProfileAvatar
 import com.hebi.talksullae.firebase.NicknamePolicy
 import com.hebi.talksullae.firebase.UserProfile
 
@@ -60,14 +63,19 @@ fun UserProfileEditorScreen(
             modifier = Modifier.fillMaxWidth().testTag("profile-nickname")
         )
         Text("기본 아바타", style = MaterialTheme.typography.titleMedium)
-        NicknamePolicy.avatars.forEach { option ->
-            FilterChip(
-                selected = avatar == option,
-                onClick = { avatar = option },
-                label = { Text(option) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .testTag("profile-avatar-$option")
-            )
+        NicknamePolicy.avatars.chunked(2).forEach { options ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.forEach { option ->
+                    FilterChip(
+                        selected = avatar == option,
+                        onClick = { avatar = option },
+                        label = { Text(option) },
+                        leadingIcon = { ProfileAvatar(option, Modifier.size(24.dp)) },
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                            .testTag("profile-avatar-$option")
+                    )
+                }
+            }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         PrimaryAction(

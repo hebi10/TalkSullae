@@ -1034,11 +1034,15 @@ private fun ProfileScreen(
         if (actualProfile == null) PreviewNotice()
         SectionTitle("내 프로필")
         ContentCard {
-            Text(
-                if (actualProfile != null) "${actualProfile.avatar} · $nickname"
-                else "$nickname · 데모 미리보기",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                com.hebi.talksullae.design.ProfileAvatar(actualProfile?.avatar,
+                    Modifier.size(48.dp))
+                Text(
+                    if (actualProfile != null) nickname else "$nickname · 데모 미리보기",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
             Text(
                 if (actualProfile != null) "친구에게 표시되는 닉네임입니다."
                 else "로그인 및 개인 통계는 연결 전입니다.",

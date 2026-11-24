@@ -24,3 +24,10 @@ test("rejects invalid profile values and untrusted fields",()=>{
     assert.throws(()=>validateProfile(data));
   }
 });
+
+test("all eight profile avatars remain valid while unknown values are rejected",()=>{
+  for(const avatar of ["부엉이","토끼","고양이","강아지","곰","여우","판다","펭귄"]){
+    assert.equal(validateProfile({nickname:"테스트",avatar}).avatar,avatar);
+  }
+  assert.throws(()=>validateProfile({nickname:"테스트",avatar:"기타"}));
+});
