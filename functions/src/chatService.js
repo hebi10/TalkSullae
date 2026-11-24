@@ -4,6 +4,7 @@ const {createHash} = require("node:crypto");
 const {FieldValue, Timestamp} = require("firebase-admin/firestore");
 const {HttpsError} = require("firebase-functions/v2/https");
 const {authUid, roomIdValue} = require("./policy");
+const {AVATARS} = require("./userProfile");
 const {ROOM_CHAT_DAYS,DAY_MS}=require("./retention");
 
 const MAX_MESSAGE_LENGTH = 1000;
@@ -59,6 +60,9 @@ async function sendRoomMessage(db, request) {
     }
 
     if (existing.exists) {
+      if (existing.get("senderUid") === uid && existing.get("deletedAt")) {
+        return {messageId, deduplicated: true};
+      }
       if (existing.get("senderUid") !== uid || existing.get("text") !== text) {
         throw new HttpsError("already-exists", "동일 요청 ID로 다른 메시지를 전송할 수 없습니다.");
       }
@@ -84,6 +88,7 @@ async function sendRoomMessage(db, request) {
     transaction.create(messageRef, {
       senderUid: uid,
       senderName,
+      senderAvatar: AVATARS.has(member.get("avatar")) ? member.get("avatar") : "부엉이",
       text,
       createdAt: FieldValue.serverTimestamp(),
       expiresAt: Timestamp.fromMillis(nowMillis+ROOM_CHAT_DAYS*DAY_MS)
@@ -93,7 +98,39 @@ async function sendRoomMessage(db, request) {
   });
 }
 
+async function deleteRoomMessage(db, request) {
+  const uid = authUid(request);
+  const input = request.data;
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).some(key => !["roomId","messageId"].includes(key)) ||
+      typeof input.messageId !== "string" || !/^[a-f0-9]{64}$/.test(input.messageId)) {
+    throw new HttpsError("invalid-argument","삭제할 메시지를 확인해 주세요.");
+  }
+  const roomId = roomIdValue(input.roomId);
+  const roomRef = db.collection("rooms").doc(roomId);
+  const messageRef = roomRef.collection("messages").doc(input.messageId);
+  const memberRef = roomRef.collection("members").doc(uid);
+  const deletionRef = db.collection("accountDeletionJobs").doc(uid);
+  return db.runTransaction(async tx => {
+    const [room, member, message, deletion] = await Promise.all([
+      tx.get(roomRef), tx.get(memberRef), tx.get(messageRef), tx.get(deletionRef)
+    ]);
+    if (deletion.exists || !room.exists || room.get("status") !== "active" ||
+        !member.exists || member.get("status") !== "active") {
+      throw new HttpsError("permission-denied","이 방의 활성 멤버만 메시지를 삭제할 수 있습니다.");
+    }
+    if (!message.exists || message.get("senderUid") !== uid) {
+      throw new HttpsError("permission-denied","본인이 작성한 메시지만 삭제할 수 있습니다.");
+    }
+    if (message.get("deletedAt")) return {deleted:true,deduplicated:true};
+    tx.update(messageRef,{text:"삭제된 메시지입니다.",deletedAt:FieldValue.serverTimestamp()});
+    tx.update(roomRef,{chatDeletionRevision:FieldValue.increment(1)});
+    return {deleted:true,deduplicated:false};
+  });
+}
+
 module.exports = {
+  deleteRoomMessage,
   MAX_MESSAGE_LENGTH,
   MIN_SEND_INTERVAL_MS,
   parseChatMessage,

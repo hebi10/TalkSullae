@@ -130,6 +130,7 @@ internal fun AccountDeletionScreen(onBack: () -> Unit, onSignedOut: () -> Unit) 
                                 }
                                 requested = true
                                 FirebaseAuth.getInstance().signOut()
+                                com.hebi.talksullae.firebase.EncryptedRoomDraftStore.clearAll(activity)
                                 onSignedOut()
                             } catch (error: Exception) {
                                 failure = error.localizedMessage ?: "삭제 요청을 확인하지 못했습니다."

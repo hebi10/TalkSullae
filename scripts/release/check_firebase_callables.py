@@ -11,6 +11,7 @@ APP_CRITICAL_CALLABLES = (
     "previewInvitation",
     "getMyCareer",
     "registerPushToken",
+    "deleteRoomMessage",
 )
 
 

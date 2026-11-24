@@ -40,6 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import com.hebi.talksullae.firebase.EncryptedRoomDraftStore
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -71,11 +73,15 @@ internal fun OnlineRoomChatHost(
     safetyRepository: UserSafetyRepository? = null
 ) {
     val chatRepository = remember(repository) { repository ?: FirestoreRoomChatRepository() }
-    val factory = remember(chatRepository) {
+    val context = LocalContext.current.applicationContext
+    val draftStore = remember(repository, uid, context) {
+        if (repository == null) EncryptedRoomDraftStore(context, uid) else null
+    }
+    val factory = remember(chatRepository, draftStore) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                RoomChatViewModel(chatRepository) as T
+                RoomChatViewModel(chatRepository, draftStore) as T
         }
     }
     val vm: RoomChatViewModel = viewModel(key = "room-chat-$uid-$roomId", factory = factory)
@@ -104,6 +110,10 @@ internal fun OnlineRoomChatHost(
     }
     val safety = safetyVm?.state?.collectAsStateWithLifecycle()?.value ?: UserSafetyState()
     var reportTarget by remember { mutableStateOf<RoomChatMessage?>(null) }
+    var deleteTarget by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.fromCache, state.readError) {
+        if (state.fromCache || state.readError != null) { reportTarget = null; deleteTarget = null }
+    }
     var reportCategory by remember { mutableStateOf("abuse") }
     var reportDetails by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -211,7 +221,12 @@ internal fun OnlineRoomChatHost(
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         RoomChatMessageRow(message, isOwn = message.senderUid == uid)
-                        if (message.senderUid != uid && safetyVm != null) {
+                        if (message.senderUid == uid && !message.deleted && repository == null) {
+                            TextButton(onClick = { deleteTarget = message.id },
+                                enabled = state.deletingId == null && !state.fromCache && state.readError == null,
+                                modifier = Modifier.align(Alignment.End).testTag("chat-delete-" + message.id)) { Text("삭제") }
+                        }
+                        if (message.senderUid != uid && safetyVm != null && !message.deleted) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 TextButton(
                                     onClick = {
@@ -318,6 +333,15 @@ internal fun OnlineRoomChatHost(
         }
     }
 
+    deleteTarget?.let { id ->
+        if (!state.fromCache && state.readError == null) AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("내 메시지 삭제") },
+            text = { Text("다른 참가자에게도 삭제 표시가 나타납니다. 이미 접수된 신고 기록은 보존될 수 있습니다.") },
+            confirmButton = { TextButton(onClick = { deleteTarget = null; vm.deleteMessage(id) }) { Text("삭제") } },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("취소") } }
+        )
+    }
     reportTarget?.let { message ->
         AlertDialog(
             onDismissRequest = { if(!safety.working)reportTarget=null },
