@@ -11,6 +11,8 @@ android {
     defaultConfig {
         applicationId = "com.hebi.talksullae"
         buildConfigField("boolean", "FIREBASE_CONFIGURED", file("google-services.json").exists().toString())
+        buildConfigField("boolean", "INVITE_WEB_ENABLED",
+            providers.gradleProperty("talksullaeVerifiedInviteLinks").orElse("false").get().toBooleanStrict().toString())
         minSdk = 26
         targetSdk = 36
         versionCode = 6
