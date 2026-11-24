@@ -7,7 +7,7 @@ const {getMessaging}=require("firebase-admin/messaging");
 const room = require("./src/roomService");
 const {saveMyProfile} = require("./src/userProfile");
 const { submitSafetyReport } = require("./src/safetyReport");
-const { sendRoomMessage, deleteRoomMessage } = require("./src/chatService");
+const { sendRoomMessage, deleteRoomMessage, markRoomChatRead } = require("./src/chatService");
 const gameSession = require("./src/game/sessionService");
 const {getMyCareer} = require("./src/game/careerService");
 const identityChat = require("./src/game/identityChatService");
@@ -39,6 +39,7 @@ exports.submitSafetyReport = onCall(config, request=>submitSafetyReport(db,reque
 
 exports.sendRoomMessage = onCall(config, request=>sendRoomMessage(db,request));
 exports.deleteRoomMessage = onCall(config, request=>deleteRoomMessage(db,request));
+exports.markRoomChatRead = onCall(config, request=>markRoomChatRead(db,request));
 exports.registerPushToken = onCall(config, request=>push.registerPushToken(db,request));
 exports.getModerationInbox = onCall(baseConfig, request=>moderation.getModerationInbox(db,request));
 exports.setModerationStatus = onCall(baseConfig, request=>moderation.setModerationStatus(db,request));

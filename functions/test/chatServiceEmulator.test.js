@@ -4,7 +4,7 @@ const {before, after, test} = require("node:test");
 const assert = require("node:assert/strict");
 const {initializeApp, deleteApp} = require("firebase-admin/app");
 const {getFirestore, Timestamp} = require("firebase-admin/firestore");
-const {sendRoomMessage,deleteRoomMessage} = require("../src/chatService");
+const {sendRoomMessage,deleteRoomMessage,markRoomChatRead} = require("../src/chatService");
 const {createRoom, requestJoin, createInvitation, changeMember} = require("../src/roomService");
 
 let app;
@@ -126,4 +126,37 @@ test("only the author can delete a message and retries never resurrect its text"
   assert.equal((await messageRef.get()).get("text"),"삭제된 메시지입니다.");
   assert.ok((await messageRef.get()).get("deletedAt"));
   assert.equal((await roomRef.get()).get("chatDeletionRevision"),1);
+});
+
+test("unread count excludes own sends, deduplicates retries, and rejects stale or unauthorized read receipts",async()=>{
+  const roomId=await roomWithOwner();
+  const invite=await createInvitation(db,{...auth("owner"),data:{roomId}});
+  await requestJoin(db,{...auth("unread-friend"),data:{code:invite.code}});
+  await changeMember(db,{...auth("owner"),data:{roomId,targetUid:"unread-friend",action:"approve"}});
+  await requestJoin(db,{...auth("unread-pending"),data:{code:invite.code}});
+  const index=uid=>db.collection("userRooms").doc(uid).collection("rooms").doc(roomId);
+  const request=message(roomId,21,"새 메시지");
+  const first=await sendRoomMessage(db,request);
+  await sendRoomMessage(db,request);
+  assert.equal((await index("owner").get()).get("unreadCount"),0);
+  const friendIndex=await index("unread-friend").get();
+  assert.equal(friendIndex.get("unreadCount"),1);
+  assert.equal(friendIndex.get("lastChatMessageId"),first.messageId);
+  assert.equal(friendIndex.get("text"),undefined);
+  assert.equal((await index("unread-pending").get()).get("unreadCount"),undefined);
+  const read={roomId,messageId:first.messageId};
+  await assert.rejects(markRoomChatRead(db,{...auth("outsider"),data:read}),e=>e.code==="permission-denied");
+  await assert.rejects(markRoomChatRead(db,{...auth("unread-pending"),data:read}),e=>e.code==="permission-denied");
+  const second=await sendRoomMessage(db,{...auth("unread-friend"),data:{roomId,requestId:uuid(22),text:"답장"}});
+  assert.equal((await index("owner").get()).get("unreadCount"),1);
+  assert.equal((await index("unread-friend").get()).get("unreadCount"),1);
+  assert.deepEqual(await markRoomChatRead(db,{...auth("unread-friend"),data:read}),{marked:false,changed:false});
+  assert.equal((await index("unread-friend").get()).get("unreadCount"),1);
+  const latest={roomId,messageId:second.messageId};
+  assert.deepEqual(await markRoomChatRead(db,{...auth("unread-friend"),data:latest}),{marked:true,changed:true});
+  assert.deepEqual(await markRoomChatRead(db,{...auth("unread-friend"),data:latest}),{marked:true,changed:false});
+  assert.equal((await index("owner").get()).get("unreadCount"),1);
+  assert.equal((await index("unread-friend").get()).get("unreadCount"),0);
+  await changeMember(db,{...auth("owner"),data:{roomId,targetUid:"unread-friend",action:"remove"}});
+  await assert.rejects(markRoomChatRead(db,{...auth("unread-friend"),data:latest}),e=>e.code==="permission-denied");
 });

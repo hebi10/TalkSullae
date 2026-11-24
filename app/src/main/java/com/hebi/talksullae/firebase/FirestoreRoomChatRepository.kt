@@ -19,7 +19,8 @@ internal data class RoomChatMessage(
     val createdAtMillis: Long?,
     val expiresAtMillis: Long? = null,
     val senderAvatar: String? = null,
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    val trackedForUnread: Boolean = false
 )
 
 internal data class RoomChatPage(
@@ -58,6 +59,7 @@ internal interface RoomChatRepository {
 
     fun watchDeletionRevision(roomId: String, onRevision: (Long) -> Unit, onError: (String) -> Unit): ListenerRegistration? = null
     suspend fun deleteMessage(roomId: String, messageId: String): Unit = error("삭제 기능을 사용할 수 없습니다.")
+    suspend fun markRead(roomId: String, messageId: String): Boolean = false
     suspend fun loadOlder(roomId: String, cursor: DocumentSnapshot): RoomChatPage
     suspend fun sendMessage(roomId: String, requestId: String, text: String): String
 }
@@ -85,7 +87,8 @@ internal class FirestoreRoomChatRepository(
             createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time,
             expiresAtMillis = snapshot.getTimestamp("expiresAt")?.toDate()?.time,
             senderAvatar = snapshot.getString("senderAvatar"),
-            deleted = snapshot.getTimestamp("deletedAt") != null
+            deleted = snapshot.getTimestamp("deletedAt") != null,
+            trackedForUnread = snapshot.getBoolean("trackedForUnread") == true
         )
     }
 
@@ -116,6 +119,12 @@ internal class FirestoreRoomChatRepository(
                 else onRevision(snapshot.getLong("chatDeletionRevision") ?: 0L)
             }
         }
+
+    override suspend fun markRead(roomId: String, messageId: String): Boolean {
+        val result = functions.getHttpsCallable("markRoomChatRead")
+            .call(mapOf("roomId" to roomId, "messageId" to messageId)).await().data as? Map<*, *>
+        return result?.get("marked") == true
+    }
 
     override suspend fun deleteMessage(roomId: String, messageId: String) {
         val result = functions.getHttpsCallable("deleteRoomMessage")
