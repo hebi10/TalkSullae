@@ -5,6 +5,10 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.performTextInput
 import com.hebi.talksullae.design.TalkSullaeTheme
 import com.hebi.talksullae.firebase.UserProfile
@@ -32,8 +36,8 @@ class UserProfileEditorTest {
         }
         compose.onNodeWithTag("profile-save").assertIsNotEnabled()
         compose.onNodeWithTag("profile-nickname").performTextInput("  해비  ")
-        compose.onNodeWithTag("profile-avatar-고양이").performClick()
-        compose.onNodeWithTag("profile-save").assertIsEnabled().performClick()
+        compose.onNodeWithTag("profile-avatar-고양이").performScrollTo().performClick()
+        compose.onNodeWithTag("profile-save").performScrollTo().assertIsEnabled().performClick()
         assertEquals("해비", savedName)
         assertEquals("고양이", savedAvatar)
     }
@@ -49,5 +53,25 @@ class UserProfileEditorTest {
             }
         }
         compose.onNodeWithTag("profile-save").assertIsEnabled()
+    }
+
+    @Test fun allEightAvatarsAndSaveRemainReachableAtLargeFontScale() {
+        var savedAvatar = ""
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                TalkSullaeTheme(darkTheme = false) {
+                    UserProfileEditorScreen(current = UserProfile("프로필", "부엉이"),
+                        firstSetup = false, saving = false, error = null,
+                        onSave = { _, avatar -> savedAvatar = avatar })
+                }
+            }
+        }
+        listOf("부엉이","토끼","고양이","강아지","곰","여우","판다","펭귄").forEach { avatar ->
+            compose.onNodeWithTag("profile-avatar-$avatar").assertExists()
+        }
+        compose.onNodeWithTag("profile-avatar-펭귄").performScrollTo().performClick()
+        compose.onNodeWithTag("profile-save").performScrollTo().assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals("펭귄", savedAvatar) }
     }
 }
