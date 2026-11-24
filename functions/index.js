@@ -19,24 +19,28 @@ const push=require("./src/pushService");
 const moderation=require("./src/moderationService");
 const monitoring=require("./src/safetyMonitoring");
 const logger=require("firebase-functions/logger");
+const {guardRoomOperation}=require("./src/apiRateLimit");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
-const config = {region:"asia-northeast3",maxInstances:10,memory:"256MiB"};
+const baseConfig = {region:"asia-northeast3",maxInstances:10,memory:"256MiB"};
+// Enable only after Play-signed clients are registered and verified. The operator
+// functions remain protected by their existing server-side custom claims.
+const config = {...baseConfig,enforceAppCheck:process.env.TALKSULLAE_ENFORCE_APP_CHECK==="true"};
 
-exports.createRoom = onCall(config, request=>room.createRoom(db,request));
+exports.createRoom = onCall(config, request=>guardRoomOperation(db,request,"createRoom",room.createRoom));
 exports.saveMyProfile = onCall(config, request=>saveMyProfile(db,request));
-exports.createInvitation = onCall(config, request=>room.createInvitation(db,request));
-exports.previewInvitation = onCall(config, request=>room.previewInvitation(db,request));
-exports.requestJoin = onCall(config, request=>room.requestJoin(db,request));
+exports.createInvitation = onCall(config, request=>guardRoomOperation(db,request,"createInvitation",room.createInvitation));
+exports.previewInvitation = onCall(config, request=>guardRoomOperation(db,request,"previewInvitation",room.previewInvitation));
+exports.requestJoin = onCall(config, request=>guardRoomOperation(db,request,"requestJoin",room.requestJoin));
 exports.changeMember = onCall(config, request=>room.changeMember(db,request));
 exports.leaveRoom = onCall(config, request=>room.leaveRoom(db,request));
 exports.submitSafetyReport = onCall(config, request=>submitSafetyReport(db,request));
 
 exports.sendRoomMessage = onCall(config, request=>sendRoomMessage(db,request));
 exports.registerPushToken = onCall(config, request=>push.registerPushToken(db,request));
-exports.getModerationInbox = onCall(config, request=>moderation.getModerationInbox(db,request));
-exports.setModerationStatus = onCall(config, request=>moderation.setModerationStatus(db,request));
+exports.getModerationInbox = onCall(baseConfig, request=>moderation.getModerationInbox(db,request));
+exports.setModerationStatus = onCall(baseConfig, request=>moderation.setModerationStatus(db,request));
 
 exports.createGameSession = onCall(config, request=>gameSession.createGameSession(db,request));
 exports.gameSessionAction = onCall(config, request=>gameSession.gameSessionAction(db,request));
