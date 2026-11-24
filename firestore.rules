@@ -84,8 +84,10 @@ service cloud.firestore {
           && signedIn() && request.auth.uid == userId;
         allow list, create, update, delete: if false;
         match /games/{gameSessionId} {
-          allow get: if activeMember(roomId) && signedIn() && request.auth.uid == userId;
+          allow get: if activeMember(roomId) && signedIn() && request.auth.uid == userId
+            && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active";
           allow list: if activeMember(roomId) && signedIn() && request.auth.uid == userId
+            && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active"
             && request.query.limit != null && request.query.limit <= 30;
           allow create, update, delete: if false;
         }
@@ -95,6 +97,7 @@ service cloud.firestore {
         allow get: if activeMember(roomId)
           && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active";
         allow list: if activeMember(roomId)
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active"
           && request.query.limit != null && request.query.limit <= 24;
         allow create, update, delete: if false;
         match /scores/{userId} {
@@ -111,6 +114,7 @@ service cloud.firestore {
         allow get: if activeMember(roomId)
           && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active";
         allow list: if activeMember(roomId)
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active"
           && request.query.limit != null && request.query.limit <= 20;
         allow create, update, delete: if false;
       }

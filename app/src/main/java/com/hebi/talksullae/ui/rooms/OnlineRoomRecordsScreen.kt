@@ -37,6 +37,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.MetadataChanges
+import com.hebi.talksullae.firebase.FirebaseFriendRecordsRepository
+import com.hebi.talksullae.firebase.FriendRecords
+import kotlinx.coroutines.CancellationException
 import com.hebi.talksullae.firebase.CloudMember
 import java.time.YearMonth
 import java.time.ZoneId
@@ -105,15 +109,52 @@ internal fun OnlineRoomRecordsHost(
     var state by remember(roomId,uid,season){
         mutableStateOf(RoomRecordsState(season,offset>0))
     }
+    var selectedFriend by remember(uid,roomId,season){mutableStateOf<String?>(null)}
+    var friendValue by remember(uid,roomId,season,selectedFriend){mutableStateOf<FriendRecords?>(null)}
+    var friendLoading by remember(uid,roomId,season,selectedFriend){mutableStateOf(false)}
+    var friendError by remember(uid,roomId,season,selectedFriend){mutableStateOf<String?>(null)}
+    var friendRetry by remember(uid,roomId,season,selectedFriend){mutableIntStateOf(0)}
+    var foreground by remember(lifecycle){mutableStateOf(lifecycle.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
+    DisposableEffect(lifecycle,uid,roomId){
+        val observer=LifecycleEventObserver { _, _ ->
+            foreground=lifecycle.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            if(!foreground){selectedFriend=null;friendValue=null}
+        }
+        lifecycle.lifecycle.addObserver(observer)
+        onDispose{lifecycle.lifecycle.removeObserver(observer)}
+    }
+    val activeFriend=selectedFriend?.let { id -> members.firstOrNull { it.uid==id && it.uid!=uid && it.status=="active" } }
+    LaunchedEffect(uid,roomId,season,activeFriend?.uid,friendRetry,foreground){
+        friendValue=null
+        friendError=null
+        val friend=activeFriend ?: return@LaunchedEffect
+        if(!foreground)return@LaunchedEffect
+        friendLoading=true
+        try {
+            friendValue=FirebaseFriendRecordsRepository().get(roomId,friend.uid)
+        } catch(cancelled:CancellationException){
+            throw cancelled
+        } catch(_:Exception){
+            friendError="친구의 전적을 확인하지 못했습니다. 방 접근 권한과 연결 상태를 확인해 주세요."
+        } finally {
+            friendLoading=false
+        }
+    }
     DisposableEffect(uid,roomId,season){
         val db=FirebaseFirestore.getInstance()
         val room=db.collection("rooms").document(roomId)
         val registrations=listOf(
             room.collection("seasons").document(season).collection("scores")
                 .orderBy("seasonPoints",Query.Direction.DESCENDING).limit(20L)
-                .addSnapshotListener{snapshot,error->
-                    if(error!=null)state=state.copy(
-                        loading=false,error="시즌 순위를 불러올 수 없습니다.")
+                .addSnapshotListener(MetadataChanges.INCLUDE){snapshot,error->
+                    if(error!=null){
+                        selectedFriend=null
+                        state=state.copy(ranking=emptyList(),loading=false,error="시즌 순위를 불러올 수 없습니다.")
+                    }
+                    else if(snapshot?.metadata?.isFromCache==true){
+                        selectedFriend=null
+                        state=state.copy(ranking=emptyList(),loading=true)
+                    }
                     else if(snapshot!=null)state=state.copy(
                         ranking=snapshot.documents.map{
                             SeasonRank(it.id,it.getLong("seasonPoints")?:0L,
@@ -122,9 +163,12 @@ internal fun OnlineRoomRecordsHost(
                     )
                 },
             room.collection("playerStats").document(uid)
-                .addSnapshotListener{snap,error->
+                .addSnapshotListener(MetadataChanges.INCLUDE){snap,error->
                     if(error!=null)state=state.copy(
+                        totalGames=0,totalWins=0,bestStreak=0,achievements=emptySet(),
                         loading=false,error="나의 기록을 불러올 수 없습니다.")
+                    else if(snap?.metadata?.isFromCache==true)state=state.copy(
+                        totalGames=0,totalWins=0,bestStreak=0,achievements=emptySet())
                     else if(snap!=null){
                         val achievements=(snap.get("achievements") as? Map<*, *>)
                             ?.filter{it.value==true}?.keys?.mapNotNull{it as? String}
@@ -139,8 +183,9 @@ internal fun OnlineRoomRecordsHost(
                 },
             room.collection("playerStats").document(uid).collection("games")
                 .orderBy("settledAt",Query.Direction.DESCENDING).limit(30L)
-                .addSnapshotListener{snapshot,error->
-                    if(error!=null)state=state.copy(error="최근 전적을 조회할 수 없습니다.")
+                .addSnapshotListener(MetadataChanges.INCLUDE){snapshot,error->
+                    if(error!=null)state=state.copy(recentGames=emptyList(),error="최근 전적을 조회할 수 없습니다.")
+                    else if(snapshot?.metadata?.isFromCache==true)state=state.copy(recentGames=emptyList())
                     else if(snapshot!=null)state=state.copy(
                         recentGames=snapshot.documents.map{
                             RecentGameRecord(it.getString("gameId").orEmpty(),
@@ -152,8 +197,9 @@ internal fun OnlineRoomRecordsHost(
                 },
             room.collection("recordEvents")
                 .orderBy("settledAt",Query.Direction.DESCENDING).limit(20L)
-                .addSnapshotListener{snapshot,error->
-                    if(error!=null)state=state.copy(error="방 연대기를 확인할 수 없습니다.")
+                .addSnapshotListener(MetadataChanges.INCLUDE){snapshot,error->
+                    if(error!=null)state=state.copy(events=emptyList(),error="방 연대기를 확인할 수 없습니다.")
+                    else if(snapshot?.metadata?.isFromCache==true)state=state.copy(events=emptyList())
                     else if(snapshot!=null)state=state.copy(
                         events=snapshot.documents.map{
                             RoomRecordEvent(it.getString("gameId").orEmpty(),
@@ -172,8 +218,14 @@ internal fun OnlineRoomRecordsHost(
         onNext={if(offset>0)offset--},
         canPrevious=offset<24,
         canNext=offset>0,
-        onBack=onBack
+        onBack=onBack,
+        friendNames=members.filter { it.uid!=uid && it.status=="active" }.associate { it.uid to it.name },
+        onFriendClick={ selectedFriend=it }
     )
+    if(activeFriend!=null && foreground){
+        FriendRecordsDialog(activeFriend.name,friendValue,friendLoading,friendError,
+            onRetry={friendRetry++},onDismiss={selectedFriend=null})
+    }
 }
 
 @Composable
@@ -181,7 +233,8 @@ internal fun RoomRecordsContent(
     roomName:String,state:RoomRecordsState,
     names:Map<String,String>,
     onPrevious:()->Unit,onNext:()->Unit,
-    canPrevious:Boolean,canNext:Boolean,onBack:()->Unit
+    canPrevious:Boolean,canNext:Boolean,onBack:()->Unit,
+    friendNames:Map<String,String> = emptyMap(),onFriendClick:(String)->Unit = {}
 ) {
     var selectedGame by rememberSaveable(roomName) { mutableStateOf("all") }
     var filterExpanded by remember { mutableStateOf(false) }
@@ -248,6 +301,17 @@ internal fun RoomRecordsContent(
         }
         Text("서로 다른 게임의 원점수는 합산하지 않고 공통 시즌 점수로 환산합니다.",
             style=MaterialTheme.typography.bodySmall)
+        if(friendNames.isNotEmpty()){
+            HorizontalDivider()
+            Text("친구와의 전적",style=MaterialTheme.typography.titleMedium)
+            Text("같은 방의 누적 전적과 함께한 최근 경기를 확인합니다.",style=MaterialTheme.typography.bodySmall)
+            friendNames.entries.sortedBy { it.value }.forEach { (id,name) ->
+                OutlinedButton(onClick={onFriendClick(id)},enabled=!state.loading && state.error==null,
+                    modifier=Modifier.fillMaxWidth().heightIn(min=48.dp).testTag("friend-records-open-"+id)){
+                    Text("$name 전적 보기")
+                }
+            }
+        }
         HorizontalDivider()
         Text("나의 최근 경기",style=MaterialTheme.typography.titleMedium)
         Box {

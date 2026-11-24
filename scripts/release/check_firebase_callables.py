@@ -12,6 +12,7 @@ APP_CRITICAL_CALLABLES = (
     "saveMyProfile",
     "previewInvitation",
     "getMyCareer",
+    "getRoomFriendRecords",
     "registerPushToken",
     "deleteRoomMessage",
     "markRoomChatRead",

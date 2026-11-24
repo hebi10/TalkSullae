@@ -105,3 +105,35 @@ test("real game persists idempotent monthly season points and individual achieve
  assert.equal((await parent.collection("recordEvents").get()).size,2);
  assert.equal((await parent.collection("recordSettlements").get()).size,2);
 });
+
+
+test("finished friend records expose only same-room aggregate and bounded comparison",async()=>{
+ const {getRoomFriendRecords}=require("../src/game/friendRecordService");
+ const room=await makeRoom(),id=room.owner,targetUid=room.users[1];
+ const game=await finishGame(room,base);
+ const input={roomId:room.roomId,targetUid};
+ const response=await getRoomFriendRecords(db,{...auth(id),data:input});
+ assert.equal(response.friend.totalGames,1);
+ assert.equal(response.reviewedGames,1);
+ assert.equal(response.capped,false);
+ assert.equal(response.comparison.sharedGames,1);
+ assert.equal(response.comparison.ties,1);
+ assert.equal(response.comparison.myIdentityAttempts,1);
+ assert.equal(response.comparison.myIdentityHits,1);
+ assert.equal(response.comparison.friendIdentityHits,1);
+ const serialized=JSON.stringify(response);
+ assert.ok(!serialized.includes(game.sessionId));
+ assert.ok(!serialized.includes(targetUid));
+ for(const key of ["matches","alias","rawScore","scoresByUid","actorUid"])assert.ok(!serialized.includes(key));
+ await assert.rejects(getRoomFriendRecords(db,{...auth("outsider"),data:input}),e=>e.code==="permission-denied");
+ await assert.rejects(getRoomFriendRecords(db,{...auth(id),data:{...input,targetUid:"outsider"}}),e=>e.code==="permission-denied");
+ const ref=db.collection("rooms").doc(room.roomId);
+ await ref.collection("members").doc(targetUid).update({status:"removed"});
+ await assert.rejects(getRoomFriendRecords(db,{...auth(id),data:input}),e=>e.code==="permission-denied");
+ await ref.collection("members").doc(targetUid).update({status:"active"});
+ await db.collection("accountDeletionJobs").doc(targetUid).set({status:"queued"});
+ await assert.rejects(getRoomFriendRecords(db,{...auth(id),data:input}),e=>e.code==="permission-denied");
+ await db.collection("accountDeletionJobs").doc(targetUid).delete();
+ await ref.update({status:"archived"});
+ await assert.rejects(getRoomFriendRecords(db,{...auth(id),data:input}),e=>e.code==="permission-denied");
+});

@@ -11,7 +11,8 @@ const LIMITS=Object.freeze({
   previewInvitation:{max:60,windowMs:60*1000},
   requestJoin:{max:30,windowMs:60*1000},
   updateRoom:{max:20,windowMs:60*1000},
-  archiveRoom:{max:10,windowMs:60*1000}
+  archiveRoom:{max:10,windowMs:60*1000},
+  getRoomFriendRecords:{max:6,windowMs:60*1000}
 });
 
 async function consumeRoomQuota(db,uid,operation,now=Date.now){

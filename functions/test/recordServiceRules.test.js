@@ -102,6 +102,10 @@ test("pending, outsider, unauthenticated and archived room users cannot see rank
  });
  const member=env.authenticatedContext("owner").firestore();
  await assertFails(getDoc(doc(member,"rooms",roomId,"playerStats","owner")));
+ await assertFails(getDoc(doc(member,"rooms",roomId,"playerStats","owner","games",sessionId)));
+ await assertFails(getDocs(query(collection(member,"rooms",roomId,"playerStats","owner","games"),limit(30))));
+ await assertFails(getDocs(query(collection(member,"rooms",roomId,"seasons"),limit(24))));
+ await assertFails(getDocs(query(collection(member,"rooms",roomId,"recordEvents"),limit(20))));
  await assertFails(getDocs(query(collection(member,"rooms",roomId,
    "seasons",seasonId,"scores"),limit(20))));
 });
