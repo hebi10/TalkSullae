@@ -20,7 +20,7 @@ internal fun gamePhaseLabel(phase: GamePhase?): String = when (phase) {
 internal fun lobbyReadinessLabel(count: Int, ready: Int, minimum: Int, phase: GamePhase?, fromCache: Boolean): String = when {
     fromCache -> "서버 상태를 확인하고 있습니다."
     count < minimum -> "시작하려면 ${minimum - count}명이 더 참가해야 합니다."
-    ready < count -> "준비 완료 $ready/$count명 · 모든 참가자의 준비를 기다립니다."
+    ready < count -> "준비 완료 $ready/${count}명 · 모든 참가자의 준비를 기다립니다."
     phase != GamePhase.READY -> "서버에서 시작 가능 여부를 확인 중입니다."
     else -> "모든 참가자가 준비했습니다. 방장이 시작할 수 있습니다."
 }
