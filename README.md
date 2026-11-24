@@ -2,7 +2,7 @@
 
 친구들이 각자의 스마트폰에서 고정된 방에 참여해 익명 채팅과 심리·추리게임을 즐기고, 기록을 함께 쌓는 Android 앱입니다.
 
-> 소스 현황: **LIVE-01~08 코드·PR 병합 완료 / 운영 Firebase·Play 0.5.0 게시 전 점검 단계**. Google Play 내부 테스트에 마지막으로 API 게시가 확인된 버전은 `0.4.1 (5)`입니다. `0.5.0 (6)`은 새 소스 **릴리스 후보**로 서명 AAB·Play 업로드/테스터 설치·운영 Firebase 변경은 아직 수행되지 않았습니다. 실제 Google 계정 다중 기기 E2E도 미검증입니다.
+> 소스 현황: LIVE-01~08 이후 TS-01~09 개선 진행 중. 2026-11-16(KST) [배포 실행 기록](https://github.com/hebi10/TalkSullae/actions/runs/43733390504)에서 `0.5.0 (6)` 서명 AAB의 내부 테스트 API 게시 및 비공개 테스트 승격 조회를 확인했습니다. 현재 Play Console 노출, 테스터 설치, 운영 Firebase 적용 상태는 별도 확인 대상입니다. 이번 개선의 신규 Play 업로드는 진행하지 않았습니다. 실제 Google 계정 다중 기기 E2E도 미검증입니다.
 
 ## 프로젝트 방향
 - Android: Kotlin + Jetpack Compose (구현됨)
@@ -52,7 +52,7 @@ Google 로그인·지속형 온라인 방·실제 채팅·4종 게임·시즌 �
 - `app/google-services.json`은 Git에 저장하지 않으며 배포 시 비공개 Secret에서 복원합니다.
 - Firebase Auth·Firestore 및 서울 Cloud Functions의 온라인 방 생성·초대·승인·강퇴·위임·탈퇴 코드가 구현되어 있습니다. 실제 Google 계정 2명 E2E는 미검증입니다.
 - Android API 29·35·36 휴대폰 및 API36 태블릿의 Firebase·Android 종합 QA는 [#42951822274](https://github.com/hebi10/TalkSullae/actions/runs/42951822274)에서 통과했습니다 (4환경 화면 캡처 48장).
-- 현재 내부 테스트 배포는 [승인형 OPS-04](.github/workflows/play-internal-release.yml)가 정확한 `main` SHA·서명 AAB·수동 승인을 확인합니다. 기존 [비공개 배포 워크플로](.github/workflows/play-closed.yml)는 별도 이력이므로 신규 `0.5.0(6)`을 자동 게시하거나 승격하지 않습니다.
+- 현재 내부 테스트 배포는 [승인형 OPS-04](.github/workflows/play-internal-release.yml)가 정확한 `main` SHA·서명 AAB·수동 승인을 확인합니다. 기존 [비공개 배포 워크플로](.github/workflows/play-closed.yml)는 별도 이력이므로 새 개선 버전을 자동 게시하거나 승격하지 않습니다.
 - 릴리스 및 인증 정보는 GitHub Actions Secrets/Variables에서만 주입합니다. GitHub에 서명키·토큰·Firebase 설정값을 넣지 않습니다.
 - [2-D QA·배포 미완료 추적](https://github.com/hebi10/TalkSullae/issues/11) · [2-D 원본 캡처](https://drive.google.com/file/d/1KzuuCJAPzn6J-Os0pUlGwDZGShiPDsFu/view)
 
@@ -61,4 +61,5 @@ Google 로그인·지속형 온라인 방·실제 채팅·4종 게임·시즌 �
 
 - [LIVE-07 화면 반응형·접근성](docs/qa/LIVE-07-accessibility-responsive.md): 채팅/랭킹/신고 글꼴 200%·폰/태블릿 레이아웃 개선
 - [LIVE-08 서버·Android 통합 QA 및 출시 게이트](docs/release/LIVE-08-release-readiness.md): Firebase Emulator 다중 사용자 경로와 GAME-06 게임 정산, 서명 AAB/운영 Firebase/Play 현장 점검
-- `0.5.0 (versionCode 6)`은 기존 Play 내부 테스트 `0.4.1 (5)`보다 높은 소스 버전입니다. 실제 서명·게시·검토·테스터 설치가 완료된 것은 아닙니다.
+- `0.5.0 (versionCode 6)`의 과거 API 게시·승격 이력은 위 실행 기록으로 확인했습니다. 현재 소스 개선 배치는 별도 릴리스 버전 확정·최종 QA·사용자 승인 전에는 새로 게시하지 않습니다.
+- [TS-01~10 개선 및 최종 QA 추적](docs/qa/TS-01-10-improvement-20261124.md)
