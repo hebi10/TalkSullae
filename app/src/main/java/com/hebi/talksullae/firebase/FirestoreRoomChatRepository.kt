@@ -3,6 +3,8 @@ package com.hebi.talksullae.firebase
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.MetadataChanges
+import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
@@ -14,7 +16,9 @@ internal data class RoomChatMessage(
     val senderUid: String,
     val senderName: String,
     val text: String,
-    val createdAtMillis: Long?
+    val createdAtMillis: Long?,
+    val expiresAtMillis: Long? = null,
+    val senderAvatar: String? = null
 )
 
 internal data class RoomChatPage(
@@ -75,7 +79,9 @@ internal class FirestoreRoomChatRepository(
             senderUid = uid,
             senderName = snapshot.getString("senderName").orEmpty().ifBlank { "멤버" },
             text = text,
-            createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time
+            createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time,
+            expiresAtMillis = snapshot.getTimestamp("expiresAt")?.toDate()?.time,
+            senderAvatar = snapshot.getString("senderAvatar")
         )
     }
 
@@ -83,7 +89,7 @@ internal class FirestoreRoomChatRepository(
         roomId: String,
         onPage: (RoomChatPage) -> Unit,
         onError: (String) -> Unit
-    ): ListenerRegistration = recentQuery(roomId).addSnapshotListener { snapshot, error ->
+    ): ListenerRegistration = recentQuery(roomId).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
         if (error != null) {
             onError("채팅 내용을 불러올 수 없습니다. 방 접근 권한과 연결 상태를 확인해 주세요.")
         } else if (snapshot != null) {
@@ -99,7 +105,7 @@ internal class FirestoreRoomChatRepository(
     }
 
     override suspend fun loadOlder(roomId: String, cursor: DocumentSnapshot): RoomChatPage {
-        val snapshot = recentQuery(roomId).startAfter(cursor).get().await()
+        val snapshot = recentQuery(roomId).startAfter(cursor).get(Source.SERVER).await()
         return RoomChatPage(
             messages = snapshot.documents.mapNotNull(::parse),
             oldestSnapshot = snapshot.documents.lastOrNull(),

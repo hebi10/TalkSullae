@@ -39,18 +39,27 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
     private var older: List<RoomChatMessage> = emptyList()
     private var oldestCursor: DocumentSnapshot? = null
     private var firstPageReceived = false
+    private var readGeneration = 0L
 
     fun start(roomId: String) {
         if (activeRoomId == roomId && listener != null) return
         stop()
         activeRoomId = roomId
         mutable.value = RoomChatState()
+        val generation = readGeneration
         listener = repository.watchRecent(roomId, { page ->
-            if (activeRoomId == roomId) {
-                val incomingIds = page.messages.map { it.id }.toSet()
+            if (activeRoomId == roomId && generation == readGeneration) {
+                if (page.fromCache) {
+                    recent = emptyList()
+                    older = emptyList()
+                    oldestCursor = null
+                    firstPageReceived = false
+                    mutable.update { it.copy(messages = emptyList(), initialLoading = false,
+                        fromCache = true, canLoadOlder = false, loadingOlder = false) }
+                    return@watchRecent
+                }
                 if (firstPageReceived) {
-                    older = (older + recent.filterNot { it.id in incomingIds })
-                        .associateBy { it.id }.values.toList()
+                    older = retainOlderChatMessages(older, recent, page.messages, page.hasMore)
                 }
                 recent = page.messages
                 val firstPage = !firstPageReceived
@@ -68,7 +77,7 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
                 }
             }
         }, { message ->
-            if (activeRoomId == roomId) {
+            if (activeRoomId == roomId && generation == readGeneration) {
                 recent = emptyList()
                 older = emptyList()
                 oldestCursor = null
@@ -86,6 +95,7 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
     }
 
     fun stop() {
+        readGeneration++
         listener?.remove()
         listener = null
         activeRoomId = null
@@ -99,7 +109,8 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
     private fun merge(): List<RoomChatMessage> =
         (older + recent)
             .associateBy { it.id }
-            .values
+             .values
+            .filter { it.expiresAtMillis == null || it.expiresAtMillis > System.currentTimeMillis() }
             .sortedWith(compareBy<RoomChatMessage> { it.createdAtMillis ?: Long.MAX_VALUE }.thenBy { it.id })
 
     fun retryRead() {
@@ -117,20 +128,20 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
     }
 
     fun updateDraft(value: String) {
-        if (mutable.value.pending == null) {
-            mutable.update { it.copy(draft = value, sendError = null, info = null) }
-        }
+        mutable.update { it.copy(draft = value, info = null,
+            sendError = if (it.pending == null) null else it.sendError) }
     }
 
     fun loadOlder() {
         val roomId = activeRoomId ?: return
         val cursor = oldestCursor ?: return
-        if (!mutable.value.canLoadOlder || mutable.value.loadingOlder) return
+        if (!mutable.value.canLoadOlder || mutable.value.loadingOlder || mutable.value.fromCache) return
+        val generation = readGeneration
         mutable.update { it.copy(loadingOlder = true, historyError = null) }
         viewModelScope.launch {
             try {
                 val page = repository.loadOlder(roomId, cursor)
-                if (activeRoomId != roomId) return@launch
+                if (activeRoomId != roomId || generation != readGeneration || mutable.value.fromCache || mutable.value.readError != null || page.fromCache) return@launch
                 older = (older + page.messages).associateBy { it.id }.values.toList()
                 if (page.oldestSnapshot != null) oldestCursor = page.oldestSnapshot
                 mutable.update {
@@ -142,18 +153,19 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
                     )
                 }
             } catch (_: Exception) {
-                if (activeRoomId == roomId) {
+                if (activeRoomId == roomId && generation == readGeneration && !mutable.value.fromCache) {
                     mutable.update { it.copy(historyError = "이전 메시지를 불러오지 못했습니다. 다시 시도해 주세요.") }
                 }
             } finally {
-                if (activeRoomId == roomId) mutable.update { it.copy(loadingOlder = false) }
+                if (activeRoomId == roomId && generation == readGeneration) mutable.update { it.copy(loadingOlder = false) }
             }
         }
     }
 
     fun send() {
         val roomId = activeRoomId ?: return
-        if (mutable.value.sending || mutable.value.pending != null) return
+        if (mutable.value.sending || mutable.value.pending != null || mutable.value.fromCache ||
+            mutable.value.initialLoading || mutable.value.readError != null) return
         val draft = mutable.value.draft
         val issue = RoomChatInputPolicy.error(draft)
         if (issue != null) {
@@ -164,20 +176,22 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
             requestId = UUID.randomUUID().toString(),
             text = RoomChatInputPolicy.normalize(draft)
         )
-        mutable.update { it.copy(pending = pending, sendError = null, info = null) }
+        mutable.update { it.copy(pending = pending, draft = "", sendError = null, info = null) }
         submit(roomId, pending)
     }
 
     fun retrySend() {
         val roomId = activeRoomId ?: return
         val pending = mutable.value.pending ?: return
-        if (!mutable.value.sending) submit(roomId, pending)
+        if (!mutable.value.sending && !mutable.value.fromCache && mutable.value.readError == null &&
+            !mutable.value.initialLoading) submit(roomId, pending)
     }
 
     fun abandonFailedSend() {
         if (mutable.value.sending || mutable.value.pending == null) return
         mutable.update {
             it.copy(
+                draft = if (it.draft.isBlank()) it.pending?.text.orEmpty() else it.draft,
                 pending = null,
                 sendError = null,
                 info = "이전 메시지의 서버 처리 여부는 확인되지 않았습니다. 새로 보내면 중복될 수 있습니다."
@@ -194,7 +208,6 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
                 if (activeRoomId == roomId && mutable.value.pending == pending) {
                     mutable.update {
                         it.copy(
-                            draft = "",
                             pending = null,
                             sending = false,
                             sendError = null,
@@ -219,4 +232,19 @@ internal class RoomChatViewModel(private val repository: RoomChatRepository) : V
         stop()
         super.onCleared()
     }
+}
+
+internal fun retainOlderChatMessages(
+    older: List<RoomChatMessage>,
+    previous: List<RoomChatMessage>,
+    incoming: List<RoomChatMessage>,
+    fullPage: Boolean
+): List<RoomChatMessage> {
+    // A missing message within the current window may have been removed, not paged out.
+    if (!fullPage || incoming.isEmpty()) return emptyList()
+    val order = compareBy<RoomChatMessage> { it.createdAtMillis ?: Long.MAX_VALUE }.thenBy { it.id }
+    val boundary = incoming.minWithOrNull(order) ?: return emptyList()
+    val ids = incoming.map { it.id }.toSet()
+    return (older + previous).filter { it.id !in ids && order.compare(it, boundary) < 0 }
+        .associateBy { it.id }.values.toList()
 }
