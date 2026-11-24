@@ -218,6 +218,9 @@ async function leaveRoom(db, request) {
     if (isOwner && room.data().memberCount>1) {
       throw new HttpsError("failed-precondition","먼저 다른 멤버에게 방장을 위임해 주세요.");
     }
+    if (isOwner && room.get("activeGameSessionId")) {
+      throw new HttpsError("failed-precondition","진행 중인 게임을 먼저 종료해 주세요.");
+    }
     if (isOwner && room.data().pendingCount>0) {
       throw new HttpsError("failed-precondition","가입 대기 요청을 먼저 처리한 후 방을 정리해 주세요.");
     }
@@ -234,4 +237,81 @@ async function leaveRoom(db, request) {
   });
 }
 
-module.exports = {createRoom,createInvitation,previewInvitation,requestJoin,changeMember,leaveRoom};
+function parseManagementRequest(input, allowed) {
+  if (!input || typeof input!=="object" || Array.isArray(input) ||
+      Object.keys(input).some(key=>!allowed.includes(key))) {
+    throw new HttpsError("invalid-argument","방 관리 요청이 올바르지 않습니다.");
+  }
+  return roomIdValue(input.roomId);
+}
+
+async function currentMemberships(tx, roomRef, room) {
+  const snapshot=await tx.get(roomRef.collection("members")
+    .where("status","in",["active","pending"])
+    .limit(ROOM_CAPACITY+PENDING_CAPACITY+1));
+  const active=snapshot.docs.filter(doc=>doc.get("status")==="active").length;
+  const pending=snapshot.docs.filter(doc=>doc.get("status")==="pending").length;
+  if(active>ROOM_CAPACITY || pending>PENDING_CAPACITY ||
+     active!==room.get("memberCount") || pending!==room.get("pendingCount")) {
+    throw new HttpsError("failed-precondition","방의 멤버 상태를 다시 확인해 주세요.");
+  }
+  return snapshot.docs;
+}
+
+async function updateRoom(db,request) {
+  const uid=authUid(request), input=request.data;
+  const roomId=parseManagementRequest(input,["roomId","name","description","requiresApproval","expectedRevision"]);
+  const draft=roomDraft(input);
+  if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0) {
+    throw new HttpsError("invalid-argument","방 정보 버전이 올바르지 않습니다.");
+  }
+  const roomRef=db.collection("rooms").doc(roomId);
+  return db.runTransaction(async tx=>{
+    const [room,actor,deletion]=await Promise.all([
+      tx.get(roomRef),tx.get(roomRef.collection("members").doc(uid)),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))
+    ]);
+    requireOwner(room,actor,uid);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 방을 변경할 수 없습니다.");
+    const revision=room.get("roomRevision")??0;
+    if(revision!==input.expectedRevision)throw new HttpsError("aborted","다른 기기에서 방 정보가 변경됐습니다. 다시 열어 주세요.");
+    if(draft.name===room.get("name") && draft.description===(room.get("description")||"") &&
+       draft.requiresApproval===room.get("requiresApproval"))return {revision,updated:false};
+    const members=await currentMemberships(tx,roomRef,room);
+    tx.update(roomRef,{...draft,roomRevision:revision+1,updatedAt:now()});
+    if(draft.name!==room.get("name")){
+      for(const member of members){
+        tx.set(userIndex(db,member.id,roomId),{roomName:draft.name,status:member.get("status"),updatedAt:now()},{merge:true});
+      }
+    }
+    return {revision:revision+1,updated:true};
+  });
+}
+
+async function archiveRoom(db,request) {
+  const uid=authUid(request),input=request.data;
+  const roomId=parseManagementRequest(input,["roomId","confirm"]);
+  if(input.confirm!=="ARCHIVE")throw new HttpsError("invalid-argument","방 종료를 확인해 주세요.");
+  const roomRef=db.collection("rooms").doc(roomId);
+  return db.runTransaction(async tx=>{
+    const [room,actor,deletion]=await Promise.all([
+      tx.get(roomRef),tx.get(roomRef.collection("members").doc(uid)),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))
+    ]);
+    if(room.exists && room.get("ownerId")===uid && room.get("status")==="archived" &&
+       actor.exists && actor.get("status")==="archived")return {status:"archived",deduplicated:true};
+    requireOwner(room,actor,uid);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 방을 변경할 수 없습니다.");
+    if(room.get("activeGameSessionId"))throw new HttpsError("failed-precondition","진행 중인 게임을 먼저 종료해 주세요.");
+    const members=await currentMemberships(tx,roomRef,room);
+    for(const member of members){
+      tx.update(member.ref,{status:"archived",updatedAt:now()});
+      tx.set(userIndex(db,member.id,roomId),{roomName:room.get("name"),status:"archived",updatedAt:now()});
+    }
+    tx.update(roomRef,{status:"archived",archivedAt:now(),activeInviteHash:null,
+      activeInviteExpiresAt:null,memberCount:0,pendingCount:0});
+    return {status:"archived",deduplicated:false};
+  });
+}
+
+module.exports = {createRoom,createInvitation,previewInvitation,requestJoin,changeMember,leaveRoom,updateRoom,archiveRoom};

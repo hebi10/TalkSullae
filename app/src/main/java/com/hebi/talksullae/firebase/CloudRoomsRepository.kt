@@ -23,7 +23,8 @@ data class CloudRoom(
     val requiresApproval: Boolean,
     val activeGameSessionId: String? = null,
     val activeInviteHash: String? = null,
-    val activeInviteExpiresAtMillis: Long? = null
+    val activeInviteExpiresAtMillis: Long? = null,
+    val roomRevision: Long = 0L
 )
 
 data class CloudMember(
@@ -57,6 +58,8 @@ internal interface OnlineRoomsRepository {
     fun watchRoom(roomId: String, onResult: (CloudRoom?) -> Unit, onError: (String) -> Unit): ListenerRegistration
     fun watchMembers(roomId: String, onResult: (List<CloudMember>) -> Unit, onError: (String) -> Unit): ListenerRegistration
     suspend fun createRoom(name: String, description: String, approval: Boolean): String
+    suspend fun updateRoom(roomId: String, name: String, description: String, approval: Boolean, expectedRevision: Long): Unit = error("방 정보 수정 기능을 사용할 수 없습니다.")
+    suspend fun archiveRoom(roomId: String): Unit = error("방 종료 기능을 사용할 수 없습니다.")
     suspend fun createInvitation(roomId: String): Invitation
     suspend fun previewInvitation(code: String): InvitationPreview
     suspend fun requestJoin(code: String): JoinResult
@@ -100,7 +103,8 @@ internal class CloudRoomsRepository(
                     requiresApproval = doc.getBoolean("requiresApproval") ?: true,
                     activeGameSessionId = doc.getString("activeGameSessionId"),
                     activeInviteHash = doc.getString("activeInviteHash"),
-                    activeInviteExpiresAtMillis = doc.getTimestamp("activeInviteExpiresAt")?.toDate()?.time
+                    activeInviteExpiresAtMillis = doc.getTimestamp("activeInviteExpiresAt")?.toDate()?.time,
+                    roomRevision = doc.getLong("roomRevision") ?: 0L
                 )
             )
         }
@@ -127,6 +131,18 @@ internal class CloudRoomsRepository(
     override suspend fun createRoom(name: String, description: String, approval: Boolean): String =
         invoke("createRoom", mapOf("name" to name, "description" to description, "requiresApproval" to approval))
             .get("roomId") as? String ?: error("생성된 방을 확인할 수 없습니다.")
+
+    override suspend fun updateRoom(roomId: String, name: String, description: String, approval: Boolean, expectedRevision: Long) {
+        val result = invoke("updateRoom", mapOf("roomId" to roomId, "name" to name,
+            "description" to description, "requiresApproval" to approval, "expectedRevision" to expectedRevision))
+        check(result["revision"] is Number) { "방 정보 수정 결과를 확인할 수 없습니다." }
+    }
+
+    override suspend fun archiveRoom(roomId: String) {
+        check(invoke("archiveRoom", mapOf("roomId" to roomId, "confirm" to "ARCHIVE"))["status"] == "archived") {
+            "방 종료 결과를 확인할 수 없습니다."
+        }
+    }
 
     override suspend fun createInvitation(roomId: String): Invitation {
         val result = invoke("createInvitation", mapOf("roomId" to roomId))

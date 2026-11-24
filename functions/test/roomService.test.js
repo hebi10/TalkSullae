@@ -104,3 +104,51 @@ test("oversized member UID is rejected before reading Firestore",async()=>{
     roomId,targetUid:"x".repeat(129),action:"remove"
   }}));
 });
+
+test("owner can update room and member indexes, stale and unauthorized writes fail",async()=>{
+  const owner=auth("edit-owner"),member=auth("edit-member"),pending=auth("edit-pending");
+  const {roomId}=await service.createRoom(db,{...owner,data:{name:"변경 전",description:"",requiresApproval:true}});
+  const invite=await service.createInvitation(db,{...owner,data:{roomId}});
+  await service.requestJoin(db,{...member,data:{code:invite.code}});
+  await service.changeMember(db,{...owner,data:{roomId,targetUid:"edit-member",action:"approve"}});
+  await service.requestJoin(db,{...pending,data:{code:invite.code}});
+  const data={roomId,name:"변경 후",description:"새 설명",requiresApproval:false,expectedRevision:0};
+  await assert.rejects(service.updateRoom(db,{...member,data}),e=>e.code==="permission-denied");
+  await assert.rejects(service.updateRoom(db,{...owner,data:{...data,ownerId:"other"}}),e=>e.code==="invalid-argument");
+  assert.deepEqual(await service.updateRoom(db,{...owner,data}),{revision:1,updated:true});
+  const roomRef=db.collection("rooms").doc(roomId);
+  assert.equal((await roomRef.get()).get("name"),"변경 후");
+  assert.equal((await roomRef.collection("members").doc("edit-pending").get()).get("status"),"pending");
+  for(const user of ["edit-owner","edit-member","edit-pending"]){
+    assert.equal((await db.collection("userRooms").doc(user).collection("rooms").doc(roomId).get()).get("roomName"),"변경 후");
+  }
+  await assert.rejects(service.updateRoom(db,{...owner,data:{...data,name:"오래된 수정"}}),e=>e.code==="aborted");
+});
+
+test("only owner can archive after games finish, revoking all memberships and invite without deleting history",async()=>{
+  const owner=auth("archive-owner"),member=auth("archive-member"),pending=auth("archive-pending");
+  const {roomId}=await service.createRoom(db,{...owner,data:{name:"종료 테스트",description:"",requiresApproval:true}});
+  const invite=await service.createInvitation(db,{...owner,data:{roomId}});
+  await service.requestJoin(db,{...member,data:{code:invite.code}});
+  await service.changeMember(db,{...owner,data:{roomId,targetUid:"archive-member",action:"approve"}});
+  await service.requestJoin(db,{...pending,data:{code:invite.code}});
+  const roomRef=db.collection("rooms").doc(roomId);
+  const data={roomId,confirm:"ARCHIVE"};
+  await assert.rejects(service.archiveRoom(db,{...member,data}),e=>e.code==="permission-denied");
+  await assert.rejects(service.archiveRoom(db,{...owner,data:{roomId}}),e=>e.code==="invalid-argument");
+  await roomRef.update({activeGameSessionId:"active-game"});
+  await assert.rejects(service.archiveRoom(db,{...owner,data}),e=>e.code==="failed-precondition");
+  await roomRef.update({activeGameSessionId:null});
+  await roomRef.collection("messages").doc("history").set({text:"보존 검증"});
+  assert.deepEqual(await service.archiveRoom(db,{...owner,data}),{status:"archived",deduplicated:false});
+  assert.equal((await roomRef.get()).get("activeInviteHash"),null);
+  assert.equal((await roomRef.get()).get("memberCount"),0);
+  assert.equal((await roomRef.get()).get("pendingCount"),0);
+  for(const user of ["archive-owner","archive-member","archive-pending"]){
+    assert.equal((await roomRef.collection("members").doc(user).get()).get("status"),"archived");
+    assert.equal((await db.collection("userRooms").doc(user).collection("rooms").doc(roomId).get()).get("status"),"archived");
+  }
+  assert.equal((await roomRef.collection("messages").doc("history").get()).get("text"),"보존 검증");
+  await assert.rejects(service.requestJoin(db,{...auth("archive-outsider"),data:{code:invite.code}}));
+  assert.deepEqual(await service.archiveRoom(db,{...owner,data}),{status:"archived",deduplicated:true});
+});
