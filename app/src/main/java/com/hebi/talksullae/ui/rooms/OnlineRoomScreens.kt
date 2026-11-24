@@ -365,6 +365,17 @@ internal fun OnlineRoomsHost(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(entry.name, style = MaterialTheme.typography.titleMedium)
                             Text(membershipLabel(entry.status), style = MaterialTheme.typography.bodySmall)
+                            if (entry.status == "active" && entryMode != "records") {
+                                val unread = entry.visibleUnread(inviteNow)
+                                entry.lastChatAtMillis?.let { last ->
+                                    Text("최근 대화 " + SimpleDateFormat("M.d HH:mm", Locale.KOREA).format(Date(last)),
+                                        style = MaterialTheme.typography.bodySmall)
+                                }
+                                if (unread > 0L) Text("새 메시지 " + if (unread > 99L) "99+" else unread.toString(),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.testTag("room-unread-" + entry.id))
+                            }
                         }
                         if (entry.status == "active") {
                             TextButton(onClick = { vm.openRoom(entry.id) }) {

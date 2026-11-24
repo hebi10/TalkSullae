@@ -10,8 +10,16 @@ data class CloudRoomIndex(
     val id: String,
     val name: String,
     val status: String,
-    val updatedAtMillis: Long = 0L
-)
+    val updatedAtMillis: Long = 0L,
+    val unreadCount: Long = 0L,
+    val lastChatAtMillis: Long? = null
+) {
+    fun visibleUnread(nowMillis: Long): Long {
+        val last = lastChatAtMillis ?: return 0L
+        if (status != "active" || last <= nowMillis - 90L * 24 * 60 * 60 * 1000) return 0L
+        return unreadCount.coerceAtLeast(0L)
+    }
+}
 
 data class CloudRoom(
     val id: String,
@@ -82,9 +90,11 @@ internal class CloudRoomsRepository(
                             id = it.id,
                             name = it.getString("roomName").orEmpty(),
                             status = it.getString("status").orEmpty(),
-                            updatedAtMillis = it.getTimestamp("updatedAt")?.toDate()?.time ?: 0L
+                            updatedAtMillis = it.getTimestamp("updatedAt")?.toDate()?.time ?: 0L,
+                            unreadCount = it.getLong("unreadCount")?.coerceAtLeast(0L) ?: 0L,
+                            lastChatAtMillis = it.getTimestamp("lastChatAt")?.toDate()?.time
                         )
-                    }.sortedByDescending { it.updatedAtMillis })
+                    }.sortedByDescending { maxOf(it.updatedAtMillis, it.lastChatAtMillis ?: 0L) })
                 }
             }
 

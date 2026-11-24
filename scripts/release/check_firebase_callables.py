@@ -14,6 +14,7 @@ APP_CRITICAL_CALLABLES = (
     "getMyCareer",
     "registerPushToken",
     "deleteRoomMessage",
+    "markRoomChatRead",
 )
 
 

@@ -43,6 +43,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import com.hebi.talksullae.firebase.EncryptedRoomDraftStore
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,6 +66,7 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 
 @Composable
 internal fun OnlineRoomChatHost(
@@ -133,6 +137,37 @@ internal fun OnlineRoomChatHost(
         }
     }
     val visibleMessages = state.messages.filter { it.expiresAtMillis == null || it.expiresAtMillis > displayNow }
+    val newestTrackedId = visibleMessages.lastOrNull()?.takeIf { it.trackedForUnread }?.id
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var resumed by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            resumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val newestVisible by remember(listState, newestTrackedId) {
+        derivedStateOf { newestTrackedId != null &&
+            listState.layoutInfo.visibleItemsInfo.any { it.key == newestTrackedId } }
+    }
+    var markedId by remember(uid, roomId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(newestTrackedId, newestVisible, resumed, awayFromNewest, state.initialLoading,
+        state.fromCache, state.readError) {
+        val id = newestTrackedId ?: return@LaunchedEffect
+        if (!resumed || !newestVisible || awayFromNewest || state.initialLoading ||
+            state.fromCache || state.readError != null || markedId == id) return@LaunchedEffect
+        delay(400L)
+        try {
+            if (chatRepository.markRead(roomId, id)) markedId = id
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Retain the unread indicator until the next successful confirmation.
+        }
+    }
     val newestId = state.pending?.requestId ?: visibleMessages.lastOrNull()?.id
     LaunchedEffect(newestId) {
         if (newestId != null && listState.firstVisibleItemIndex <= 1) {
