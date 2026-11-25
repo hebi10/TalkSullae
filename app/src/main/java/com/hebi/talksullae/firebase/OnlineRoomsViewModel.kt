@@ -162,6 +162,25 @@ internal class OnlineRoomsViewModel(
             }
         }
 
+    fun revokeInvitation(roomId: String, expectedHash: String) {
+        if (stateMutable.value.selectedId != roomId || stateMutable.value.selectedRoom?.ownerId != uid) return
+        action("초대 코드를 취소했습니다.") {
+            repository.revokeInvitation(roomId, expectedHash)
+            stateMutable.update { if (it.selectedId == roomId) it.copy(invite = null) else it }
+        }
+    }
+
+    fun openNotification(target: RoomNotificationTarget): Boolean {
+        val current = stateMutable.value
+        if (target.recipientUid != uid || current.loading || current.error != null || current.working) return false
+        if (current.entries.none { it.id == target.roomId && it.status == "active" }) {
+            stateMutable.update { it.copy(info = "현재 접근할 수 없는 방입니다.") }
+            return true
+        }
+        if (current.selectedId != target.roomId) openRoom(target.roomId)
+        return true
+    }
+
     fun previewInvite(value: String): Boolean {
         if (stateMutable.value.working) return false
         val code = InviteLinkCodec.normalizeInput(value)

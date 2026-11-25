@@ -152,3 +152,22 @@ test("only owner can archive after games finish, revoking all memberships and in
   await assert.rejects(service.requestJoin(db,{...auth("archive-outsider"),data:{code:invite.code}}));
   assert.deepEqual(await service.archiveRoom(db,{...owner,data}),{status:"archived",deduplicated:true});
 });
+
+test("owner revokes exact active invitation without replacing it; stale and unauthorized revocations fail",async()=>{
+ const {roomId}=await service.createRoom(db,{...auth("r2-revoke-owner"),data:{name:"초대 취소",description:"",requiresApproval:false}});
+ const first=await service.createInvitation(db,{...auth("r2-revoke-owner"),data:{roomId}});
+ const ref=db.collection("rooms").doc(roomId);
+ const oldHash=(await ref.get()).get("activeInviteHash");
+ const latest=await service.createInvitation(db,{...auth("r2-revoke-owner"),data:{roomId}});
+ const expectedHash=(await ref.get()).get("activeInviteHash");
+ await assert.rejects(service.revokeInvitation(db,{...auth("r2-revoke-owner"),data:{roomId,expectedHash:oldHash}}),e=>e.code==="aborted");
+ await assert.rejects(service.revokeInvitation(db,{...auth("r2-revoke-outsider"),data:{roomId,expectedHash}}),e=>e.code==="permission-denied");
+ assert.deepEqual(await service.revokeInvitation(db,{...auth("r2-revoke-owner"),data:{roomId,expectedHash}}),{revoked:true,changed:true});
+ assert.equal((await ref.get()).get("activeInviteHash"),null);
+ assert.equal((await ref.get()).get("activeInviteExpiresAt"),null);
+ for(const code of [first.code,latest.code]){
+   await assert.rejects(service.previewInvitation(db,{...auth("r2-revoke-guest"),data:{code}}),e=>e.code==="permission-denied");
+   await assert.rejects(service.requestJoin(db,{...auth("r2-revoke-guest"),data:{code}}),e=>e.code==="permission-denied");
+ }
+ assert.deepEqual(await service.revokeInvitation(db,{...auth("r2-revoke-owner"),data:{roomId,expectedHash}}),{revoked:true,changed:false});
+});

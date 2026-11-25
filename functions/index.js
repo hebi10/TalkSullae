@@ -34,6 +34,7 @@ exports.updateRoom = onCall(config, request=>guardRoomOperation(db,request,"upda
 exports.archiveRoom = onCall(config, request=>guardRoomOperation(db,request,"archiveRoom",room.archiveRoom));
 exports.saveMyProfile = onCall(config, request=>saveMyProfile(db,request));
 exports.createInvitation = onCall(config, request=>guardRoomOperation(db,request,"createInvitation",room.createInvitation));
+exports.revokeInvitation = onCall(config, request=>guardRoomOperation(db,request,"revokeInvitation",room.revokeInvitation));
 exports.previewInvitation = onCall(config, request=>guardRoomOperation(db,request,"previewInvitation",room.previewInvitation));
 exports.requestJoin = onCall(config, request=>guardRoomOperation(db,request,"requestJoin",room.requestJoin));
 exports.changeMember = onCall(config, request=>room.changeMember(db,request));

@@ -68,6 +68,7 @@ internal interface OnlineRoomsRepository {
     suspend fun createRoom(name: String, description: String, approval: Boolean): String
     suspend fun updateRoom(roomId: String, name: String, description: String, approval: Boolean, expectedRevision: Long): Unit = error("방 정보 수정 기능을 사용할 수 없습니다.")
     suspend fun archiveRoom(roomId: String): Unit = error("방 종료 기능을 사용할 수 없습니다.")
+    suspend fun revokeInvitation(roomId: String, expectedHash: String): Unit = error("초대 취소 기능을 사용할 수 없습니다.")
     suspend fun createInvitation(roomId: String): Invitation
     suspend fun previewInvitation(code: String): InvitationPreview
     suspend fun requestJoin(code: String): JoinResult
@@ -151,6 +152,12 @@ internal class CloudRoomsRepository(
     override suspend fun archiveRoom(roomId: String) {
         check(invoke("archiveRoom", mapOf("roomId" to roomId, "confirm" to "ARCHIVE"))["status"] == "archived") {
             "방 종료 결과를 확인할 수 없습니다."
+        }
+    }
+
+    override suspend fun revokeInvitation(roomId: String, expectedHash: String) {
+        check(invoke("revokeInvitation", mapOf("roomId" to roomId, "expectedHash" to expectedHash))["revoked"] == true) {
+            "초대 취소 결과를 확인하지 못했습니다."
         }
     }
 

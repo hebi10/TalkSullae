@@ -11,6 +11,7 @@ APP_CRITICAL_CALLABLES = (
     "archiveRoom",
     "saveMyProfile",
     "previewInvitation",
+    "revokeInvitation",
     "getMyCareer",
     "getRoomFriendRecords",
     "registerPushToken",
