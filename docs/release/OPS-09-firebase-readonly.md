@@ -37,3 +37,11 @@ LIVE-01~08의 GitHub 소스 검증과 **현재 배포된** Firebase 프로젝트
 - https://docs.cloud.google.com/sdk/gcloud/reference/scheduler/jobs/list
 - https://firebase.google.com/docs/reference/rules/rest/v1/projects.releases/list
 - https://docs.cloud.google.com/iam/docs/roles-permissions/firebaserules
+
+## TS-R2-02 추가 운영 메타데이터 및 구버전 호환성
+- 단일 필드 `fieldOverrides`의 READY 상태도 확인한다. 컴포지트 색인만 일치해도 만료/게임 마감 쿼리가 준비됐다고 간주하지 않는다.
+- Firebase Management Android 앱 목록에서 패키지 1개를 확인하고, App Check Play Integrity 등록 여부 및 Firestore enforcement 상태, SHA-256 등록 개수만 출력한다. 공개 지문이라도 실제 값·앱 ID·API 응답·인증 정보는 감사 파일에 출력하지 않는다.
+- 해당 REST GET에 대한 기존 IAM 권한이 부족하면 미확인으로 남는다. 승인된 감사 전용 계정의 필요한 메타데이터 권한만 운영자가 검토한다. 새로운 역할/설정 변경/강제 적용을 이 PR이 수행하지 않는다.
+- 배포된 0.5.0(6)은 3종 아바타만 허용한다. 새 서버는 프로필의 `avatar`를 기존 3종 값으로 유지하고 `avatarV2`를 별도로 보관한다. 신규 앱은 우선 V2를 읽고 기존 데이터에도 대응한다. 방 멤버는 실제 선택을 유지한다. 기존에 8종이 `avatar`에 직접 저장된 운영 데이터는 미확인으로, 실제 인벤토리 확인 후 필요한 범위만 별도 마이그레이션한다.
+- 새 Functions를 먼저 호환 모드로 검증한 후 새 클라이언트를 배포하고 App Check 강제 전 구버전 업데이트 경로를 확보한다. 메타데이터 일치가 운영 리비전 동일/토큰 정상/Play 서명 일치를 증명하지 않는다.
+- 공식 API: https://firebase.google.com/docs/reference/firebase-management/rest/v1beta1/projects.androidApps/list ; https://firebase.google.com/docs/reference/appcheck/rest/v1/projects.apps.playIntegrityConfig/get ; https://firebase.google.com/docs/reference/appcheck/rest/v1/projects.services/get ; https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.collectionGroups.fields/get

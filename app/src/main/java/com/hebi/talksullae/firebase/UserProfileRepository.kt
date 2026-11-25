@@ -10,6 +10,9 @@ data class UserProfile(val nickname: String, val avatar: String)
 object NicknamePolicy {
     val avatars = listOf("부엉이", "토끼", "고양이", "강아지", "곰", "여우", "판다", "펭귄")
 
+    fun resolveAvatar(modern: String?, legacy: String?): String =
+        modern?.takeIf { it in avatars } ?: legacy?.takeIf { it in avatars } ?: avatars.first()
+
     fun normalize(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFC).trim()
 
     fun isValid(value: String): Boolean {
@@ -29,10 +32,8 @@ internal class UserProfileRepository(
         val snapshot = firestore.collection("users").document(uid).get().await()
         if (!snapshot.exists()) return null
         val nickname = snapshot.getString("nickname") ?: return null
-        val avatar = snapshot.getString("avatar") ?: return null
-        return if (NicknamePolicy.isValid(nickname) && avatar in NicknamePolicy.avatars) {
-            UserProfile(nickname, avatar)
-        } else null
+        val avatar = NicknamePolicy.resolveAvatar(snapshot.getString("avatarV2"), snapshot.getString("avatar"))
+        return if (NicknamePolicy.isValid(nickname)) UserProfile(nickname, avatar) else null
     }
 
     suspend fun save(nickname: String, avatar: String): UserProfile {
