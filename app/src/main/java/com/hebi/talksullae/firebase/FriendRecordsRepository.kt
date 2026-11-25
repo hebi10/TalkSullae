@@ -14,7 +14,10 @@ internal data class FriendComparison(
 internal data class FriendRecords(
     val totalGames: Long, val totalWins: Long, val bestStreak: Long, val totalSeasonPoints: Long,
     val games: Map<String, FriendGameStats>, val achievements: List<String>,
-    val comparison: FriendComparison, val reviewedGames: Long, val capped: Boolean
+    val comparison: FriendComparison, val reviewedGames: Long, val capped: Boolean,
+    val comparisonLoaded: Boolean = true,
+    val identitySuppressed: Boolean = false,
+    val balanceSuppressed: Boolean = false
 )
 
 internal object FriendRecordsDecoder {
@@ -58,20 +61,23 @@ internal object FriendRecordsDecoder {
             it as? String ?: error("업적 형식 오류")
         } ?: error("업적 누락")
         return FriendRecords(totalGames, wins, count(friend["bestStreak"]), count(friend["totalSeasonPoints"]),
-            games, achievements, comparison, reviewed, data["capped"] as? Boolean ?: error("조회 범위 누락"))
+            games, achievements, comparison, reviewed, data["capped"] as? Boolean ?: error("조회 범위 누락"),
+            data["comparisonLoaded"] as? Boolean ?: true,
+            data["identitySuppressed"] as? Boolean ?: false,
+            data["balanceSuppressed"] as? Boolean ?: false)
     }
 }
 
 internal interface FriendRecordsRepository {
-    suspend fun get(roomId: String, targetUid: String): FriendRecords
+    suspend fun get(roomId: String, targetUid: String, includeComparison: Boolean = true): FriendRecords
 }
 
 internal class FirebaseFriendRecordsRepository(
     private val functions: FirebaseFunctions = FirebaseFunctions.getInstance("asia-northeast3")
 ) : FriendRecordsRepository {
-    override suspend fun get(roomId: String, targetUid: String): FriendRecords {
+    override suspend fun get(roomId: String, targetUid: String, includeComparison: Boolean): FriendRecords {
         val result = functions.getHttpsCallable("getRoomFriendRecords")
-            .call(mapOf("roomId" to roomId, "targetUid" to targetUid)).await().data as? Map<*, *>
+            .call(mapOf("roomId" to roomId, "targetUid" to targetUid, "includeComparison" to includeComparison)).await().data as? Map<*, *>
             ?: error("전적 정보를 확인하지 못했습니다.")
         return FriendRecordsDecoder.decode(result)
     }

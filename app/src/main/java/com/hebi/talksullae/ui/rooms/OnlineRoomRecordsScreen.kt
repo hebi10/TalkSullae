@@ -114,6 +114,7 @@ internal fun OnlineRoomRecordsHost(
     var friendLoading by remember(uid,roomId,season,selectedFriend){mutableStateOf(false)}
     var friendError by remember(uid,roomId,season,selectedFriend){mutableStateOf<String?>(null)}
     var friendRetry by remember(uid,roomId,season,selectedFriend){mutableIntStateOf(0)}
+    var includeComparison by remember(uid,roomId,season,selectedFriend){mutableStateOf(false)}
     var foreground by remember(lifecycle){mutableStateOf(lifecycle.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
     DisposableEffect(lifecycle,uid,roomId){
         val observer=LifecycleEventObserver { _, _ ->
@@ -124,14 +125,14 @@ internal fun OnlineRoomRecordsHost(
         onDispose{lifecycle.lifecycle.removeObserver(observer)}
     }
     val activeFriend=selectedFriend?.let { id -> members.firstOrNull { it.uid==id && it.uid!=uid && it.status=="active" } }
-    LaunchedEffect(uid,roomId,season,activeFriend?.uid,friendRetry,foreground){
+    LaunchedEffect(uid,roomId,season,activeFriend?.uid,friendRetry,foreground,includeComparison){
         friendValue=null
         friendError=null
         val friend=activeFriend ?: return@LaunchedEffect
         if(!foreground)return@LaunchedEffect
         friendLoading=true
         try {
-            friendValue=FirebaseFriendRecordsRepository().get(roomId,friend.uid)
+            friendValue=FirebaseFriendRecordsRepository().get(roomId,friend.uid,includeComparison)
         } catch(cancelled:CancellationException){
             throw cancelled
         } catch(_:Exception){
@@ -224,7 +225,7 @@ internal fun OnlineRoomRecordsHost(
     )
     if(activeFriend!=null && foreground){
         FriendRecordsDialog(activeFriend.name,friendValue,friendLoading,friendError,
-            onRetry={friendRetry++},onDismiss={selectedFriend=null})
+            onRetry={friendRetry++},onDismiss={selectedFriend=null},onCompare={includeComparison=true})
     }
 }
 

@@ -73,7 +73,8 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
     LaunchedEffect(uid) { vm.load(uid) }
 
     ContentCard(modifier = Modifier.testTag("my-career-summary")) {
-        Text("나의 전체 전적", style = MaterialTheme.typography.titleMedium)
+        Text("현재 참여 중인 방의 전적", style = MaterialTheme.typography.titleMedium)
+        Text("탈퇴하거나 종료된 방은 집계하지 않습니다.", style = MaterialTheme.typography.bodySmall)
         if (state.loading) CircularProgressIndicator()
         state.value?.let { career ->
             Text("참여 중인 방 " + career.roomCount + "개 · 누적 경기 " + career.totalGames + "회")

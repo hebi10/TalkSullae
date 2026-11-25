@@ -120,7 +120,13 @@ test("finished friend records expose only same-room aggregate and bounded compar
  assert.equal(response.comparison.ties,1);
  assert.equal(response.comparison.myIdentityAttempts,1);
  assert.equal(response.comparison.myIdentityHits,1);
- assert.equal(response.comparison.friendIdentityHits,1);
+ assert.equal(response.comparison.friendIdentityHits,0);
+ assert.equal(response.comparison.friendIdentityAttempts,0);
+ assert.equal(response.identitySuppressed,true);
+ const summary=await getRoomFriendRecords(db,{...auth(id),data:{...input,includeComparison:false}});
+ assert.equal(summary.comparisonLoaded,false);
+ assert.equal(summary.reviewedGames,0);
+ assert.deepEqual(summary.friend,response.friend);
  const serialized=JSON.stringify(response);
  assert.ok(!serialized.includes(game.sessionId));
  assert.ok(!serialized.includes(targetUid));

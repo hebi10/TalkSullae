@@ -21,6 +21,10 @@ class FriendRecordsDecoderTest {
         assertEquals(1L,data.comparison.myIdentityHits)
         assertEquals(2L,data.reviewedGames)
     }
+    @Test fun summaryDoesNotClaimComparisonWasLoaded(){
+        val data=FriendRecordsDecoder.decode(response()+("comparisonLoaded" to false))
+        assertEquals(false,data.comparisonLoaded)
+    }
     @Test fun rejectsImpossibleCounts(){
         assertThrows(IllegalArgumentException::class.java){ FriendRecordsDecoder.decode(response(2L)) }
         assertThrows(IllegalArgumentException::class.java){ FriendRecordsDecoder.decode(response()+("reviewedGames" to 31L)) }

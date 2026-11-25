@@ -22,7 +22,7 @@ internal fun rateLabel(hits: Long, attempts: Long): String =
 
 @Composable
 internal fun FriendRecordsDialog(name: String, value: FriendRecords?, loading: Boolean, error: String?,
-    onRetry: () -> Unit, onDismiss: () -> Unit) {
+    onRetry: () -> Unit, onDismiss: () -> Unit, onCompare: () -> Unit = {}) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("$name · 방 전적") },
@@ -45,6 +45,11 @@ internal fun FriendRecordsDialog(name: String, value: FriendRecords?, loading: B
                     labels.forEach { (id, label) ->
                         record.games[id]?.let { Text("$label · ${it.plays}경기 · ${it.wins}승") }
                     }
+                    if (!record.comparisonLoaded) {
+                        TextButton(onClick = onCompare, enabled = !loading, modifier = Modifier.testTag("friend-load-comparison")) {
+                            Text("함께한 경기 상세 비교")
+                        }
+                    } else {
                     Text("함께한 경기", style = MaterialTheme.typography.titleMedium)
                     Text("내 최근 ${record.reviewedGames}경기 기준" +
                         if (record.capped) " (최대 30경기, 전체 누적 아님)" else "")
@@ -54,12 +59,13 @@ internal fun FriendRecordsDialog(name: String, value: FriendRecords?, loading: B
                     labels.forEach { (id, label) -> Text("$label · ${pair.games[id] ?: 0L}회") }
                     Text("정체 추리", style = MaterialTheme.typography.titleMedium)
                     Text("내가 친구 정체를 맞힌 비율 " + rateLabel(pair.myIdentityHits, pair.myIdentityAttempts))
-                    Text("친구가 내 정체를 맞힌 비율 " + rateLabel(pair.friendIdentityHits, pair.friendIdentityAttempts))
-                    Text("친구가 내 정체를 틀린 횟수 ${pair.friendIdentityAttempts - pair.friendIdentityHits}회")
+                    if (record.identitySuppressed) Text("친구의 정체 추리 비율은 비교 기록 3회 이상일 때 표시합니다.")
+                    else Text("친구가 내 정체를 맞힌 비율 " + rateLabel(pair.friendIdentityHits, pair.friendIdentityAttempts))
                     Text("밸런스 선택 일치율", style = MaterialTheme.typography.titleMedium)
-                    Text(rateLabel(pair.balanceMatched, pair.balanceCompared))
+                    Text(if (record.balanceSuppressed) "비교 기록 3회 이상 필요" else rateLabel(pair.balanceMatched, pair.balanceCompared))
                     Text("미제출 또는 보존되지 않은 비밀 기록은 비율 계산에서 제외합니다. 점수 비교는 같은 경기 내 원점수 비교입니다.",
                         style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         },
