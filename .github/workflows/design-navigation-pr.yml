@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   capture:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/ts-final-01-b-deletion-navigation'
+    if: github.event.pull_request.head.repo.full_name == github.repository && (github.event.pull_request.head.ref == 'fix/ts-final-01-b-deletion-navigation' || github.event.pull_request.head.ref == 'design/ts-final-game-polish')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

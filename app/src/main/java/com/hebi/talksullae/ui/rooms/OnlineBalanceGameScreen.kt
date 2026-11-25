@@ -29,6 +29,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hebi.talksullae.design.ContentCard
 import com.hebi.talksullae.design.PrimaryAction
 import com.hebi.talksullae.firebase.CloudMember
 import com.hebi.talksullae.game.core.GamePhase
@@ -130,10 +131,11 @@ internal fun OnlineBalanceGameHost(
                 .testTag("balance-refresh")){Text("게임 다시 확인")}
         }
         if(session!=null){
-            Text("상태: ${gamePhaseLabel(phase)} · ${if(mode=="async")"비동기" else "실시간"}",
-                style=MaterialTheme.typography.titleMedium)
-            remaining?.let{GameDeadlineStatus(it)}
-            if(session.fromCache)Text("캐시 상태입니다. 서버 연결을 확인해 주세요.")
+            GamePhasePanel(
+                "상태: ${gamePhaseLabel(phase)} · ${if(mode=="async")"비동기" else "실시간"}",
+                remaining,
+                if (session.fromCache) "캐시 상태입니다. 서버 연결을 확인해 주세요." else null
+            )
             if(phase==GamePhase.WAITING||phase==GamePhase.READY){
                 Text("참가 ${session.participants.size}명 · 최소 2명, 최대 10명")
                 Text(lobbyReadinessLabel(session.participants.size, session.participants.count { it.ready }, 2, phase, session.fromCache),
@@ -164,15 +166,19 @@ internal fun OnlineBalanceGameHost(
             if(member&&phase==GamePhase.PLAYING){
                 Text("나의 선택",style=MaterialTheme.typography.titleMedium)
                 if(state.submitted){
-                    Text("선택을 제출했습니다. 결과 공개 전까지 다른 사람의 선택은 비공개입니다.")
-                    state.ownChoice?.let{Text("내 선택: $it")}
+                    ContentCard {
+                        Text("선택을 제출했습니다. 결과 공개 전까지 다른 사람의 선택은 비공개입니다.")
+                        state.ownChoice?.let{Text("내 선택: $it")}
+                    }
                 }else if(options.size==2){
                     options.forEachIndexed{index,item->
                         val key=if(index==0)"A" else "B"
-                        OutlinedButton(onClick={choice=key},
-                            modifier=Modifier.fillMaxWidth().testTag("balance-choice-$key")){
-                            Text("$key · $item"+if(choice==key)" · 선택됨" else "")
-                        }
+                        GameChoiceAction(
+                            label = "$key · $item"+if(choice==key)" · 선택됨" else "",
+                            selected = choice==key,
+                            onClick = {choice=key},
+                            modifier = Modifier.fillMaxWidth().testTag("balance-choice-$key")
+                        )
                     }
                     PrimaryAction("나의 선택 제출",
                         onClick={vm.action("submit",mapOf("choice" to choice))},
@@ -187,21 +193,23 @@ internal fun OnlineBalanceGameHost(
                 }else{
                     Text("예측할 친구")
                     session.participants.filter{it.uid!=uid}.forEach{player->
-                        OutlinedButton(onClick={target=player.uid},
-                            modifier=Modifier.fillMaxWidth()
-                                .testTag("balance-predict-target-"+player.uid)){
-                            Text((names[player.uid]?:"친구")+
-                                if(target==player.uid)" · 선택됨" else "")
-                        }
+                        GameChoiceAction(
+                            label = (names[player.uid]?:"친구")+
+                                if(target==player.uid)" · 선택됨" else "",
+                            selected = target==player.uid,
+                            onClick = {target=player.uid},
+                            modifier = Modifier.fillMaxWidth().testTag("balance-predict-target-"+player.uid)
+                        )
                     }
                     if(options.size==2){
                         options.forEachIndexed{index,item->
                             val key=if(index==0)"A" else "B"
-                            OutlinedButton(onClick={prediction=key},
-                                modifier=Modifier.fillMaxWidth()
-                                    .testTag("balance-predict-choice-$key")){
-                                Text("$key · $item"+if(prediction==key)" · 선택됨" else "")
-                            }
+                            GameChoiceAction(
+                                label = "$key · $item"+if(prediction==key)" · 선택됨" else "",
+                                selected = prediction==key,
+                                onClick = {prediction=key},
+                                modifier = Modifier.fillMaxWidth().testTag("balance-predict-choice-$key")
+                            )
                         }
                     }
                     PrimaryAction("예측 제출",onClick={
@@ -213,9 +221,11 @@ internal fun OnlineBalanceGameHost(
                 }
             }
             if(phase==GamePhase.REVEAL||phase==GamePhase.FINISHED){
-                Text("전체 선택·예측 결과",style=MaterialTheme.typography.titleMedium)
-                Text(session.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.",
-                    modifier=Modifier.testTag("balance-result"))
+                ContentCard {
+                    Text("전체 선택·예측 결과",style=MaterialTheme.typography.titleMedium)
+                    Text(session.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.",
+                        modifier=Modifier.testTag("balance-result"))
+                }
                 if(phase==GamePhase.FINISHED){
                     OutlinedButton(onClick=onBack,modifier=Modifier.fillMaxWidth()){Text("방으로 돌아가기")}
                     OutlinedButton(

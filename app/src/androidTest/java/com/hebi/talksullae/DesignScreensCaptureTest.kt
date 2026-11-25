@@ -327,16 +327,43 @@ class DesignScreensCaptureTest {
     }
     @Test fun d17IdentityResult(){mountGame("identity",GamePhase.FINISHED);capture("D17_identity_result",label("정체 공개·결과"),true)}
     @Test fun d18Liar(){mountGame("liar",GamePhase.PLAYING,role="liar");capture("D18_liar_secret",tag("liar-secret-role"),true)}
-    @Test fun d18Citizen(){mountGame("liar",GamePhase.PLAYING);capture("D18_citizen_secret",tag("liar-secret-role"),true);capture("D18_liar_input",tag("liar-chat-input"),true)}
-    @Test fun d19LiarVote(){mountGame("liar",GamePhase.VOTING);capture("D19_liar_vote",tag("liar-vote-friend3"),true)}
-    @Test fun d20LiarGuess(){mountGame("liar",GamePhase.VOTING,role="liar",guess=true);capture("D20_liar_guess",tag("liar-topic-option-커피"),true)}
+    @Test fun d18Citizen(){
+        mountGame("liar",GamePhase.PLAYING)
+        capture("D18_citizen_secret",tag("liar-secret-role"),true)
+        tag("liar-chat-input").performScrollTo().performClick().performTextInput("나는 아침에 마시는 편이야.")
+        capture("D18_liar_input",tag("liar-chat-input"),true)
+    }
+    @Test fun d19LiarVote(){
+        mountGame("liar",GamePhase.VOTING)
+        tag("liar-vote-friend3").performScrollTo().performClick()
+        capture("D19_liar_vote",tag("liar-vote-friend3"),true)
+    }
+    @Test fun d20LiarGuess(){
+        mountGame("liar",GamePhase.VOTING,role="liar",guess=true)
+        tag("liar-topic-option-커피").performScrollTo().performClick()
+        capture("D20_liar_guess",tag("liar-topic-option-커피"),true)
+    }
     @Test fun d21LiarResult(){mountGame("liar",GamePhase.FINISHED);capture("D21_liar_result",tag("liar-result"),true)}
-    @Test fun d22Forbidden(){mountGame("forbidden",GamePhase.PLAYING);capture("D22_forbidden_chat",tag("forbidden-other-friend1"),true);capture("D22_forbidden_input",tag("forbidden-chat-input"),true)}
+    @Test fun d22Forbidden(){
+        mountGame("forbidden",GamePhase.PLAYING)
+        capture("D22_forbidden_chat",tag("forbidden-other-friend1"),true)
+        tag("forbidden-chat-input").performScrollTo().performClick().performTextInput("오늘 어떤 계획이 있어?")
+        capture("D22_forbidden_input",tag("forbidden-chat-input"),true)
+    }
     @Test fun d22Eliminated(){mountGame("forbidden",GamePhase.PLAYING,eliminated=true);capture("D22_eliminated",label("금지어를 말해 탈락했습니다. 채팅을 보낼 수 없습니다."),true)}
     @Test fun d23ForbiddenResult(){mountGame("forbidden",GamePhase.FINISHED);capture("D23_forbidden_result",tag("forbidden-result"),true)}
-    @Test fun d24BalanceChoice(){mountGame("balance",GamePhase.PLAYING);capture("D24_balance_choice",tag("balance-choice-A"),true)}
+    @Test fun d24BalanceChoice(){
+        mountGame("balance",GamePhase.PLAYING)
+        tag("balance-choice-A").performScrollTo().performClick()
+        capture("D24_balance_choice",tag("balance-choice-A"),true)
+    }
     @Test fun d24BalanceSubmitted(){mountGame("balance",GamePhase.PLAYING,submitted=true);capture("D24_balance_submitted",label("선택을 제출했습니다. 결과 공개 전까지 다른 사람의 선택은 비공개입니다."),true)}
-    @Test fun d25BalancePredict(){mountGame("balance",GamePhase.VOTING);tag("balance-predict-target-friend1").performScrollTo().performClick();capture("D25_balance_predict",tag("balance-predict-choice-A"),true)}
+    @Test fun d25BalancePredict(){
+        mountGame("balance",GamePhase.VOTING)
+        tag("balance-predict-target-friend1").performScrollTo().performClick()
+        tag("balance-predict-choice-A").performScrollTo().performClick()
+        capture("D25_balance_predict",tag("balance-predict-choice-A"),true)
+    }
     @Test fun d26BalanceResult(){mountGame("balance",GamePhase.FINISHED);capture("D26_balance_result",tag("balance-result"),true)}
     private val records=RoomRecordsState("2026-11",false,
         ranking=listOf(SeasonRank("owner",420,5,3),SeasonRank("friend1",360,5,2),SeasonRank("friend2",280,4,1)),

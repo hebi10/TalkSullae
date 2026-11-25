@@ -31,6 +31,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hebi.talksullae.design.ContentCard
 import com.hebi.talksullae.design.PrimaryAction
 import com.hebi.talksullae.firebase.CloudMember
 import com.hebi.talksullae.game.core.GamePhase
@@ -111,10 +112,11 @@ internal fun OnlineForbiddenGameHost(
                 modifier=Modifier.fillMaxWidth()){Text("게임 다시 확인")}
         }
         if(snap!=null){
-            Text("상태: ${gamePhaseLabel(phase)} · 라운드 ${snap.session.round}",
-                style=MaterialTheme.typography.titleMedium)
-            remaining?.let{GameDeadlineStatus(it)}
-            if(snap.fromCache)Text("저장된 상태입니다. 서버 동기화를 확인해 주세요.")
+            GamePhasePanel(
+                "상태: ${gamePhaseLabel(phase)} · 라운드 ${snap.session.round}",
+                remaining,
+                if (snap.fromCache) "저장된 상태입니다. 서버 동기화를 확인해 주세요." else null
+            )
             if(phase==GamePhase.WAITING||phase==GamePhase.READY){
                 Text("참가 ${snap.participants.size}명 · 최소 3명, 최대 10명")
                 Text(lobbyReadinessLabel(snap.participants.size, snap.participants.count { it.ready }, 3, phase, snap.fromCache),
@@ -145,13 +147,15 @@ internal fun OnlineForbiddenGameHost(
             if(participant&&phase==GamePhase.PLAYING){
                 Text(snap.publicState["prompt"] as? String ?: "금지어를 유도해 주세요.",
                     style=MaterialTheme.typography.titleMedium)
-                Text("다른 친구의 금지어",style=MaterialTheme.typography.titleMedium)
-                if(state.personal==null){
-                    Text("개인 금지어 정보를 확인 중입니다.")
-                }else{
-                    state.otherWords.forEach{(target,word)->
-                        Text((names[target]?:"친구")+" · "+word,
-                            modifier=Modifier.testTag("forbidden-other-"+target))
+                ContentCard {
+                    Text("다른 친구의 금지어",style=MaterialTheme.typography.titleMedium)
+                    if(state.personal==null){
+                        Text("개인 금지어 정보를 확인 중입니다.")
+                    }else{
+                        state.otherWords.forEach{(target,word)->
+                            Text((names[target]?:"친구")+" · "+word,
+                                modifier=Modifier.testTag("forbidden-other-"+target))
+                        }
                     }
                 }
                 state.personalError?.let{error->
@@ -161,8 +165,11 @@ internal fun OnlineForbiddenGameHost(
                         Text("금지어 정보 다시 불러오기")
                     }
                 }
-                Text("탈락 ${eliminated.size}명 / 참가 ${snap.participants.size}명")
-                if(uid in eliminated)Text("금지어를 말해 탈락했습니다. 채팅을 보낼 수 없습니다.")
+                ContentCard {
+                    Text("탈락 ${eliminated.size}명 / 참가 ${snap.participants.size}명")
+                    if(uid in eliminated)Text("금지어를 말해 탈락했습니다. 채팅을 보낼 수 없습니다.",
+                        color = MaterialTheme.colorScheme.error)
+                }
                 Column(Modifier.fillMaxWidth().heightIn(max=280.dp)
                     .verticalScroll(rememberScrollState()).testTag("forbidden-chat-messages"),
                     verticalArrangement=Arrangement.spacedBy(8.dp)){
@@ -197,9 +204,11 @@ internal fun OnlineForbiddenGameHost(
                 }
             }
             if(phase==GamePhase.REVEAL||phase==GamePhase.FINISHED){
-                Text("금지어 결과",style=MaterialTheme.typography.titleMedium)
-                Text(snap.publicState["publishedResult"] as? String ?: "결과 집계 중",
-                    modifier=Modifier.testTag("forbidden-result"))
+                ContentCard {
+                    Text("금지어 결과",style=MaterialTheme.typography.titleMedium)
+                    Text(snap.publicState["publishedResult"] as? String ?: "결과 집계 중",
+                        modifier=Modifier.testTag("forbidden-result"))
+                }
             }
             if (phase == GamePhase.FINISHED) {
                 PrimaryAction("방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())

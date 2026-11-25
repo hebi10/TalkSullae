@@ -1,8 +1,15 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.hebi.talksullae.design.ContentCard
 import com.hebi.talksullae.game.core.GamePhase
 
 internal fun gamePhaseLabel(phase: GamePhase?): String = when (phase) {
@@ -38,4 +45,35 @@ internal fun GameDeadlineStatus(seconds: Long) {
     Text(gameDeadlineLabel(seconds),
         style = MaterialTheme.typography.titleMedium,
         color = if (seconds in 0L..30L) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+}
+
+@Composable
+internal fun GamePhasePanel(status: String, remaining: Long?, cacheNotice: String?) {
+    ContentCard {
+        Text(status, style = MaterialTheme.typography.titleMedium)
+        remaining?.let { GameDeadlineStatus(it) }
+        cacheNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+@Composable
+internal fun GameChoiceAction(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.heightIn(min = 48.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+        )
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
 }
