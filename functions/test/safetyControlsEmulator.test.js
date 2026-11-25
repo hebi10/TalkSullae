@@ -95,6 +95,10 @@ test("server deletion worker removes user chat, membership, preference and auth 
    roomId,requestId:UUID(41),text:"탈퇴자의 메시지"
  }});
  await safety.requestAccountDeletion(db,{...auth(member),data:{confirm:"DELETE",expectedUid:member}},()=>nowMillis);
+ const season=db.collection("rooms").doc(roomId).collection("seasons").doc("2025-01");
+ await season.set({seasonId:"2025-01",gameCount:2});
+ await season.collection("scores").doc(member).set({seasonPoints:200});
+ await season.collection("scores").doc(owner).set({seasonPoints:100});
  const identityRef=db.collection("rooms").doc(roomId)
    .collection("gameSessions").doc("f".repeat(64));
  await identityRef.set({
@@ -134,6 +138,10 @@ test("server deletion worker removes user chat, membership, preference and auth 
  assert.equal(scores[anonymous],200);
  assert.equal(scores[owner],100);
  assert.equal(Object.hasOwn(scores,member),false);
+ assert.equal((await season.collection("scores").doc(member).get()).exists,false);
+ assert.equal((await season.collection("scores").doc(owner).get()).get("seasonPoints"),100);
+ assert.equal((await season.get()).get("finalResult.winningScore"),200);
+ assert.equal((await season.get()).get("finalResult.winnerCount"),1);
  assert.equal((await base.collection("members").doc(member).get()).exists,false);
  assert.equal((await base.collection("members").doc(owner).get()).exists,true);
  assert.equal((await base.get()).get("memberCount"),1);

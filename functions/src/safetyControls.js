@@ -6,6 +6,7 @@ const {getAuth}=require("firebase-admin/auth");
 const {HttpsError}=require("firebase-functions/v2/https");
 const {authUid,roomIdValue}=require("./policy");
 const {removeSender}=require("./chatUnread");
+const {removeSeasonScore}=require("./game/seasonClosure");
 
 const UUID=/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
 const USER_ID=/^[^/\u0000-\u001f]{1,128}$/u;
@@ -303,13 +304,12 @@ async function cleanupRoom(db,index,uid,deadline){
   }
   if(progress.stage==="seasons"){
     const page=await documentPage(roomRef.collection("seasons"),progress.cursor,DELETE_SEASONS);
-    const batch=db.batch();
-    for(const season of page.docs)batch.delete(season.ref.collection("scores").doc(uid));
-    if(page.docs.length)await batch.commit();
-    if(page.more){
-      await checkpoint("seasons",page.docs.at(-1).id);
-      return false;
+    for(const season of page.docs){
+      if(Date.now()>=deadline)return false;
+      if(!await removeSeasonScore(db,season.ref,uid))return false;
+      await checkpoint("seasons",season.id);
     }
+    if(page.more)return false;
     await checkpoint("sessions");
   }
   if(progress.stage==="sessions"){

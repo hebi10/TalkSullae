@@ -11,6 +11,7 @@ import com.hebi.talksullae.ui.rooms.RoomRecordEvent
 import com.hebi.talksullae.ui.rooms.RoomRecordsContent
 import com.hebi.talksullae.ui.rooms.RoomRecordsState
 import com.hebi.talksullae.ui.rooms.SeasonRank
+import com.hebi.talksullae.ui.rooms.SeasonFinalResult
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -71,5 +72,20 @@ class RoomRecordsComposeTest {
         }
         compose.onNodeWithTag("friend-records-open-friend").performScrollTo().performClick()
         compose.runOnIdle{assertEquals("friend",chosen)}
+    }
+
+    @Test fun closedSeasonDoesNotPromoteRunnerUpAfterWinnerRecordIsRemoved(){
+        compose.setContent{
+            TalkSullaeTheme{
+                RoomRecordsContent("친구방",sample().copy(closed=true,
+                    ranking=listOf(SeasonRank("friend",120,2,1)),
+                    finalResult=SeasonFinalResult(225,1,3)),
+                    mapOf("friend" to "지훈"),onPrevious={},onNext={},canPrevious=true,
+                    canNext=false,onBack={})
+            }
+        }
+        compose.onNodeWithTag("season-final").performScrollTo().assertExists()
+        compose.onNodeWithText("우승 점수 225점 · 우승자 1명").assertExists()
+        compose.onNodeWithText("우승 · 지훈").assertDoesNotExist()
     }
 }

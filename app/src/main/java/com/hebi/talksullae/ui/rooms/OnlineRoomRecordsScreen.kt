@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.MetadataChanges
+import com.google.firebase.functions.FirebaseFunctions
+import kotlinx.coroutines.tasks.await
 import com.hebi.talksullae.firebase.FirebaseFriendRecordsRepository
 import com.hebi.talksullae.firebase.FriendRecords
 import kotlinx.coroutines.CancellationException
@@ -54,6 +56,8 @@ internal data class RecentGameRecord(
 internal data class RoomRecordEvent(
     val gameId:String,val seasonId:String,val participants:Long
 )
+internal data class SeasonFinalResult(val winningScore:Long?,val winnerCount:Long,val gameCount:Long)
+
 internal data class RoomRecordsState(
     val seasonId:String,
     val closed:Boolean,
@@ -65,7 +69,9 @@ internal data class RoomRecordsState(
     val recentGames:List<RecentGameRecord> = emptyList(),
     val events:List<RoomRecordEvent> = emptyList(),
     val loading:Boolean = true,
-    val error:String? = null
+    val error:String? = null,
+    val finalResult:SeasonFinalResult? = null,
+    val finalStatus:String? = null
 )
 private val achievementLabels=mapOf(
     "first_game" to "첫 게임 완료",
@@ -115,6 +121,7 @@ internal fun OnlineRoomRecordsHost(
     var friendError by remember(uid,roomId,season,selectedFriend){mutableStateOf<String?>(null)}
     var friendRetry by remember(uid,roomId,season,selectedFriend){mutableIntStateOf(0)}
     var includeComparison by remember(uid,roomId,season,selectedFriend){mutableStateOf(false)}
+    var closureRetry by remember(uid,roomId,season){mutableIntStateOf(0)}
     var foreground by remember(lifecycle){mutableStateOf(lifecycle.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
     DisposableEffect(lifecycle,uid,roomId){
         val observer=LifecycleEventObserver { _, _ ->
@@ -141,10 +148,32 @@ internal fun OnlineRoomRecordsHost(
             friendLoading=false
         }
     }
+    LaunchedEffect(uid,roomId,season,foreground,state.closed,state.loading,state.error,closureRetry){
+        if(!foreground||!state.closed||state.loading||state.error!=null)return@LaunchedEffect
+        try {
+            val value=FirebaseFunctions.getInstance("asia-northeast3").getHttpsCallable("getRoomSeasonClosure")
+                .call(mapOf("roomId" to roomId,"seasonId" to season)).await().data as? Map<*,*>
+            if(value?.get("status")=="closing")state=state.copy(finalStatus="마감 처리 중입니다. 잠시 후 다시 확인해 주세요.")
+            else if(value?.get("status")=="empty")state=state.copy(finalStatus="종료된 시즌 기록이 없습니다.")
+            else if(value?.get("status")!="closed")state=state.copy(finalStatus="서버의 시즌 마감 상태를 다시 확인해 주세요.")
+        }catch(cancelled:CancellationException){throw cancelled}
+        catch(_:Exception){state=state.copy(finalStatus="시즌 마감 결과를 확인할 수 없습니다.")}
+    }
     DisposableEffect(uid,roomId,season){
         val db=FirebaseFirestore.getInstance()
         val room=db.collection("rooms").document(roomId)
         val registrations=listOf(
+            room.collection("seasons").document(season)
+                .addSnapshotListener(MetadataChanges.INCLUDE){doc,error->
+                    val result=if(error==null&&doc!=null&&!doc.metadata.isFromCache&&doc.exists())doc.get("finalResult") as? Map<*,*> else null
+                    val count=(result?.get("winnerCount") as? Number)?.toLong()
+                    val score=(result?.get("winningScore") as? Number)?.toLong()
+                    val games=(result?.get("gameCount") as? Number)?.toLong()
+                    val final=if(result?.get("status")=="closed"&&count!=null&&count>=0&&games!=null&&games>=0&&
+                        ((count==0L&&score==null)||(count>0L&&score!=null&&score>0L)))
+                        SeasonFinalResult(score,count,games) else null
+                    state=state.copy(finalResult=final,finalStatus=if(final!=null)null else state.finalStatus)
+                },
             room.collection("seasons").document(season).collection("scores")
                 .orderBy("seasonPoints",Query.Direction.DESCENDING).limit(20L)
                 .addSnapshotListener(MetadataChanges.INCLUDE){snapshot,error->
@@ -221,7 +250,8 @@ internal fun OnlineRoomRecordsHost(
         canNext=offset>0,
         onBack=onBack,
         friendNames=members.filter { it.uid!=uid && it.status=="active" }.associate { it.uid to it.name },
-        onFriendClick={ selectedFriend=it }
+        onFriendClick={ selectedFriend=it },
+        onClosureRetry={closureRetry++}
     )
     if(activeFriend!=null && foreground){
         FriendRecordsDialog(activeFriend.name,friendValue,friendLoading,friendError,
@@ -235,7 +265,8 @@ internal fun RoomRecordsContent(
     names:Map<String,String>,
     onPrevious:()->Unit,onNext:()->Unit,
     canPrevious:Boolean,canNext:Boolean,onBack:()->Unit,
-    friendNames:Map<String,String> = emptyMap(),onFriendClick:(String)->Unit = {}
+    friendNames:Map<String,String> = emptyMap(),onFriendClick:(String)->Unit = {},
+    onClosureRetry:()->Unit={}
 ) {
     var selectedGame by rememberSaveable(roomName) { mutableStateOf("all") }
     var filterExpanded by remember { mutableStateOf(false) }
@@ -284,7 +315,25 @@ internal fun RoomRecordsContent(
                 ) { Text("다음 시즌") }
             }
         }
-        Text("월간 시즌 순위",style=MaterialTheme.typography.titleMedium)
+        if(state.closed && !state.loading && state.error==null){
+            val final=state.finalResult
+            if(final!=null){
+                Text("시즌 최종 결과",style=MaterialTheme.typography.titleMedium,modifier=Modifier.testTag("season-final"))
+                if(final.winnerCount==0L)Text("기록된 우승자가 없습니다.")
+                else {
+                    Text("우승 점수 ${final.winningScore}점 · 우승자 ${final.winnerCount}명")
+                    Text("삭제된 기록은 제외한 보존 순위입니다. 확정된 우승자는 변경되지 않습니다.",
+                        style=MaterialTheme.typography.bodySmall)
+                }
+                Text("마감 시 누적 경기 ${final.gameCount}회",style=MaterialTheme.typography.bodySmall)
+            }else{
+                Text(state.finalStatus?:"서버의 시즌 마감 결과를 확인 중입니다.",style=MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick=onClosureRetry,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)){
+                    Text("마감 결과 다시 조회")
+                }
+            }
+        }
+        Text(if(state.closed)"보존된 시즌 순위 (상위 20명)" else "월간 시즌 순위",style=MaterialTheme.typography.titleMedium)
         if(state.loading)CircularProgressIndicator()
         state.error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
         if(!state.loading&&state.ranking.isEmpty())Text("해당 시즌의 경기 기록이 없습니다.")
@@ -293,7 +342,9 @@ internal fun RoomRecordsContent(
                 modifier = Modifier.fillMaxWidth().testTag("records-ranked-" + item.uid),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text("${rank}위 · " + (names[item.uid] ?: "탈퇴한 멤버"),
+                val champion=state.closed && state.finalResult?.winningScore==item.points
+                Text(if(champion)"우승 · "+(names[item.uid] ?: "탈퇴한 멤버")
+                    else (if(state.closed)"보존 순위 ${rank}위 · " else "${rank}위 · ") + (names[item.uid] ?: "탈퇴한 멤버"),
                     style = MaterialTheme.typography.bodyLarge)
                 Text("${item.points}점 · ${item.games}경기 · ${item.wins}승",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

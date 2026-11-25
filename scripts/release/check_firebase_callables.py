@@ -16,6 +16,7 @@ APP_CRITICAL_CALLABLES = (
     "previewInvitation",
     "revokeInvitation",
     "getMyCareer",
+    "getRoomSeasonClosure",
     "getRoomFriendRecords",
     "registerPushToken",
     "deleteRoomMessage",
