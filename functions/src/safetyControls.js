@@ -136,7 +136,7 @@ async function requestAccountDeletion(db,request,now=Date.now){
     // waiting game after the deletion request was acknowledged.
     const [existing,index]=await Promise.all([tx.get(ref),tx.get(indexQuery)]);
     if(existing.exists && ["queued","processing","completed","manual-review","needs-attention"].includes(existing.get("status"))){
-      return {status:existing.get("status")};
+      return {status:"queued",jobStatus:existing.get("status")};
     }
     if(index.size>MAX_ROOMS){
       throw new HttpsError("resource-exhausted","방이 많아 운영자 확인이 필요합니다.");
