@@ -1,9 +1,9 @@
 package com.hebi.talksullae
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import org.junit.Before
@@ -26,8 +26,11 @@ class DesignNavigationCaptureTest {
         compose.waitForIdle();DesignCaptureIO.save("D33_report_demo")
         // Return through the existing system back handler, not a test-only account.
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        compose.onNodeWithTag("account-deletion-request-open").performScrollTo().performClick()
+        // The request-open tag launches the external policy URL; use the in-app route.
+        compose.onNodeWithTag("account-deletion-in-app").performScrollTo().performClick()
         compose.onNodeWithTag("account-deletion-screen").assertIsDisplayed()
+        compose.onNodeWithTag("account-deletion-reauth").assertIsNotEnabled()
+        compose.onNodeWithTag("account-deletion-open-confirm").assertIsNotEnabled()
         compose.waitForIdle();DesignCaptureIO.save("D34_delete_demo")
     }
 }
