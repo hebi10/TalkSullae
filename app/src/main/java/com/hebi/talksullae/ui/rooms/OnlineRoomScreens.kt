@@ -144,13 +144,16 @@ internal fun OnlineRoomsHost(
     var confirmInviteRoomId by remember { mutableStateOf<String?>(null) }
     var revokeInvite by remember { mutableStateOf<Pair<String, String>?>(null) }
     var editRoomId by remember { mutableStateOf<String?>(null) }
+    var iconRoomId by remember { mutableStateOf<String?>(null) }
     var archiveRoomId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(state.selectedId, isOwner) {
         if (!isOwner || editRoomId != state.selectedId) editRoomId = null
+        if (!isOwner || iconRoomId != state.selectedId) iconRoomId = null
         if (!isOwner || archiveRoomId != state.selectedId) archiveRoomId = null
     }
     LaunchedEffect(state.info) {
         if (state.info == "방 정보를 수정했습니다.") editRoomId = null
+        if (state.info == "방 아이콘을 수정했습니다.") iconRoomId = null
     }
     var inviteNow by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(state.selectedId, state.invite) {
@@ -375,11 +378,13 @@ internal fun OnlineRoomsHost(
                 ContentCard(modifier = Modifier.testTag("online-room-${entry.id}")) {
                     Row(verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        RoomListAvatar(entry.name)
+                        RoomListAvatar(entry.name,entry.roomIcon)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(entry.name, style = MaterialTheme.typography.titleMedium)
                             Text(membershipLabel(entry.status), style = MaterialTheme.typography.bodySmall)
                             if (entry.status == "active" && entryMode != "records") {
+                                entry.memberCount?.let { Text("참가 $it/20명", style = MaterialTheme.typography.bodySmall) }
+                                if (entry.gameInProgress == true) Text("진행 중인 게임 있음", style = MaterialTheme.typography.labelMedium)
                                 val unread = entry.visibleUnread(inviteNow)
                                 entry.lastChatAtMillis?.let { last ->
                                     Text("최근 대화 " + SimpleDateFormat("M.d HH:mm", Locale.KOREA).format(Date(last)),
@@ -483,6 +488,10 @@ internal fun OnlineRoomsHost(
                 OutlinedButton(onClick = { vm.clearNotice(); editRoomId = room.id },
                     enabled = !state.working, modifier = Modifier.fillMaxWidth().testTag("room-edit-open")) {
                     Text("방 정보 수정")
+                }
+                OutlinedButton(onClick = { vm.clearNotice(); iconRoomId = room.id },
+                    enabled = !state.working, modifier = Modifier.fillMaxWidth().testTag("room-icon-open")) {
+                    Text("방 아이콘 변경")
                 }
                 val hasCurrentCode = room.activeInviteHash != null &&
                     (room.activeInviteExpiresAtMillis == null || room.activeInviteExpiresAtMillis > inviteNow)
@@ -613,6 +622,11 @@ internal fun OnlineRoomsHost(
             onSave = { name, description, approval, revision ->
                 vm.updateRoom(room.id, name, description, approval, revision)
             })
+    }
+    if (room != null && isOwner && iconRoomId == room.id) {
+        RoomIconDialog(room,state.working,state.error,
+            onDismiss={if(!state.working){iconRoomId=null;vm.clearNotice()}},
+            onSave={icon,revision->vm.updateRoomIcon(room.id,icon,revision)})
     }
     if (room != null && isOwner && archiveRoomId == room.id) {
         AlertDialog(onDismissRequest = { archiveRoomId = null },

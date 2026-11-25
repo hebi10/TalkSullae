@@ -31,6 +31,11 @@ const config = {...baseConfig,enforceAppCheck:process.env.TALKSULLAE_ENFORCE_APP
 
 exports.createRoom = onCall(config, request=>guardRoomOperation(db,request,"createRoom",room.createRoom));
 exports.updateRoom = onCall(config, request=>guardRoomOperation(db,request,"updateRoom",room.updateRoom));
+exports.updateRoomIcon = onCall(config, request=>guardRoomOperation(db,request,"updateRoomIcon",room.updateRoomIcon));
+exports.syncRoomDirectory = onDocumentUpdated({document:"rooms/{roomId}",region:"asia-northeast3"},async event=>{
+  const before=event.data?.before.data(),after=event.data?.after.data();
+  if(room.roomDirectoryChanged(before,after))await room.syncRoomDirectory(db,event.params.roomId);
+});
 exports.archiveRoom = onCall(config, request=>guardRoomOperation(db,request,"archiveRoom",room.archiveRoom));
 exports.saveMyProfile = onCall(config, request=>saveMyProfile(db,request));
 exports.createInvitation = onCall(config, request=>guardRoomOperation(db,request,"createInvitation",room.createInvitation));

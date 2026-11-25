@@ -7,6 +7,7 @@ const {
 } = require("./policy");
 const {memberDisplayName,profileAvatar} = require("./userProfile");
 
+const ROOM_ICONS=new Set(["부엉이","토끼","고양이","강아지","곰","여우","판다","펭귄"]);
 const now = () => FieldValue.serverTimestamp();
 const hashToken = value => createHash("sha256").update(value).digest("hex");
 
@@ -22,6 +23,37 @@ function requireOwner(room, member, uid) {
   if (room.data().ownerId !== uid) {
     throw new HttpsError("permission-denied", "방장만 관리할 수 있습니다.");
   }
+}
+
+function directoryFields(room,memberCount=room.memberCount) {
+  return {roomIcon:ROOM_ICONS.has(room.roomIcon)?room.roomIcon:null,
+    memberCount:Number.isInteger(memberCount)&&memberCount>=0&&memberCount<=ROOM_CAPACITY?memberCount:null,
+    gameInProgress:typeof room.activeGameSessionId==="string"&&room.activeGameSessionId.length>0};
+}
+
+function roomDirectoryChanged(before,after){
+  return ["roomIcon","memberCount","activeGameSessionId","status"].some(key=>before?.[key]!==after?.[key]);
+}
+
+async function syncRoomDirectory(db,roomId){
+  const ref=db.collection("rooms").doc(roomId);
+  return db.runTransaction(async tx=>{
+    const room=await tx.get(ref);
+    if(!room.exists||room.get("status")!=="active")return 0;
+    const members=await tx.get(ref.collection("members").where("status","==","active").limit(ROOM_CAPACITY+1));
+    if(members.size>ROOM_CAPACITY||members.size!==room.get("memberCount"))return 0;
+    const indices=await Promise.all(members.docs.map(member=>tx.get(userIndex(db,member.id,roomId))));
+    const fields=directoryFields(room.data());
+    let changed=0;
+    for(const index of indices){
+      if(!index.exists||index.get("status")!=="active")continue;
+      if(Object.entries(fields).some(([key,value])=>index.get(key)!==value)){
+        tx.update(index.ref,fields);
+        changed++;
+      }
+    }
+    return changed;
+  });
 }
 
 function userIndex(db, uid, roomId) {
@@ -48,7 +80,7 @@ async function createRoom(db, request) {
     });
     tx.create(memberRef,{displayName:memberDisplayName(profile,request.auth),
       avatar:profileAvatar(profile),status:"active",joinedAt:now()});
-    tx.create(indexRef,{roomName:draft.name,status:"active",updatedAt:now()});
+    tx.create(indexRef,{roomName:draft.name,status:"active",updatedAt:now(),...directoryFields({},1)});
   });
   return {roomId:roomRef.id};
 }
@@ -160,7 +192,8 @@ async function requestJoin(db, request) {
     const status = pending ? "pending" : "active";
     tx.set(memberRef,{status,displayName:memberDisplayName(profile,request.auth),
       avatar:profileAvatar(profile),joinedAt:now()});
-    tx.set(indexRef,{status,roomName:room.data().name,updatedAt:now()});
+    tx.set(indexRef,{status,roomName:room.data().name,updatedAt:now(),
+      ...(!pending?directoryFields(room.data(),room.get("memberCount")+1):{})});
     tx.update(roomRef,pending
       ? {pendingCount:FieldValue.increment(1)}
       : {memberCount:FieldValue.increment(1)});
@@ -205,7 +238,8 @@ async function changeMember(db, request) {
       }
       const status = action==="approve"?"active":"rejected";
       tx.update(memberRef,{status,updatedAt:now()});
-      tx.set(indexRef,{status,roomName:room.data().name,updatedAt:now()});
+      tx.set(indexRef,{status,roomName:room.data().name,updatedAt:now(),
+        ...(action==="approve"?directoryFields(room.data(),room.get("memberCount")+1):{})});
       tx.update(roomRef,action==="approve"
         ? {pendingCount:FieldValue.increment(-1),memberCount:FieldValue.increment(1)}
         : {pendingCount:FieldValue.increment(-1)});
@@ -314,6 +348,28 @@ async function updateRoom(db,request) {
   });
 }
 
+async function updateRoomIcon(db,request){
+  const uid=authUid(request),input=request.data;
+  const roomId=parseManagementRequest(input,["roomId","roomIcon","expectedRevision"]);
+  if(!(input.roomIcon===null||ROOM_ICONS.has(input.roomIcon))||!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0)
+    throw new HttpsError("invalid-argument","방 아이콘 또는 버전이 올바르지 않습니다.");
+  const ref=db.collection("rooms").doc(roomId);
+  return db.runTransaction(async tx=>{
+    const [room,member,deletion]=await Promise.all([tx.get(ref),tx.get(ref.collection("members").doc(uid)),tx.get(db.collection("accountDeletionJobs").doc(uid))]);
+    requireOwner(room,member,uid);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 방을 변경할 수 없습니다.");
+    const revision=room.get("roomRevision")??0;
+    if(revision!==input.expectedRevision)throw new HttpsError("aborted","방 정보가 변경됐습니다. 다시 열어 주세요.");
+    if((room.get("roomIcon")??null)===input.roomIcon)return {revision,updated:false};
+    const members=await currentMemberships(tx,ref,room);
+    tx.update(ref,{roomIcon:input.roomIcon,roomRevision:revision+1,updatedAt:now()});
+    for(const member of members.filter(doc=>doc.get("status")==="active")){
+      tx.set(userIndex(db,member.id,roomId),{roomIcon:input.roomIcon},{merge:true});
+    }
+    return {revision:revision+1,updated:true};
+  });
+}
+
 async function archiveRoom(db,request) {
   const uid=authUid(request),input=request.data;
   const roomId=parseManagementRequest(input,["roomId","confirm"]);
@@ -340,4 +396,4 @@ async function archiveRoom(db,request) {
   });
 }
 
-module.exports = {createRoom,createInvitation,revokeInvitation,previewInvitation,requestJoin,changeMember,leaveRoom,updateRoom,archiveRoom};
+module.exports = {createRoom,createInvitation,revokeInvitation,previewInvitation,requestJoin,changeMember,leaveRoom,updateRoom,archiveRoom,updateRoomIcon,roomDirectoryChanged,syncRoomDirectory};

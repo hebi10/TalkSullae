@@ -23,6 +23,7 @@ import com.hebi.talksullae.design.ContentCard
 import com.hebi.talksullae.firebase.CareerRepository
 import com.hebi.talksullae.firebase.FirebaseCareerRepository
 import com.hebi.talksullae.firebase.MyCareer
+import com.hebi.talksullae.firebase.careerProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -76,6 +77,13 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
         Text("나의 전체 전적", style = MaterialTheme.typography.titleMedium)
         if (state.loading) CircularProgressIndicator()
         state.value?.let { career ->
+            val progress = careerProgress(career.totalGames)
+            Text("Lv. " + progress.level + " · " + progress.title, style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.testTag("career-level"))
+            Text("활성 방 경험치 " + progress.xp + " XP · 다음 레벨까지 " + (100L - progress.xp % 100L) + " XP",
+                style = MaterialTheme.typography.bodySmall)
+            Text("완료 경기 1회당 10 XP. 현재 참여 중인 방 기준이며 승패나 게임 권한에 영향을 주지 않습니다.",
+                style = MaterialTheme.typography.bodySmall)
             Text("참여 중인 방 " + career.roomCount + "개 · 누적 경기 " + career.totalGames + "회")
             Text("승리 " + career.totalWins + "회 · 최고 연승 " + career.bestStreak + "회")
             Text("획득한 시즌점 " + career.totalSeasonPoints + "점")

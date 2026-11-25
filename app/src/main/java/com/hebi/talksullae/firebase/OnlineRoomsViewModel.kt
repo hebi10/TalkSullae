@@ -179,6 +179,13 @@ internal class OnlineRoomsViewModel(
         }
     }
 
+    fun updateRoomIcon(roomId: String, icon: String?, expectedRevision: Long) {
+        if (stateMutable.value.selectedId != roomId || stateMutable.value.selectedRoom?.ownerId != uid) return
+        action("방 아이콘을 수정했습니다.") {
+            repository.updateRoomIcon(roomId, icon, expectedRevision)
+        }
+    }
+
     fun archiveRoom(roomId: String) {
         if (stateMutable.value.selectedId != roomId || stateMutable.value.selectedRoom?.ownerId != uid) return
         action("방을 종료했습니다.") {
