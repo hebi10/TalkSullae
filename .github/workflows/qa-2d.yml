@@ -27,6 +27,10 @@ on:
         type: string
   workflow_call:
     inputs:
+      expected_main_sha:
+        description: 'Exact frozen main SHA when called by a manual release workflow'
+        type: string
+        required: false
       full_device_qa:
         description: 'Preserve full device tests for reusable workflow callers'
         type: boolean
