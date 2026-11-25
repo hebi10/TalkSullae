@@ -11,6 +11,8 @@ APP_CRITICAL_CALLABLES = (
     "updateRoomIcon",
     "archiveRoom",
     "saveMyProfile",
+    "getServiceNoticeStatus",
+    "acceptServiceNotices",
     "previewInvitation",
     "revokeInvitation",
     "getMyCareer",
