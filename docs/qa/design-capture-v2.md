@@ -7,3 +7,8 @@
 - Design spec: https://docs.google.com/document/d/1yMzZC_FEHt2K0j6TB601twJwVeebGVgustrSseGfX8s/edit
 
 - If instrumentation fails or times out, export only verified available inventory PNGs plus missing/invalid/unexpected lists and instrumentation output; overall result remains failed. A partial artifact is not complete coverage.
+
+## TS-FINAL-01-A — Manual capture argument failure (2026-11-25)
+- [Failed main capture](https://github.com/hebi10/TalkSullae/actions/runs/45558210833) at `f321a519`: source check, debug/test APK build, emulator boot and both APK installs succeeded. The emulator runner invoked each script line in a separate shell; the preceding shell-local size/density assignment did not reach the exporter. Argparse rejected the empty density value (exit 2) before instrumentation; no PNG artifact was uploaded.
+- The manual workflow now supplies only the existing profile/theme/font-scale inputs and SHA; the exporter resolves phone (1080×2400, 420 dpi) or tablet (1600×2560, 240 dpi) geometry in one Python process. Explicit paired geometry remains supported by the existing core-10 workflow. The inventory suite checks both profiles, theme/font combinations, explicit geometry, and rejection of partial or empty arguments.
+- Run the inventory/CI checks, merge only after the latest PR checks pass, and rerun the manual workflow on the new exact main SHA. The full 52-checkpoint inventory, manifest, foreground guard and instrumentation requirements remain unchanged. No Firebase or Play deployment. Until a successful native capture is verified, TS-FINAL-01-B remains incomplete.

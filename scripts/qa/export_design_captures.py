@@ -14,6 +14,7 @@ from capture_matrix import PACKAGE, adb, dismiss_launcher_dialog
 
 ROOT = Path(__file__).resolve().parents[2]
 INVENTORY = json.loads(Path(__file__).with_name("design_capture_inventory.json").read_text(encoding="utf-8"))
+PROFILE_GEOMETRY = {"phone": ("1080x2400", 420), "tablet": ("1600x2560", 240)}
 CORE_IDS = {"D05","D09","D13","D14","D15","D16","D17","D27","D29","D30"}
 CORE_METHODS = ("d05Rooms","d09Chat","d09CacheHidden","d13Catalog","d14Lobby",
                 "d15IdentityChat","d16IdentityGuess","d17IdentityResult","d27Ranking",
@@ -130,14 +131,23 @@ def run(args):
         (args.output/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
 
 
-if __name__=="__main__":
+def parse_args(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument("--output",type=Path,required=True)
     parser.add_argument("--expected-sha",required=True)
-    parser.add_argument("--profile",required=True)
-    parser.add_argument("--size",required=True)
-    parser.add_argument("--density",type=int,required=True)
+    parser.add_argument("--profile",choices=tuple(PROFILE_GEOMETRY),required=True)
+    parser.add_argument("--size")
+    parser.add_argument("--density",type=int)
     parser.add_argument("--font-scale",type=float,choices=[1.0,2.0],default=1.0)
     parser.add_argument("--theme",choices=["dark","light"],default="dark")
     parser.add_argument("--core-only",action="store_true",help="Capture only the ten redesigned screens and their fixture checkpoints")
-    run(parser.parse_args())
+    args=parser.parse_args(argv)
+    if (args.size is None) != (args.density is None):
+        parser.error("--size and --density must be supplied together")
+    if args.size is None:
+        args.size, args.density = PROFILE_GEOMETRY[args.profile]
+    return args
+
+
+if __name__=="__main__":
+    run(parse_args())
