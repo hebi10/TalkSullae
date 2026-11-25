@@ -4,7 +4,6 @@ import argparse
 import datetime as dt
 import hashlib
 import json
-import os
 import re
 import struct
 import subprocess
@@ -46,6 +45,9 @@ def run(args):
         "fontScale":args.font_scale,"theme":args.theme,
         "timestampUtc":dt.datetime.now(dt.timezone.utc).isoformat(),"captures":[],"result":"started",
         "missing":[]}
+    expected={item["name"]+".png" for item in INVENTORY["captures"]}
+    manifest["missing"]=sorted(expected)
+    manifest["invalid"]=[]
     try:
         adb("shell","wm","size",args.size)
         adb("shell","wm","density",str(args.density))
@@ -56,24 +58,40 @@ def run(args):
         cmd=["adb","shell","am","instrument","-w","-r","-e","captureDesign","true","-e","designTheme",args.theme,
              "-e","class",f"{PACKAGE}.DesignScreensCaptureTest,{PACKAGE}.DesignNavigationCaptureTest",
              f"{PACKAGE}.test/androidx.test.runner.AndroidJUnitRunner"]
-        result=subprocess.run(cmd,capture_output=True,timeout=1500)
         report=args.output/"instrumentation.txt"
-        report.write_bytes(result.stdout+result.stderr)
-        if result.returncode:
-            raise RuntimeError("Instrumentation command failed")
-        subprocess.run([sys.executable,str(Path(__file__).with_name("assert_instrumentation.py")),str(report),"34"],check=True)
-        actual=set(adb("shell","run-as",PACKAGE,"ls","files/design-captures").split())
-        expected={item["name"]+".png" for item in INVENTORY["captures"]}
+        instrument_failed=False
+        try:
+            result=subprocess.run(cmd,capture_output=True,timeout=1500)
+            report.write_bytes(result.stdout+result.stderr)
+            instrument_failed=result.returncode!=0
+        except subprocess.TimeoutExpired as err:
+            report.write_bytes((err.stdout or b"")+(err.stderr or b""))
+            instrument_failed=True
+        # Preserve verified partial evidence even if a test or another page fails.
+        try:
+            actual=set(adb("shell","run-as",PACKAGE,"ls","files/design-captures").split())
+        except (subprocess.SubprocessError,OSError):
+            actual=set()
         manifest["missing"]=sorted(expected-actual)
-        if actual!=expected:
-            raise RuntimeError("Capture set does not match inventory")
+        manifest["unexpected"]=sorted(actual-expected)
         for item in INVENTORY["captures"]:
             name=item["name"]+".png"
-            raw=adb("exec-out","run-as",PACKAGE,"cat","files/design-captures/"+name,binary=True)
-            validate_png(raw,size)
+            if name not in actual:
+                continue
+            try:
+                raw=adb("exec-out","run-as",PACKAGE,"cat","files/design-captures/"+name,binary=True)
+                validate_png(raw,size)
+            except (subprocess.SubprocessError,OSError,ValueError):
+                manifest["invalid"].append(name)
+                continue
             (args.output/name).write_bytes(raw)
             manifest["captures"].append({**item,"file":name,"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest(),
                 "screenId":item["name"][:3],"theme":"app-default-demo" if item["dataType"]=="demo-navigation" else args.theme})
+        if instrument_failed:
+            raise RuntimeError("Instrumentation command failed")
+        subprocess.run([sys.executable,str(Path(__file__).with_name("assert_instrumentation.py")),str(report),"34"],check=True)
+        if actual!=expected or manifest["invalid"]:
+            raise RuntimeError("Capture set does not match inventory")
         manifest["result"]="passed"
     except Exception:
         manifest["result"]="failed"

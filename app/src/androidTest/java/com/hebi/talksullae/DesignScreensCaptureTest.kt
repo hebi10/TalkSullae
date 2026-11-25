@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -201,7 +202,7 @@ class DesignScreensCaptureTest {
                 OnlineRoomChatHost("owner",roomId,room.name,{},chat,showHeader=false)
             }
         }
-        capture("D09_cache_hidden",tag("online-chat-retry-read"))
+        capture("D09_cache_hidden",label("방 접근 권한을 확인할 수 없어 채팅을 숨겼습니다. 연결되면 다시 표시합니다."))
     }
     @Test fun d10Management(){
         mountRooms()
@@ -337,8 +338,10 @@ class DesignScreensCaptureTest {
     private val gameStats=listOf("identity","liar","forbidden","balance").associateWith{FriendGameStats(5,3)}
     private val pair=FriendComparison(12,5,4,3,mapOf("identity" to 4L,"liar" to 3L,"forbidden" to 2L,"balance" to 3L),4,3,4,2,3,2)
     @Test fun d29Friend(){
-        mount("친구 전적"){FriendRecordsDialog("지훈",FriendRecords(20,12,3,1200,gameStats,listOf("first_game","wins_5"),pair,20,false),false,null,{},{},{})}
+        val detail=mutableStateOf(false)
+        mount("친구 전적"){FriendRecordsDialog("지훈",FriendRecords(20,12,3,1200,gameStats,listOf("first_game","wins_5"),pair,20,false,comparisonLoaded=detail.value),false,null,{},{},{detail.value=true})}
         capture("D29_friend_summary",tag("friend-records-dialog"))
+        tag("friend-load-comparison").performScrollTo().performClick()
         capture("D29_friend_comparison",tag("friend-shared-games"),true)
         capture("D29_friend_rates",label("밸런스 선택 일치율"),true)
     }

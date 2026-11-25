@@ -5,3 +5,5 @@
 - Export verifies exact file set, dimensions, PNG signature/end and source SHA; each image has a checksum and manifest. Capture failures remain failed, not filled by fake images. The three demo navigation screens use the app default theme; manifest explicitly marks them. Retain raw PNGs and label source kind when uploading to Drive.
 - Run Actions → Native Android design reference captures (test data only) → Run workflow on main, expected_main_sha from latest main. Run phone 100% first; tablet, light and 200% separately when needed. Do not replace TS-10 final QA.
 - Design spec: https://docs.google.com/document/d/1yMzZC_FEHt2K0j6TB601twJwVeebGVgustrSseGfX8s/edit
+
+- If instrumentation fails or times out, export only verified available inventory PNGs plus missing/invalid/unexpected lists and instrumentation output; overall result remains failed. A partial artifact is not complete coverage.
