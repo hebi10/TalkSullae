@@ -5,6 +5,7 @@ const {FieldValue,Timestamp}=require("firebase-admin/firestore");
 const {getAuth}=require("firebase-admin/auth");
 const {HttpsError}=require("firebase-functions/v2/https");
 const {authUid,roomIdValue}=require("./policy");
+const {removeSender}=require("./chatUnread");
 
 const UUID=/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
 const USER_ID=/^[^/\u0000-\u001f]{1,128}$/u;
@@ -289,6 +290,8 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
         const prop=current==="active"?"memberCount":"pendingCount";
         tx.update(roomRef,{[prop]:FieldValue.increment(-1)});
       }
+      const senderCleanup=removeSender(room.data(),uid);
+      if(Object.keys(senderCleanup).length)tx.update(roomRef,senderCleanup);
       if(room.get("status")==="archived"&&room.get("ownerId")===uid)tx.update(roomRef,{ownerId:null});
       if(member.exists)tx.delete(member.ref);
       // A room index is the durable checkpoint. Delete it only after every room cleanup has succeeded.

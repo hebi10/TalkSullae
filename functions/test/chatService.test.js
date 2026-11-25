@@ -3,6 +3,8 @@
 const {test} = require("node:test");
 const assert = require("node:assert/strict");
 const {parseChatMessage, messageIdFor, MAX_MESSAGE_LENGTH} = require("../src/chatService");
+const {Timestamp}=require("firebase-admin/firestore");
+const {nextActivity,unreadFor,readBaseline}=require("../src/chatUnread");
 
 const example = () => ({
   roomId: "12345678901234567890",
@@ -43,4 +45,14 @@ test("message id is stable for a retry and unique for different account/room", (
   assert.equal(a, messageIdFor(roomId, "uid-1", requestId));
   assert.notEqual(a, messageIdFor(roomId, "uid-2", requestId));
   assert.notEqual(a, messageIdFor("another-room", "uid-1", requestId));
+});
+
+test("shared unread sequence removes own sends, prunes departed counters and rejects inconsistent baselines",()=>{
+ const now=Date.now(),base={lastChatAt:Timestamp.fromMillis(now),unreadEpoch:2,unreadSequence:10,unreadSentCounts:{me:3,departed:2}};
+ const current=nextActivity(base,["me","friend"],"me",now);
+ assert.deepEqual(current.counts,{me:4});
+ const before={chatReadEpoch:2,chatReadSequence:6,chatReadOwnSent:2,unreadCarry:1};
+ assert.equal(unreadFor(current,before,"me"),4);
+ assert.equal(unreadFor(current,readBaseline(current,"me"),"me"),0);
+ assert.throws(()=>unreadFor(current,{...before,chatReadOwnSent:7},"me"));
 });
