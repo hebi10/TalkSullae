@@ -81,6 +81,45 @@ class InternalReleaseSafetyTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "no exact run ID"):
                     pipe.dispatch("emulator-smoke.yml", {"expected_main_sha": SHA})
 
+    def test_just_dispatched_run_can_become_visible_after_a_404(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = settings(GITHUB_STEP_SUMMARY=str(Path(tmp) / "summary"))
+            with patch.dict(os.environ, env):
+                pipe = Orchestrator(env)
+                run_id = 45602587518
+                run = {
+                    "id": run_id, "head_sha": SHA, "head_branch": "main",
+                    "event": "workflow_dispatch", "repository": {"full_name": pipe.repo},
+                    "path": ".github/workflows/emulator-smoke.yml",
+                    "status": "completed", "conclusion": "success",
+                }
+                with patch.object(pipe, "api", side_effect=[None, run]) as api, \
+                        patch.object(pipe, "current_main") as current_main, \
+                        patch("internal_release_pipeline.time.sleep") as sleep:
+                    self.assertEqual(pipe.wait("emulator-smoke.yml", run_id), run)
+                    self.assertEqual(api.call_count, 2)
+                    self.assertEqual(api.call_args.args[0], f"/repos/{pipe.repo}/actions/runs/{run_id}")
+                    self.assertTrue(api.call_args.kwargs["allow_not_found"])
+                    sleep.assert_called_once_with(5)
+                    current_main.assert_called_once_with()
+
+    def test_run_visibility_retry_does_not_apply_after_metadata_was_seen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = settings(GITHUB_STEP_SUMMARY=str(Path(tmp) / "summary"))
+            with patch.dict(os.environ, env):
+                pipe = Orchestrator(env)
+                run_id = 45602587518
+                run = {
+                    "id": run_id, "head_sha": SHA, "head_branch": "main",
+                    "event": "workflow_dispatch", "repository": {"full_name": pipe.repo},
+                    "path": ".github/workflows/emulator-smoke.yml", "status": "in_progress",
+                }
+                with patch.object(pipe, "api", side_effect=[run, RuntimeError("HTTP 404")]) as api, \
+                        patch("internal_release_pipeline.time.sleep"):
+                    with self.assertRaisesRegex(RuntimeError, "HTTP 404"):
+                        pipe.wait("emulator-smoke.yml", run_id)
+                    self.assertFalse(api.call_args.kwargs["allow_not_found"])
+
     def test_only_successful_qa_and_signed_aab_allow_publisher_dispatch(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = settings(GITHUB_STEP_SUMMARY=str(Path(tmp) / "summary"))
