@@ -1,6 +1,7 @@
 package com.hebi.talksullae.firebase
 
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.auth.FirebaseAuth
@@ -90,34 +91,106 @@ internal class CloudRoomsRepository(
 ) : OnlineRoomsRepository {
     override fun watchMyRooms(uid: String, onResult: (List<CloudRoomIndex>) -> Unit, onError: (String) -> Unit): ListenerRegistration {
         val gate = ServerSnapshotGate(reportInitialCache = true)
-        return db.collection("userRooms").document(uid).collection("rooms")
-            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
-                if (error != null) {
-                    onError("방 목록을 가져올 수 없습니다.")
-                } else if (snapshot != null) {
-                    when (gate.evaluate(snapshot.metadata.isFromCache, auth.currentUser?.uid == uid)) {
-                        SnapshotAccess.WAIT -> return@addSnapshotListener
-                        SnapshotAccess.HIDE -> {
-                            onError("서버에서 방 접근 권한을 확인할 수 없습니다. 연결을 확인해 주세요.")
-                            return@addSnapshotListener
-                        }
-                        SnapshotAccess.ACCEPT -> Unit
-                    }
-                    onResult(snapshot.documents.map {
-                        CloudRoomIndex(
-                            id = it.id,
-                            name = it.getString("roomName").orEmpty(),
-                            status = it.getString("status").orEmpty(),
-                            updatedAtMillis = it.getTimestamp("updatedAt")?.toDate()?.time ?: 0L,
-                            unreadCount = it.getLong("unreadCount")?.coerceAtLeast(0L) ?: 0L,
-                            lastChatAtMillis = it.getTimestamp("lastChatAt")?.toDate()?.time,
-                            roomIcon = it.getString("roomIcon"),
-                            memberCount = it.getLong("memberCount")?.takeIf { n -> n in 0L..20L }?.toInt(),
-                            gameInProgress = it.getBoolean("gameInProgress")
-                        )
-                    }.sortedByDescending { maxOf(it.updatedAtMillis, it.lastChatAtMillis ?: 0L) })
+        var stopped = false
+        var confirmed = false
+        var entries = emptyList<CloudRoomIndex>()
+        var baselines = emptyMap<String, SharedUnreadBaseline>()
+        val activities = mutableMapOf<String, SharedUnreadActivity>()
+        val tokens = mutableMapOf<String, Any>()
+        val registrations = mutableMapOf<String, ListenerRegistration>()
+        var published: List<CloudRoomIndex>? = null
+
+        fun clearActivity() {
+            tokens.clear()
+            registrations.values.forEach { it.remove() }
+            registrations.clear()
+            activities.clear()
+        }
+
+        fun publish() {
+            if (stopped || !confirmed || auth.currentUser?.uid != uid) return
+            val result = entries.map { entry ->
+                val baseline = baselines[entry.id]
+                if (baseline == null) entry else {
+                    val shared = activities[entry.id]
+                    val count = shared?.count(baseline.epoch, baseline.sequence, baseline.ownSent, baseline.carry)
+                    entry.copy(unreadCount = count ?: 0L, lastChatAtMillis = shared?.lastChatAtMillis)
                 }
+            }.sortedByDescending { maxOf(it.updatedAtMillis, it.lastChatAtMillis ?: 0L) }
+            if (published != result) {
+                published = result
+                onResult(result)
             }
+        }
+
+        fun activityOf(doc: DocumentSnapshot): SharedUnreadActivity? {
+            if (!doc.exists() || doc.getString("status") != "active") return null
+            val epoch = doc.getLong("unreadEpoch") ?: return null
+            val sequence = doc.getLong("unreadSequence") ?: return null
+            val own = (doc.get("unreadSentCounts") as? Map<*, *>)?.get(uid) as? Number
+            return SharedUnreadActivity(epoch,sequence,own?.toLong() ?: 0L,
+                doc.getTimestamp("lastChatAt")?.toDate()?.time)
+        }
+
+        val indexRegistration = db.collection("userRooms").document(uid).collection("rooms")
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                if (stopped) return@addSnapshotListener
+                if (error != null || snapshot == null ||
+                    gate.evaluate(snapshot.metadata.isFromCache, auth.currentUser?.uid == uid) != SnapshotAccess.ACCEPT) {
+                    confirmed = false
+                    entries = emptyList()
+                    baselines = emptyMap()
+                    published = null
+                    clearActivity()
+                    onError("서버에서 방 접근 권한을 확인할 수 없습니다. 연결을 확인해 주세요.")
+                    return@addSnapshotListener
+                }
+                confirmed = true
+                entries = snapshot.documents.map {
+                    CloudRoomIndex(
+                        id = it.id, name = it.getString("roomName").orEmpty(), status = it.getString("status").orEmpty(),
+                        updatedAtMillis = it.getTimestamp("updatedAt")?.toDate()?.time ?: 0L,
+                        unreadCount = it.getLong("unreadCount")?.coerceAtLeast(0L) ?: 0L,
+                        lastChatAtMillis = it.getTimestamp("lastChatAt")?.toDate()?.time,
+                        roomIcon = it.getString("roomIcon"),
+                        memberCount = it.getLong("memberCount")?.takeIf { n -> n in 0L..20L }?.toInt(),
+                        gameInProgress = it.getBoolean("gameInProgress")
+                    )
+                }
+                baselines = snapshot.documents.filter { it.getString("status") == "active" && it.getLong("unreadSchema") == 1L }
+                    .associate { doc -> doc.id to SharedUnreadBaseline(doc.getLong("chatReadEpoch") ?: 0L,
+                        doc.getLong("chatReadSequence") ?: 0L,doc.getLong("chatReadOwnSent") ?: 0L,
+                        doc.getLong("unreadCarry") ?: 0L) }
+                registrations.keys.filter { it !in baselines }.forEach { id ->
+                    tokens.remove(id)
+                    registrations.remove(id)?.remove()
+                    activities.remove(id)
+                }
+                baselines.keys.filter { it !in registrations }.forEach { id ->
+                    val token = Any()
+                    tokens[id] = token
+                    registrations[id] = db.collection("rooms").document(id)
+                        .addSnapshotListener(MetadataChanges.INCLUDE) { doc, failure ->
+                            if (!stopped && confirmed && tokens[id] === token && auth.currentUser?.uid == uid) {
+                                val value = if (failure == null && doc != null && !doc.metadata.isFromCache) activityOf(doc) else null
+                                if (value == null) activities.remove(id) else activities[id] = value
+                                publish()
+                            }
+                        }
+                }
+                publish()
+            }
+        return object : ListenerRegistration {
+            override fun remove() {
+                stopped = true
+                confirmed = false
+                indexRegistration.remove()
+                clearActivity()
+                entries = emptyList()
+                baselines = emptyMap()
+                published = null
+            }
+        }
     }
 
     override fun watchRoom(roomId: String, onResult: (CloudRoom?) -> Unit, onError: (String) -> Unit): ListenerRegistration {

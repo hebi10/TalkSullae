@@ -5,7 +5,9 @@ const {FieldValue, Timestamp} = require("firebase-admin/firestore");
 const {HttpsError} = require("firebase-functions/v2/https");
 const {authUid, roomIdValue, ROOM_CAPACITY} = require("./policy");
 const {AVATARS} = require("./userProfile");
-const {ROOM_CHAT_DAYS,DAY_MS}=require("./retention");
+const {ROOM_CHAT_DAYS}=require("./retention");
+const {activity,nextActivity,readBaseline,migrationBaseline,unreadFor}=require("./chatUnread");
+const {DAY_MS}=require("./retention");
 
 const MAX_MESSAGE_LENGTH = 1000;
 const MIN_SEND_INTERVAL_MS = 750;
@@ -85,9 +87,15 @@ async function sendRoomMessage(db, request) {
     if(activeMembers.size>ROOM_CAPACITY || !activeMembers.docs.some(doc=>doc.id===uid)){
       throw new HttpsError("failed-precondition","방의 멤버 상태를 확인할 수 없습니다.");
     }
-    const previousActivity=room.get("lastChatAt");
-    const resetUnread=!(previousActivity instanceof Timestamp) ||
-      previousActivity.toMillis()<=nowMillis-ROOM_CHAT_DAYS*DAY_MS;
+    const next=nextActivity(room.data(),activeMembers.docs.map(doc=>doc.id),uid,nowMillis);
+    // Migrate once per existing room. Preserve each member's unread count as a
+    // carry; subsequent sends write no recipient index documents.
+    const migration=next.migrating?await Promise.all(activeMembers.docs.map(async doc=>{
+      const ref=db.collection("userRooms").doc(doc.id).collection("rooms").doc(roomId);
+      const index=await transaction.get(ref);
+      if(!index.exists||index.get("status")!=="active")throw new HttpsError("failed-precondition","방 목록을 다시 확인해 주세요.");
+      return {ref,baseline:migrationBaseline(index.data(),next.expired,nowMillis)};
+    })):[];
 
     const displayName = member.get("displayName");
     const senderName = typeof displayName === "string" && displayName.trim()
@@ -104,14 +112,9 @@ async function sendRoomMessage(db, request) {
       expiresAt: Timestamp.fromMillis(nowMillis+ROOM_CHAT_DAYS*DAY_MS)
     });
     transaction.set(rateRef, {lastSentAt: Timestamp.fromMillis(nowMillis)});
-    transaction.update(roomRef,{lastChatMessageId:messageId,lastChatAt:FieldValue.serverTimestamp()});
-    for(const recipient of activeMembers.docs){
-      const indexRef=db.collection("userRooms").doc(recipient.id).collection("rooms").doc(roomId);
-      const activity={roomName:room.get("name"),status:"active",lastChatMessageId:messageId,lastChatAt:FieldValue.serverTimestamp()};
-      if(resetUnread)activity.unreadCount=recipient.id===uid?0:1;
-      else if(recipient.id!==uid)activity.unreadCount=FieldValue.increment(1);
-      transaction.set(indexRef,activity,{merge:true});
-    }
+    transaction.update(roomRef,{lastChatMessageId:messageId,lastChatAt:FieldValue.serverTimestamp(),
+      unreadEpoch:next.epoch,unreadSequence:next.sequence,unreadSentCounts:next.counts});
+    for(const row of migration)transaction.update(row.ref,row.baseline);
     return {messageId, deduplicated: false};
   });
 }
@@ -136,8 +139,16 @@ async function markRoomChatRead(db,request){
        !index.exists || index.get("status")!=="active"){
       throw new HttpsError("permission-denied","활성 멤버만 읽음 상태를 변경할 수 있습니다.");
     }
-    if(room.get("lastChatMessageId")!==input.messageId ||
-       index.get("lastChatMessageId")!==input.messageId)return {marked:false,changed:false};
+    if(room.get("lastChatMessageId")!==input.messageId)return {marked:false,changed:false};
+    const state=activity(room.data());
+    if(state){
+      if(index.get("unreadSchema")!==1)throw new HttpsError("failed-precondition","읽음 정보를 다시 불러와 주세요.");
+      const unread=unreadFor(state,index.data(),uid);
+      if(unread===0)return {marked:true,changed:false};
+      tx.update(indexRef,readBaseline(state,uid));
+      return {marked:true,changed:true};
+    }
+    if(index.get("lastChatMessageId")!==input.messageId)return {marked:false,changed:false};
     const unread=index.get("unreadCount")??0;
     if(!Number.isSafeInteger(unread)||unread<0)throw new HttpsError("failed-precondition","메시지 수를 확인할 수 없습니다.");
     if(unread===0)return {marked:true,changed:false};

@@ -6,6 +6,7 @@ const {
   roomDraft, roomIdValue, parseJoinCode, authUid
 } = require("./policy");
 const {memberDisplayName,profileAvatar} = require("./userProfile");
+const {joinReadBaseline}=require("./chatUnread");
 
 const ROOM_ICONS=new Set(["부엉이","토끼","고양이","강아지","곰","여우","판다","펭귄"]);
 const now = () => FieldValue.serverTimestamp();
@@ -193,7 +194,7 @@ async function requestJoin(db, request) {
     tx.set(memberRef,{status,displayName:memberDisplayName(profile,request.auth),
       avatar:profileAvatar(profile),joinedAt:now()});
     tx.set(indexRef,{status,roomName:room.data().name,updatedAt:now(),
-      ...(!pending?directoryFields(room.data(),room.get("memberCount")+1):{})});
+      ...(!pending?{...directoryFields(room.data(),room.get("memberCount")+1),...joinReadBaseline(room.data(),uid)}:{})});
     tx.update(roomRef,pending
       ? {pendingCount:FieldValue.increment(1)}
       : {memberCount:FieldValue.increment(1)});
@@ -239,7 +240,7 @@ async function changeMember(db, request) {
       const status = action==="approve"?"active":"rejected";
       tx.update(memberRef,{status,updatedAt:now()});
       tx.set(indexRef,{status,roomName:room.data().name,updatedAt:now(),
-        ...(action==="approve"?directoryFields(room.data(),room.get("memberCount")+1):{})});
+        ...(action==="approve"?{...directoryFields(room.data(),room.get("memberCount")+1),...joinReadBaseline(room.data(),targetUid)}:{})});
       tx.update(roomRef,action==="approve"
         ? {pendingCount:FieldValue.increment(-1),memberCount:FieldValue.increment(1)}
         : {pendingCount:FieldValue.increment(-1)});
