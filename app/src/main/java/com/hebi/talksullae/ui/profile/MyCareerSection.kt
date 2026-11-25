@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -39,23 +40,51 @@ internal class MyCareerViewModel(private val repository: CareerRepository) : Vie
     private val mutable = MutableStateFlow(CareerUiState())
     val state = mutable
     private var user: String? = null
+    private var generation = 0L
 
     fun load(uid: String, force: Boolean = false) {
         if (!force && user == uid) return
         user = uid
-        mutable.update { it.copy(loading = true, error = null) }
+        val token = ++generation
+        mutable.value = CareerUiState(loading = true)
         viewModelScope.launch {
             try {
-                val loaded = repository.getMyCareer()
-                if (user == uid) mutable.value = CareerUiState(loading = false, value = loaded)
+                val loaded = repository.getMyCareerPage(null)
+                if (user == uid && token == generation) mutable.value = CareerUiState(loading = false, value = loaded)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                if (user == uid) mutable.update {
-                    it.copy(loading = false, error = "나의 전적을 확인할 수 없습니다. 다시 시도해 주세요.")
+                if (user == uid && token == generation) mutable.value =
+                    CareerUiState(loading = false, error = "나의 전적을 확인할 수 없습니다. 다시 시도해 주세요.")
+            }
+        }
+    }
+
+    fun loadMore(uid: String) {
+        val previous = mutable.value.value ?: return
+        val cursor = previous.nextCursor ?: return
+        if (user != uid || mutable.value.loading) return
+        val token = generation
+        mutable.update { it.copy(loading = true,error = null) }
+        viewModelScope.launch {
+            try {
+                val next = repository.getMyCareerPage(cursor)
+                if (user == uid && token == generation) mutable.value =
+                    CareerUiState(loading = false,value = previous.append(next))
+            } catch(e:CancellationException) {
+                throw e
+            } catch(_:Exception) {
+                if(user == uid && token == generation) mutable.update {
+                    it.copy(loading=false,error="추가 전적을 확인할 수 없습니다. 다시 시도해 주세요.")
                 }
             }
         }
+    }
+
+    fun clear() {
+        generation++
+        user = null
+        mutable.value = CareerUiState()
     }
 }
 
@@ -72,20 +101,28 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
     val vm: MyCareerViewModel = viewModel(key = "career-$uid", factory = factory)
     val state by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(uid) { vm.load(uid) }
+    DisposableEffect(vm,uid) { onDispose { vm.clear() } }
 
     ContentCard(modifier = Modifier.testTag("my-career-summary")) {
-        Text("현재 참여 중인 방의 전적", style = MaterialTheme.typography.titleMedium)
-        Text("탈퇴하거나 종료된 방은 집계하지 않습니다.", style = MaterialTheme.typography.bodySmall)
+        Text("나의 누적 전적", style = MaterialTheme.typography.titleMedium)
         if (state.loading) CircularProgressIndicator()
         state.value?.let { career ->
-            val progress = careerProgress(career.totalGames)
-            Text("Lv. " + progress.level + " · " + progress.title, style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.testTag("career-level"))
-            Text("활성 방 경험치 " + progress.xp + " XP · 다음 레벨까지 " + (100L - progress.xp % 100L) + " XP",
-                style = MaterialTheme.typography.bodySmall)
-            Text("완료 경기 1회당 10 XP. 현재 참여 중인 방 기준이며 승패나 게임 권한에 영향을 주지 않습니다.",
-                style = MaterialTheme.typography.bodySmall)
-            Text("참여 중인 방 " + career.roomCount + "개 · 누적 경기 " + career.totalGames + "회")
+            Text(if(career.retainedScope) "탈퇴·종료된 방을 포함하여 서버에 보존된 본인 전적만 집계합니다."
+                else "현재 참여 중인 방의 전적만 집계합니다.",style=MaterialTheme.typography.bodySmall)
+            if(career.nextCursor == null) {
+                val progress = careerProgress(career.totalGames)
+                Text("Lv. " + progress.level + " · " + progress.title, style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.testTag("career-level"))
+                Text("경험치 " + progress.xp + " XP · 다음 레벨까지 " + (100L - progress.xp % 100L) + " XP",
+                    style = MaterialTheme.typography.bodySmall)
+                Text("완료 경기 1회당 10 XP. 서버에 보존된 전적 기준이며 승패나 게임 권한에 영향을 주지 않습니다.",
+                    style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text("아직 모든 기록을 조회하지 않았습니다. 전체 전적과 레벨은 추가 조회 후 확인할 수 있습니다.",
+                    style=MaterialTheme.typography.bodySmall)
+            }
+            Text("참여 중인 방 " + career.roomCount + "개 · 조회한 기록 방 " + career.recordedRoomCount + "개")
+            Text("누적 경기 " + career.totalGames + "회")
             Text("승리 " + career.totalWins + "회 · 최고 연승 " + career.bestStreak + "회")
             Text("획득한 시즌점 " + career.totalSeasonPoints + "점")
             if (career.achievements.isNotEmpty()) {
@@ -109,6 +146,10 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
             }
         }
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if(state.value?.nextCursor != null) {
+            OutlinedButton(modifier=Modifier.fillMaxWidth().testTag("my-career-more"),
+                onClick={vm.loadMore(uid)},enabled=!state.loading) { Text("이전 방 기록 더 불러오기") }
+        }
         OutlinedButton(
             modifier = Modifier.fillMaxWidth().testTag("my-career-refresh"),
             onClick = { vm.load(uid, force = true) },
