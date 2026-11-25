@@ -143,3 +143,54 @@ test("finished friend records expose only same-room aggregate and bounded compar
  await ref.update({status:"archived"});
  await assert.rejects(getRoomFriendRecords(db,{...auth(id),data:input}),e=>e.code==="permission-denied");
 });
+
+test("monthly closure freezes tied winning score without copying personal identities",async()=>{
+ const {closeAt,closeRoomSeason,getRoomSeasonClosure,removeSeasonScore,closeDueSeasons,seasonQueueRef}
+   =require("../src/game/seasonClosure");
+ const room=await makeRoom(),parent=db.collection("rooms").doc(room.roomId);
+ const first=await finishGame(room,base);
+ const seasonId=records.currentSeason(base+190201),ref=parent.collection("seasons").doc(seasonId);
+ const due=closeAt(seasonId);
+ const input={...auth(room.owner),data:{roomId:room.roomId,seasonId}};
+ assert.equal((await seasonQueueRef(db,room.roomId,seasonId).get()).exists,true);
+ assert.equal((await getRoomSeasonClosure(db,input,()=>due-1)).status,"closing");
+ await assert.rejects(getRoomSeasonClosure(db,{...auth("not-a-member"),data:input.data},()=>due),e=>e.code==="permission-denied");
+ const summary=await getRoomSeasonClosure(db,input,()=>due);
+ assert.equal(summary.status,"closed");
+ assert.equal(summary.winnerCount,4);
+ assert.equal(summary.winningScore,records.normalizedPoints("identity",300,4,true));
+ assert.equal(summary.gameCount,1);
+ assert.equal(JSON.stringify(summary).includes(room.owner),false);
+ assert.equal((await seasonQueueRef(db,room.roomId,seasonId).get()).exists,false);
+ for(const uid of room.users){
+   assert.equal(await removeSeasonScore(db,ref,uid,due+1000),true);
+ }
+ assert.deepEqual(await closeRoomSeason(db,room.roomId,seasonId,due+2000),summary);
+ assert.equal((await ref.collection("scores").get()).empty,true);
+ // A new settlement in the next month belongs to the new season and cannot change the old closure.
+ const next=await finishGame(room,due+1000);
+ assert.equal(next.ended.phase,"finished");
+ const nextId=records.currentSeason(due+1000);
+ assert.notEqual(nextId,seasonId);
+ assert.equal((await parent.collection("seasons").doc(nextId).get()).get("gameCount"),1);
+ assert.deepEqual((await ref.get()).get("finalResult"),summary);
+ // Hourly queue also closes a season without an app visit.
+ await closeDueSeasons(db,()=>closeAt(nextId));
+ assert.equal((await parent.collection("seasons").doc(nextId).get()).get("finalResult.status"),"closed");
+ assert.equal((await first.ref.get()).get("phase"),"finished");
+});
+test("legacy season closes before a winning score is removed and never promotes the runner-up",async()=>{
+ const {removeSeasonScore,closeAt,closeRoomSeason}=require("../src/game/seasonClosure");
+ const room=await makeRoom(),seasonId="2026-01";
+ const ref=db.collection("rooms").doc(room.roomId).collection("seasons").doc(seasonId);
+ await ref.set({seasonId,gameCount:2});
+ await ref.collection("scores").doc(room.owner).set({seasonPoints:200});
+ await ref.collection("scores").doc(room.users[1]).set({seasonPoints:100});
+ assert.equal(await removeSeasonScore(db,ref,room.owner,closeAt(seasonId)-1),false);
+ assert.equal((await ref.collection("scores").doc(room.owner).get()).exists,true);
+ assert.equal(await removeSeasonScore(db,ref,room.owner,closeAt(seasonId)),true);
+ const summary=await closeRoomSeason(db,room.roomId,seasonId,closeAt(seasonId)+1);
+ assert.equal(summary.winningScore,200);
+ assert.equal(summary.winnerCount,1);
+ assert.equal((await ref.collection("scores").doc(room.users[1]).get()).get("seasonPoints"),100);
+});

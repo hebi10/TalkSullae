@@ -14,7 +14,8 @@ const LIMITS=Object.freeze({
   updateRoom:{max:20,windowMs:60*1000},
   updateRoomIcon:{max:20,windowMs:60*1000},
   archiveRoom:{max:10,windowMs:60*1000},
-  getRoomFriendRecords:{max:6,windowMs:60*1000}
+  getRoomFriendRecords:{max:6,windowMs:60*1000},
+  getRoomSeasonClosure:{max:20,windowMs:60*1000}
 });
 
 async function consumeRoomQuota(db,uid,operation,now=Date.now){

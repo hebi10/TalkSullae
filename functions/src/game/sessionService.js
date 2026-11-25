@@ -620,7 +620,7 @@ async function expireDueGameSessions(db,rules=productionRules,now=Date.now){
         roomId:path[1],sessionId:path[3],gameId:session.gameId,
         rulesVersion:session.rulesVersion,expectedRevision:session.revision,
         requestId,payload:{kind:"advance"}
-      }},rules,()=>timestamp);
+      }},rules,now);
       counts[moved.deduplicated?"skipped":"advanced"]++;
     }catch(error){
       if(["aborted","failed-precondition","permission-denied"].includes(error?.code)){

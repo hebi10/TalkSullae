@@ -44,3 +44,11 @@ test("earned achievements depend on stored counters and current streak",()=>{
  for(const id of ["first_game","games_10","wins_5","streak_3","streak_5",
    "liar_wins_5","identity_wins_10"])assert.equal(achievements[id],true);
 });
+
+test("season close waits ten minutes after the Korean month boundary",()=>{
+ const {seasonEnd,closeAt}=require("../src/game/seasonClosure");
+ assert.equal(seasonEnd("2026-11"),Date.parse("2026-11-30T15:00:00Z"));
+ assert.equal(closeAt("2026-11"),Date.parse("2026-11-30T15:10:00Z"));
+ assert.equal(seasonEnd("2026-12"),Date.parse("2026-12-31T15:00:00Z"));
+ assert.throws(()=>seasonEnd("2026-13"));
+});

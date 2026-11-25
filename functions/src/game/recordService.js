@@ -2,6 +2,7 @@
 
 const {FieldValue,Timestamp}=require("firebase-admin/firestore");
 const {HttpsError}=require("firebase-functions/v2/https");
+const {closeAt,seasonQueueRef}=require("./seasonClosure");
 
 const GAME_MAX_SCORES=Object.freeze({
   liar:120,forbidden:100,balance:120
@@ -82,7 +83,9 @@ async function prepareSettlement(tx,roomRef,{
   const ledgers=roomRef.collection("recordSettlements").doc(sessionId);
   const summaryRef=roomRef.collection("stats").doc("summary");
   const memberRefs=participants.map(uid=>roomRef.collection("playerStats").doc(uid));
-  const previous=await Promise.all(memberRefs.map(ref=>tx.get(ref)));
+  const [season,...previous]=await Promise.all([tx.get(seasonRef),...memberRefs.map(ref=>tx.get(ref))]);
+  if(season.exists&&season.get("finalResult")!==undefined)
+    throw new HttpsError("aborted","마감된 시즌에 점수를 추가할 수 없습니다. 현재 시간 기준으로 다시 시도해 주세요.");
   const wins=winnerMap(gameId,scoreByUid,participants);
   const settlements=participants.map((uid,index)=>{
     const rawScore=scoreByUid[uid],win=wins[uid],snapshot=previous[index];
@@ -115,8 +118,13 @@ async function prepareSettlement(tx,roomRef,{
     },{merge:true});
     tx.set(seasonRef,{
       seasonId,lastGameAt:settledAt,
-      gameCount:FieldValue.increment(1)
+      gameCount:FieldValue.increment(1),closeQueued:true
     },{merge:true});
+    if(!season.exists||season.get("closeQueued")!==true){
+      tx.set(seasonQueueRef(roomRef.firestore,roomRef.id,seasonId),{
+        roomId:roomRef.id,seasonId,closeAt:Timestamp.fromMillis(closeAt(seasonId))
+      });
+    }
     for(const item of settlements){
       const uid=item.uid;
       const playerRef=roomRef.collection("playerStats").doc(uid);
