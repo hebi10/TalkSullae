@@ -1,6 +1,7 @@
+import json
 import struct
 import unittest
-from export_design_captures import INVENTORY, validate_png, source_version
+from export_design_captures import INVENTORY, validate_png, validate_guard, source_version, PACKAGE
 
 
 class DesignInventoryTest(unittest.TestCase):
@@ -18,6 +19,23 @@ class DesignInventoryTest(unittest.TestCase):
             validate_png(sample,(1600,2560))
         with self.assertRaises(ValueError):
             validate_png(sample[:-1],(1080,2400))
+
+    def test_foreground_guard_requires_clear_app_before_and_after(self):
+        name = "D09_chat"
+        good = {"guardVersion": 1, "screen": name, "package": PACKAGE,
+                "preForegroundClear": True, "postForegroundClear": True,
+                "systemDialogRecoveries": 1}
+        self.assertEqual(validate_guard(json.dumps(good).encode(), name), good)
+        for field, invalid in (("guardVersion", 0), ("screen", "D05_rooms"),
+                               ("package", "android"), ("preForegroundClear", False),
+                               ("postForegroundClear", False), ("postForegroundClear", 1),
+                               ("systemDialogRecoveries", 4), ("systemDialogRecoveries", True)):
+            with self.subTest(field=field, invalid=invalid), self.assertRaises(ValueError):
+                validate_guard(json.dumps({**good, field: invalid}).encode(), name)
+        with self.assertRaises(ValueError):
+            validate_guard(b"{}", name)
+        with self.assertRaises(ValueError):
+            validate_guard(b"[]", name)
 
     def test_source_version(self):
         version,code=source_version()

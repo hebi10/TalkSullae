@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from capture_matrix import PACKAGE, adb
+from capture_matrix import PACKAGE, adb, dismiss_launcher_dialog
 
 ROOT = Path(__file__).resolve().parents[2]
 INVENTORY = json.loads(Path(__file__).with_name("design_capture_inventory.json").read_text(encoding="utf-8"))
@@ -25,6 +25,21 @@ def validate_png(raw, size):
         raise ValueError("Incomplete PNG")
     if struct.unpack(">II", raw[16:24]) != size:
         raise ValueError("Unexpected native screenshot size")
+
+
+def validate_guard(raw, name):
+    guard = json.loads(raw)
+    if not isinstance(guard, dict):
+        raise ValueError("Capture foreground guard is not an object")
+    if (guard.get("guardVersion") != 1 or guard.get("screen") != name
+            or guard.get("package") != PACKAGE
+            or guard.get("preForegroundClear") is not True
+            or guard.get("postForegroundClear") is not True):
+        raise ValueError("Capture lacks verified foreground checks")
+    recoveries = guard.get("systemDialogRecoveries")
+    if type(recoveries) is not int or not 0 <= recoveries <= 3:
+        raise ValueError("Invalid emulator dialog recovery count")
+    return guard
 
 
 def source_version():
@@ -54,12 +69,17 @@ def run(args):
     manifest["scope"]="core-10" if args.core_only else "all-34"
     manifest["missing"]=sorted(expected)
     manifest["invalid"]=[]
+    manifest["foregroundGuardVersion"]=1
+    manifest["preflightSystemDialogRecoveries"]=None
     try:
         adb("shell","wm","size",args.size)
         adb("shell","wm","density",str(args.density))
         adb("shell","settings","put","system","font_scale",str(args.font_scale))
         adb("shell","am","force-stop",PACKAGE)
         adb("shell","pm","clear",PACKAGE)
+        # Reuse the existing emulator-only policy: System UI Wait, launcher Close.
+        # An ANR from TalkSullae is not acknowledged here or by the capture guard.
+        manifest["preflightSystemDialogRecoveries"]=dismiss_launcher_dialog()
         # Instrumentation can exceed the short adb helper timeout.
         classes = (",".join(f"{PACKAGE}.DesignScreensCaptureTest#{method}" for method in CORE_METHODS)
                    if args.core_only else f"{PACKAGE}.DesignScreensCaptureTest,{PACKAGE}.DesignNavigationCaptureTest")
@@ -88,12 +108,15 @@ def run(args):
             try:
                 raw=adb("exec-out","run-as",PACKAGE,"cat","files/design-captures/"+name,binary=True)
                 validate_png(raw,size)
+                guard_raw=adb("exec-out","run-as",PACKAGE,"cat","files/design-capture-guards/"+item["name"]+".json",binary=True)
+                guard=validate_guard(guard_raw,item["name"])
             except (subprocess.SubprocessError,OSError,ValueError):
                 manifest["invalid"].append(name)
                 continue
             (args.output/name).write_bytes(raw)
             manifest["captures"].append({**item,"file":name,"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest(),
-                "screenId":item["name"][:3],"theme":"app-default-demo" if item["dataType"]=="demo-navigation" else args.theme})
+                "screenId":item["name"][:3],"theme":"app-default-demo" if item["dataType"]=="demo-navigation" else args.theme,
+                "foregroundGuard":guard})
         if instrument_failed:
             raise RuntimeError("Instrumentation command failed")
         subprocess.run([sys.executable,str(Path(__file__).with_name("assert_instrumentation.py")),str(report),str(len(CORE_METHODS) if args.core_only else 34)],check=True)
