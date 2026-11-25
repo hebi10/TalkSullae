@@ -1,0 +1,81 @@
+name: Native Android design reference captures (test data only)
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Exact current main SHA (40 lowercase hex)
+        required: true
+        type: string
+      profile:
+        type: choice
+        description: Capture device profile
+        options: [phone, tablet]
+        default: phone
+      theme:
+        type: choice
+        options: [dark, light]
+        default: dark
+      font_scale:
+        type: choice
+        options: ['1.0', '2.0']
+        default: '1.0'
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source and isolated test configuration
+        env:
+          EXPECTED: ${{ inputs.expected_main_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main && "$EXPECTED" =~ ^[a-f0-9]{40}$ && "$EXPECTED" == "$GITHUB_SHA" ]]
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" == "$GITHUB_SHA" ]]
+          test ! -f app/google-services.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build debug and test APK only
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+          ./gradlew --no-daemon --max-workers=2 assembleDebug assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Capture native screens using isolated test fixtures
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          CAP_PROFILE: ${{ inputs.profile }}
+          CAP_THEME: ${{ inputs.theme }}
+          FONT_SCALE: ${{ inputs.font_scale }}
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: ${{ inputs.profile == 'tablet' && 'pixel_tablet' || 'pixel_6' }}
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            if [ "$CAP_PROFILE" = tablet ]; then size=1600x2560; density=240; else size=1080x2400; density=420; fi
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            python3 scripts/qa/export_design_captures.py --expected-sha "$GITHUB_SHA" --profile "$CAP_PROFILE" --size "$size" --density "$density" --theme "$CAP_THEME" --font-scale "$FONT_SCALE" --output design-captures
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: talksullae-design-native-captures-${{ inputs.profile }}-${{ inputs.theme }}-${{ inputs.font_scale }}
+          path: design-captures/
+          if-no-files-found: error
+          retention-days: 30

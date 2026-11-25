@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Collect native PNGs from a dedicated test-only capture suite."""
+import argparse
+import datetime as dt
+import hashlib
+import json
+import os
+import re
+import struct
+import subprocess
+import sys
+from pathlib import Path
+
+from capture_matrix import PACKAGE, adb
+
+ROOT = Path(__file__).resolve().parents[2]
+INVENTORY = json.loads(Path(__file__).with_name("design_capture_inventory.json").read_text(encoding="utf-8"))
+
+
+def validate_png(raw, size):
+    if len(raw) < 45 or raw[:8] != b"\x89PNG\r\n\x1a\n" or raw[-12:] != b"\x00\x00\x00\x00IEND\xaeB`\x82":
+        raise ValueError("Incomplete PNG")
+    if struct.unpack(">II", raw[16:24]) != size:
+        raise ValueError("Unexpected native screenshot size")
+
+
+def source_version():
+    text = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
+    name = re.search(r'versionName\s*=\s*"([^"]+)"', text)
+    code = re.search(r'versionCode\s*=\s*(\d+)', text)
+    if not name or not code:
+        raise ValueError("Missing source version")
+    return name[1], int(code[1])
+
+
+def run(args):
+    sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    if sha != args.expected_sha or not re.fullmatch(r"[a-f0-9]{40}", sha):
+        raise ValueError("Capture source SHA mismatch")
+    size = tuple(int(v) for v in args.size.split("x"))
+    version, code = source_version()
+    args.output.mkdir(parents=True, exist_ok=True)
+    manifest = {"schema":1,"sourceSha":sha,"versionName":version,"versionCode":code,
+        "captureKind":"native-android-screenshot-with-test-data","productionVerified":False,
+        "profile":args.profile,"size":list(size),"density":args.density,
+        "fontScale":args.font_scale,"theme":args.theme,
+        "timestampUtc":dt.datetime.now(dt.timezone.utc).isoformat(),"captures":[],"result":"started",
+        "missing":[]}
+    try:
+        adb("shell","wm","size",args.size)
+        adb("shell","wm","density",str(args.density))
+        adb("shell","settings","put","system","font_scale",str(args.font_scale))
+        adb("shell","am","force-stop",PACKAGE)
+        adb("shell","pm","clear",PACKAGE)
+        # Instrumentation can exceed the short adb helper timeout.
+        cmd=["adb","shell","am","instrument","-w","-r","-e","captureDesign","true","-e","designTheme",args.theme,
+             "-e","class",f"{PACKAGE}.DesignScreensCaptureTest,{PACKAGE}.DesignNavigationCaptureTest",
+             f"{PACKAGE}.test/androidx.test.runner.AndroidJUnitRunner"]
+        result=subprocess.run(cmd,capture_output=True,timeout=1500)
+        report=args.output/"instrumentation.txt"
+        report.write_bytes(result.stdout+result.stderr)
+        if result.returncode:
+            raise RuntimeError("Instrumentation command failed")
+        subprocess.run([sys.executable,str(Path(__file__).with_name("assert_instrumentation.py")),str(report),"34"],check=True)
+        actual=set(adb("shell","run-as",PACKAGE,"ls","files/design-captures").split())
+        expected={item["name"]+".png" for item in INVENTORY["captures"]}
+        manifest["missing"]=sorted(expected-actual)
+        if actual!=expected:
+            raise RuntimeError("Capture set does not match inventory")
+        for item in INVENTORY["captures"]:
+            name=item["name"]+".png"
+            raw=adb("exec-out","run-as",PACKAGE,"cat","files/design-captures/"+name,binary=True)
+            validate_png(raw,size)
+            (args.output/name).write_bytes(raw)
+            manifest["captures"].append({**item,"file":name,"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest(),
+                "screenId":item["name"][:3],"theme":"app-default-demo" if item["dataType"]=="demo-navigation" else args.theme})
+        manifest["result"]="passed"
+    except Exception:
+        manifest["result"]="failed"
+        raise
+    finally:
+        (args.output/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+
+
+if __name__=="__main__":
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--output",type=Path,required=True)
+    parser.add_argument("--expected-sha",required=True)
+    parser.add_argument("--profile",required=True)
+    parser.add_argument("--size",required=True)
+    parser.add_argument("--density",type=int,required=True)
+    parser.add_argument("--font-scale",type=float,choices=[1.0,2.0],default=1.0)
+    parser.add_argument("--theme",choices=["dark","light"],default="dark")
+    run(parser.parse_args())

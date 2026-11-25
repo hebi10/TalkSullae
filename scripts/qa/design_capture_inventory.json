@@ -1,0 +1,249 @@
+{
+  "schema": 1,
+  "primaryIds": [
+    "D01",
+    "D02",
+    "D03",
+    "D04",
+    "D05",
+    "D06",
+    "D07",
+    "D08",
+    "D09",
+    "D10",
+    "D11",
+    "D12",
+    "D13",
+    "D14",
+    "D15",
+    "D16",
+    "D17",
+    "D18",
+    "D19",
+    "D20",
+    "D21",
+    "D22",
+    "D23",
+    "D24",
+    "D25",
+    "D26",
+    "D27",
+    "D28",
+    "D29",
+    "D30",
+    "D31",
+    "D32",
+    "D33",
+    "D34"
+  ],
+  "captures": [
+    {
+      "name": "D01_welcome",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D02_login",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D03_notice",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D03_notice_bottom",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D04_profile_setup",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D04_profile_setup_bottom",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D05_rooms",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D06_create",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D06_create_bottom",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D07_invite_preview",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D08_pending",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D09_cache_hidden",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D09_chat",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D10_management",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D10_members",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D11_invite_manage",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D11_invite_revoke",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D12_room_edit",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D12_room_icon",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D13_catalog",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D13_catalog_bottom",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D14_lobby",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D15_identity_chat",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D15_identity_input",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D16_identity_guess",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D16_identity_guess_bottom",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D17_identity_result",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D18_citizen_secret",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D18_liar_input",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D18_liar_secret",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D19_liar_vote",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D20_liar_guess",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D21_liar_result",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D22_eliminated",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D22_forbidden_chat",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D22_forbidden_input",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D23_forbidden_result",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D24_balance_choice",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D24_balance_submitted",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D25_balance_predict",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D26_balance_result",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D27_closed",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D27_ranking",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D28_chronology",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D29_friend_comparison",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D29_friend_rates",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D29_friend_summary",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D30_career_section",
+      "dataType": "component-fixture"
+    },
+    {
+      "name": "D31_profile_edit",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D32_settings_demo",
+      "dataType": "demo-navigation"
+    },
+    {
+      "name": "D33_report_demo",
+      "dataType": "demo-navigation"
+    },
+    {
+      "name": "D34_delete_demo",
+      "dataType": "demo-navigation"
+    }
+  ]
+}
