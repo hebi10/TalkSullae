@@ -204,7 +204,7 @@ jobs:
           echo "batch=$(TZ=Asia/Seoul date +%F)-talksullae" >> "$GITHUB_OUTPUT"
 
       - name: Verify exact source Android and release-policy CI
-        if: steps.verify.outputs.mode == 'deploy' || steps.verify.outputs.mode == 'deploy-and-promote'
+        if: steps.verify.outputs.mode != 'check'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -213,10 +213,25 @@ jobs:
             result="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$GITHUB_SHA&branch=main&per_page=100" \
               --jq '[.workflow_runs[] | select(.head_branch == "main" and (.event == "push" or .event == "workflow_dispatch"))] | .[0] | select(.) | [.head_sha, .conclusion] | join(" ")')"
             if [[ "$result" != "$GITHUB_SHA success" ]]; then
-              echo "Latest main CI must pass for $workflow before Play publishing." >&2
+              echo "Latest main CI must pass for $workflow before signing or Play publishing." >&2
               exit 1
             fi
           done
+
+      - name: Verify successful standalone device QA before signing
+        if: steps.verify.outputs.mode == 'build'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/qa-2d.yml/runs?head_sha=$GITHUB_SHA&branch=main&event=workflow_dispatch&per_page=100" \
+            --jq '[.workflow_runs[] | select(.head_branch == "main" and .event == "workflow_dispatch")] | max_by([.run_number, .run_attempt, .id]) | select(.) | [.head_sha, .status, .conclusion] | join(" ")')"
+          if [[ "$result" != "$GITHUB_SHA completed success" ]]; then
+            echo 'Latest standalone device QA for this exact main commit must pass before signing.' >&2
+            exit 1
+          fi
+          echo "Verified standalone device QA for $GITHUB_SHA."
 
       - name: Probe production Firebase callable routing before Play publishing
         if: steps.verify.outputs.mode == 'deploy' || steps.verify.outputs.mode == 'deploy-and-promote'
@@ -224,8 +239,10 @@ jobs:
 
   qa:
     needs: source
-    if: needs.source.outputs.mode != 'check'
+    if: needs.source.outputs.mode == 'deploy' || needs.source.outputs.mode == 'deploy-and-promote'
     uses: ./.github/workflows/qa-2d.yml
+    with:
+      expected_main_sha: ${{ github.sha }}
 
   play-preflight:
     needs: source
@@ -326,7 +343,11 @@ jobs:
 
   signed-aab:
     needs: [source, qa]
-    if: needs.source.outputs.mode != 'check' && needs.qa.result == 'success'
+    if: >-
+      !cancelled() && needs.source.result == 'success' &&
+      ((needs.source.outputs.mode == 'build' && needs.qa.result == 'skipped') ||
+       ((needs.source.outputs.mode == 'deploy' || needs.source.outputs.mode == 'deploy-and-promote') &&
+        needs.qa.result == 'success'))
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
