@@ -72,7 +72,8 @@ exports.setUserBlock = onCall(config, request=>safetyControls.setUserBlock(db,re
 exports.reportChatMessage = onCall(config, request=>safetyControls.reportChatMessage(db,request));
 exports.requestAccountDeletion = onCall(config, request=>safetyControls.requestAccountDeletion(db,request));
 exports.processAccountDeletionQueue = onSchedule({
-  schedule:"every 30 minutes",region:"asia-northeast3",maxInstances:1
+  schedule:"every 30 minutes",region:"asia-northeast3",maxInstances:1,
+  concurrency:1,timeoutSeconds:540
 }, async()=>{await safetyControls.processAccountDeletionQueue(db);});
 exports.expireDueMessages = onSchedule({
   schedule:"every 60 minutes",region:"asia-northeast3",maxInstances:1

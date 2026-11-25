@@ -246,3 +246,52 @@ test("a queued deletion account cannot submit a new chat report even before memb
    requestId:UUID(902),category:"abuse",details:"권한 회수 검증입니다."}},()=>nowMillis),e=>e.code==="permission-denied");
  assert.equal((await db.collection("rooms").doc(roomId).collection("members").doc(member).get()).get("status"),"active");
 });
+
+test("room-internal deletion checkpoints resume beyond old session and season limits",async()=>{
+ const {owner,member,roomId}=await sharedRoom();
+ const ref=db.collection("rooms").doc(roomId);
+ const ownIndex=db.collection("userRooms").doc(member).collection("rooms").doc(roomId);
+ const games=ref.collection("gameSessions"),seasons=ref.collection("seasons");
+ const batch=db.batch();
+ for(let i=0;i<101;i++){
+   const session=games.doc(String(i).padStart(64,"a"));
+   batch.set(session,{phase:"finished",gameId:"identity",participants:{[owner]:{ready:true},[member]:{ready:true}},createdBy:owner});
+   if(i===100){
+     batch.set(session.collection("privateAssignments").doc(member),{data:{alias:"삭제대상"}});
+     batch.set(session.collection("publicMessages").doc("own"),{alias:"삭제대상",text:"본인"});
+     batch.set(session.collection("publicMessages").doc("other"),{alias:"다른친구",text:"보존"});
+   }
+ }
+ for(let i=0;i<121;i++){
+   const season=seasons.doc("season-"+String(i).padStart(3,"0"));
+   batch.set(season,{seasonId:season.id});
+   batch.set(season.collection("scores").doc(member),{seasonPoints:10});
+ }
+ // Extra room chat page to exercise the old high-volume limit path.
+ for(let i=0;i<101;i++)batch.set(ref.collection("messages").doc("cleanup-"+i),{senderUid:member,text:"정리"});
+ batch.set(ref.collection("messages").doc("keep"),{senderUid:owner,text:"유지"});
+ await batch.commit();
+ await safety.requestAccountDeletion(db,{...auth(member),data:{confirm:"DELETE",expectedUid:member}},()=>nowMillis);
+ const deleted=[],authApi={async deleteUser(uid){deleted.push(uid);}};
+ let outcome=await safety.processOneAccountDeletion(db,member,authApi);
+ assert.equal(outcome.status,"processing");
+ assert.equal((await ownIndex.get()).get("deletionProgress.stage"),"messages");
+ assert.equal(deleted.length,0);
+ let calls=1;
+ while(outcome.status==="processing"&&calls<25){
+   outcome=await safety.processOneAccountDeletion(db,member,authApi);calls++;
+ }
+ assert.equal(outcome.status,"completed");
+ assert.ok(calls>5);
+ assert.deepEqual(deleted,[member]);
+ assert.equal((await ownIndex.get()).exists,false);
+ assert.equal((await ref.collection("messages").where("senderUid","==",member).get()).size,0);
+ assert.equal((await ref.collection("messages").doc("keep").get()).exists,true);
+ assert.equal((await seasons.doc("season-120").collection("scores").doc(member).get()).exists,false);
+ const last=games.doc(String(100).padStart(64,"a"));
+ assert.equal((await last.collection("privateAssignments").doc(member).get()).exists,false);
+ assert.equal((await last.collection("publicMessages").doc("own").get()).exists,false);
+ assert.equal((await last.collection("publicMessages").doc("other").get()).exists,true);
+ assert.equal(Object.hasOwn((await last.get()).get("participants"),member),false);
+ assert.equal((await ref.get()).get("memberCount"),1);
+});
