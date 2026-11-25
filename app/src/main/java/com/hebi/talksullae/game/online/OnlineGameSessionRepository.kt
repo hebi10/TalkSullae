@@ -4,6 +4,12 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.MetadataChanges
+import com.google.firebase.firestore.Source
+import com.google.firebase.auth.FirebaseAuth
+import com.hebi.talksullae.firebase.ServerSnapshotGate
+import com.hebi.talksullae.firebase.SnapshotAccess
+import com.hebi.talksullae.firebase.unexpiredMessage
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
 
@@ -11,7 +17,8 @@ internal data class IdentityChatMessage(
     val id: String,
     val alias: String,
     val text: String,
-    val createdAtMillis: Long?
+    val createdAtMillis: Long?,
+    val expiresAtMillis: Long? = null
 )
 
 internal data class IdentityChatPage(
@@ -24,7 +31,8 @@ internal data class LiarChatMessage(
     val id: String,
     val senderUid: String,
     val text: String,
-    val createdAtMillis: Long?
+    val createdAtMillis: Long?,
+    val expiresAtMillis: Long? = null
 )
 
 internal data class LiarChatPage(
@@ -114,21 +122,32 @@ internal interface OnlineGameSessionRepository {
  */
 internal class FirestoreOnlineGameSessionRepository(
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
-    private val functions: FirebaseFunctions = FirebaseFunctions.getInstance("asia-northeast3")
+    private val functions: FirebaseFunctions = FirebaseFunctions.getInstance("asia-northeast3"),
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) : OnlineGameSessionRepository {
     override fun watchSession(
         roomId: String,
         sessionId: String,
         onResult: (OnlineGameSnapshot?) -> Unit,
         onError: (String) -> Unit
-    ): ListenerRegistration = db.collection("rooms").document(roomId)
+    ): ListenerRegistration {
+        val uid = auth.currentUser?.uid
+        val gate = ServerSnapshotGate()
+        return db.collection("rooms").document(roomId)
         .collection("gameSessions").document(sessionId)
-        .addSnapshotListener { snapshot, error ->
+        .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
             if (error != null) {
                 onError("게임 세션을 확인할 수 없습니다. 멤버 권한과 연결 상태를 확인해 주세요.")
-            } else if (snapshot == null || !snapshot.exists()) {
-                onResult(null)
-            } else {
+            } else if (snapshot != null) {
+                when (gate.evaluate(snapshot.metadata.isFromCache, uid != null && uid == auth.currentUser?.uid)) {
+                    SnapshotAccess.WAIT -> return@addSnapshotListener
+                    SnapshotAccess.HIDE -> {
+                        onError("서버에서 게임 접근 권한을 확인할 수 없습니다. 다시 연결해 주세요.")
+                        return@addSnapshotListener
+                    }
+                    SnapshotAccess.ACCEPT -> Unit
+                }
+                if (!snapshot.exists()) { onResult(null); return@addSnapshotListener }
                 val safe = snapshot.data?.let { raw ->
                     val fields = mutableMapOf<String, Any?>()
                     fields.putAll(raw)
@@ -141,6 +160,7 @@ internal class FirestoreOnlineGameSessionRepository(
                 else onResult(safe)
             }
         }
+    }
 
     private suspend fun invoke(functionName: String, body: Map<String, Any>): Map<*, *> {
         val result = functions.getHttpsCallable(functionName).call(body).await().data
@@ -157,11 +177,14 @@ internal class FirestoreOnlineGameSessionRepository(
     private fun identityPage(docs: List<DocumentSnapshot>): IdentityChatPage =
         IdentityChatPage(
             messages = docs.mapNotNull { snapshot ->
+                val expires = snapshot.getTimestamp("expiresAt")?.toDate()?.time
+                if (!unexpiredMessage(expires)) return@mapNotNull null
                 val alias = snapshot.getString("alias") ?: return@mapNotNull null
                 val text = snapshot.getString("text") ?: return@mapNotNull null
                 IdentityChatMessage(
                     id = snapshot.id, alias = alias, text = text,
-                    createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time
+                    createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time,
+                    expiresAtMillis = expires
                 )
             },
             cursor = docs.lastOrNull(),
@@ -173,18 +196,27 @@ internal class FirestoreOnlineGameSessionRepository(
         sessionId: String,
         onPage: (IdentityChatPage) -> Unit,
         onError: (String) -> Unit
-    ): ListenerRegistration = identityQuery(roomId, sessionId)
-        .addSnapshotListener { snapshot, error ->
+    ): ListenerRegistration {
+        val uid = auth.currentUser?.uid
+        val gate = ServerSnapshotGate()
+        return identityQuery(roomId, sessionId).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
             if (error != null) onError("익명 채팅 기록을 불러올 수 없습니다.")
-            else if (snapshot != null) onPage(identityPage(snapshot.documents))
+            else if (snapshot != null) {
+                when (gate.evaluate(snapshot.metadata.isFromCache, uid != null && uid == auth.currentUser?.uid)) {
+                    SnapshotAccess.WAIT -> Unit
+                    SnapshotAccess.HIDE -> onError("게임 채팅 접근 권한을 확인하지 못했습니다.")
+                    SnapshotAccess.ACCEPT -> onPage(identityPage(snapshot.documents))
+                }
+            }
         }
+    }
 
     override suspend fun loadOlderIdentityMessages(
         roomId: String,
         sessionId: String,
         cursor: DocumentSnapshot
     ): IdentityChatPage {
-        val result = identityQuery(roomId, sessionId).startAfter(cursor).get().await()
+        val result = identityQuery(roomId, sessionId).startAfter(cursor).get(Source.SERVER).await()
         return identityPage(result.documents)
     }
 
@@ -264,11 +296,14 @@ internal class FirestoreOnlineGameSessionRepository(
     private fun liarPage(docs: List<DocumentSnapshot>): LiarChatPage =
         LiarChatPage(
             messages = docs.mapNotNull { snapshot ->
+                val expires = snapshot.getTimestamp("expiresAt")?.toDate()?.time
+                if (!unexpiredMessage(expires)) return@mapNotNull null
                 val senderUid = snapshot.getString("senderUid") ?: return@mapNotNull null
                 val text = snapshot.getString("text") ?: return@mapNotNull null
                 LiarChatMessage(
                     id = snapshot.id, senderUid = senderUid, text = text,
-                    createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time
+                    createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time,
+                    expiresAtMillis = expires
                 )
             },
             cursor = docs.lastOrNull(),
@@ -278,16 +313,25 @@ internal class FirestoreOnlineGameSessionRepository(
     override fun watchLiarMessages(
         roomId: String, sessionId: String,
         onPage: (LiarChatPage) -> Unit, onError: (String) -> Unit
-    ): ListenerRegistration = identityQuery(roomId, sessionId)
-        .addSnapshotListener { snapshot, error ->
+    ): ListenerRegistration {
+        val uid = auth.currentUser?.uid
+        val gate = ServerSnapshotGate()
+        return identityQuery(roomId, sessionId).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
             if (error != null) onError("라이어 게임 채팅 기록을 불러올 수 없습니다.")
-            else if (snapshot != null) onPage(liarPage(snapshot.documents))
+            else if (snapshot != null) {
+                when (gate.evaluate(snapshot.metadata.isFromCache, uid != null && uid == auth.currentUser?.uid)) {
+                    SnapshotAccess.WAIT -> Unit
+                    SnapshotAccess.HIDE -> onError("게임 채팅 접근 권한을 확인하지 못했습니다.")
+                    SnapshotAccess.ACCEPT -> onPage(liarPage(snapshot.documents))
+                }
+            }
         }
+    }
 
     override suspend fun loadOlderLiarMessages(
         roomId: String, sessionId: String, cursor: DocumentSnapshot
     ): LiarChatPage {
-        val result = identityQuery(roomId, sessionId).startAfter(cursor).get().await()
+        val result = identityQuery(roomId, sessionId).startAfter(cursor).get(Source.SERVER).await()
         return liarPage(result.documents)
     }
 

@@ -8,6 +8,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 
 data class OnlineRoomsState(
     val entries: List<CloudRoomIndex> = emptyList(),
@@ -33,11 +37,17 @@ internal class OnlineRoomsViewModel(
     private var listListener: ListenerRegistration? = null
     private var roomListener: ListenerRegistration? = null
     private var membersListener: ListenerRegistration? = null
+    private var listGeneration = 0L
+    private var roomGeneration = 0L
+    private var actionGeneration = 0L
+    private var actionJob: Job? = null
 
     fun start() {
         if (listListener != null) return
+        val generation = ++listGeneration
         listListener = repository.watchMyRooms(uid,
             { result ->
+                if (generation != listGeneration) return@watchMyRooms
                 val selectedId = stateMutable.value.selectedId
                 if (selectedId != null && result.none {
                     it.id == selectedId && it.status == "active"
@@ -48,7 +58,12 @@ internal class OnlineRoomsViewModel(
                     stateMutable.update { it.copy(entries = result, error = null, loading = false) }
                 }
             },
-            { message -> stateMutable.update { it.copy(error = message, loading = false) } }
+            { message ->
+                if (generation == listGeneration) {
+                    revokeSelectedRoom(message)
+                    stateMutable.update { it.copy(entries = emptyList(), loading = false, error = message) }
+                }
+            }
         )
     }
 
@@ -60,6 +75,10 @@ internal class OnlineRoomsViewModel(
     }
 
     fun stop(preserveInvite: Boolean = false) {
+        listGeneration++
+        actionGeneration++
+        actionJob?.cancel()
+        actionJob = null
         listListener?.remove()
         listListener = null
         closeRoomListeners()
@@ -82,22 +101,31 @@ internal class OnlineRoomsViewModel(
         ) }
         val entry = stateMutable.value.entries.firstOrNull { it.id == roomId }
         if (entry?.status != "active") return
-        roomListener = repository.watchRoom(roomId,
-            { value -> stateMutable.update { it.copy(selectedRoom = value) } },
-            { message -> revokeSelectedRoom(message) }
+        val generation = roomGeneration
+        val roomRegistration = repository.watchRoom(roomId,
+            { value -> if (generation == roomGeneration && stateMutable.value.selectedId == roomId)
+                stateMutable.update { it.copy(selectedRoom = value) } },
+            { message -> if (generation == roomGeneration) revokeSelectedRoom(message) }
         )
-        membersListener = repository.watchMembers(roomId,
-            { value -> stateMutable.update { it.copy(members = value) } },
-            { message -> revokeSelectedRoom(message) }
+        if (generation != roomGeneration) { roomRegistration.remove(); return }
+        roomListener = roomRegistration
+        val memberRegistration = repository.watchMembers(roomId,
+            { value -> if (generation == roomGeneration && stateMutable.value.selectedId == roomId)
+                stateMutable.update { it.copy(members = value) } },
+            { message -> if (generation == roomGeneration) revokeSelectedRoom(message) }
         )
+        if (generation == roomGeneration) membersListener = memberRegistration else memberRegistration.remove()
     }
 
     private fun revokeSelectedRoom(message: String) {
+        actionGeneration++
+        actionJob?.cancel()
+        actionJob = null
         closeRoomListeners()
         stateMutable.update {
             it.copy(
                 selectedId = null, selectedRoom = null,
-                members = emptyList(), invite = null, info = message
+                members = emptyList(), invite = null, working = false, info = message
             )
         }
     }
@@ -118,16 +146,22 @@ internal class OnlineRoomsViewModel(
     private fun action(successMessage: String, block: suspend () -> Unit) {
         if (stateMutable.value.working) return
         stateMutable.update { it.copy(working = true, error = null, info = null) }
-        viewModelScope.launch {
+        val generation = actionGeneration
+        actionJob = viewModelScope.launch {
             try {
                 block()
+                coroutineContext.ensureActive()
+                if (generation != actionGeneration) return@launch
                 if (successMessage.isNotEmpty()) {
                     stateMutable.update { if (it.info == null) it.copy(info = successMessage) else it }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                stateMutable.update { it.copy(error = e.localizedMessage ?: "연결 오류가 발생했습니다.") }
+                if (generation == actionGeneration)
+                    stateMutable.update { it.copy(error = e.localizedMessage ?: "연결 오류가 발생했습니다.") }
             } finally {
-                stateMutable.update { it.copy(working = false) }
+                if (generation == actionGeneration) stateMutable.update { it.copy(working = false) }
             }
         }
     }
@@ -235,6 +269,7 @@ internal class OnlineRoomsViewModel(
     }
 
     private fun closeRoomListeners() {
+        roomGeneration++
         roomListener?.remove()
         roomListener = null
         membersListener?.remove()

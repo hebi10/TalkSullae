@@ -6,6 +6,8 @@ service cloud.firestore {
     }
     function activeMember(roomId) {
       return signedIn()
+        && !exists(/databases/$(database)/documents/accountDeletionJobs/$(request.auth.uid))
+        && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == "active"
         && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid))
         && get(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid)).data.status == "active";
     }
