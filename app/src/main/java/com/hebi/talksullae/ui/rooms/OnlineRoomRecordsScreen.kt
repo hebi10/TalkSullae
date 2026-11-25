@@ -1,5 +1,9 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Alignment
+import com.hebi.talksullae.design.ContentCard
+import com.hebi.talksullae.design.ProfileAvatar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -251,11 +255,13 @@ internal fun OnlineRoomRecordsHost(
         onBack=onBack,
         friendNames=members.filter { it.uid!=uid && it.status=="active" }.associate { it.uid to it.name },
         onFriendClick={ selectedFriend=it },
-        onClosureRetry={closureRetry++}
+        onClosureRetry={closureRetry++},
+        avatars=members.associate { it.uid to it.avatar }
     )
     if(activeFriend!=null && foreground){
         FriendRecordsDialog(activeFriend.name,friendValue,friendLoading,friendError,
-            onRetry={friendRetry++},onDismiss={selectedFriend=null},onCompare={includeComparison=true})
+            onRetry={friendRetry++},onDismiss={selectedFriend=null},onCompare={includeComparison=true},
+            avatar=activeFriend.avatar)
     }
 }
 
@@ -266,7 +272,8 @@ internal fun RoomRecordsContent(
     onPrevious:()->Unit,onNext:()->Unit,
     canPrevious:Boolean,canNext:Boolean,onBack:()->Unit,
     friendNames:Map<String,String> = emptyMap(),onFriendClick:(String)->Unit = {},
-    onClosureRetry:()->Unit={}
+    onClosureRetry:()->Unit={},
+    avatars:Map<String,String?> = emptyMap()
 ) {
     var selectedGame by rememberSaveable(roomName) { mutableStateOf("all") }
     var filterExpanded by remember { mutableStateOf(false) }
@@ -279,15 +286,6 @@ internal fun RoomRecordsContent(
             Text("방 기록 · $roomName",Modifier.weight(1f),
                 style=MaterialTheme.typography.titleLarge)
             TextButton(onClick=onBack){Text("방 관리")}
-        }
-        HorizontalDivider()
-        Text("나의 누적 전적",style=MaterialTheme.typography.titleMedium)
-        Text("경기 ${state.totalGames}회 · 승리 ${state.totalWins}회 · 최고 연승 ${state.bestStreak}회",
-            modifier=Modifier.testTag("room-records-summary"))
-        Text("획득 업적",style=MaterialTheme.typography.titleMedium)
-        if(state.achievements.isEmpty())Text("아직 획득한 업적이 없습니다.")
-        else state.achievements.sorted().forEach{id->
-            Text(achievementLabels[id]?:id)
         }
         HorizontalDivider()
         Column(
@@ -315,6 +313,11 @@ internal fun RoomRecordsContent(
                 ) { Text("다음 시즌") }
             }
         }
+        ContentCard {
+            Text("내 기록",style=MaterialTheme.typography.titleMedium)
+            Text("경기 ${state.totalGames}회 · 승리 ${state.totalWins}회 · 최고 연승 ${state.bestStreak}회",
+                modifier=Modifier.testTag("room-records-summary"))
+        }
         if(state.closed && !state.loading && state.error==null){
             val final=state.finalResult
             if(final!=null){
@@ -338,17 +341,19 @@ internal fun RoomRecordsContent(
         state.error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
         if(!state.loading&&state.ranking.isEmpty())Text("해당 시즌의 경기 기록이 없습니다.")
         competitionRanks(state.ranking).forEach{(rank,item)->
-            Column(
-                modifier = Modifier.fillMaxWidth().testTag("records-ranked-" + item.uid),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+            ContentCard(Modifier.testTag("records-ranked-" + item.uid)) {
                 val champion=state.closed && state.finalResult?.winningScore==item.points
-                Text(if(champion)"우승 · "+(names[item.uid] ?: "탈퇴한 멤버")
-                    else (if(state.closed)"보존 순위 ${rank}위 · " else "${rank}위 · ") + (names[item.uid] ?: "탈퇴한 멤버"),
-                    style = MaterialTheme.typography.bodyLarge)
-                Text("${item.points}점 · ${item.games}경기 · ${item.wins}승",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium)
+                Row(verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    ProfileAvatar(avatars[item.uid], Modifier.size(32.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(if(champion)"우승 · "+(names[item.uid] ?: "탈퇴한 멤버")
+                            else (if(state.closed)"보존 순위 ${rank}위 · " else "${rank}위 · ") + (names[item.uid] ?: "탈퇴한 멤버"),
+                            style = MaterialTheme.typography.bodyLarge)
+                        Text("${item.games}경기 · ${item.wins}승",
+                            color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
+                    }
+                    Text("${item.points}점", style=MaterialTheme.typography.titleMedium)
+                }
             }
         }
         Text("서로 다른 게임의 원점수는 합산하지 않고 공통 시즌 점수로 환산합니다.",
@@ -364,6 +369,10 @@ internal fun RoomRecordsContent(
                 }
             }
         }
+        HorizontalDivider()
+        Text("획득 업적",style=MaterialTheme.typography.titleMedium)
+        if(state.achievements.isEmpty())Text("아직 획득한 업적이 없습니다.")
+        else state.achievements.sorted().forEach{id-> Text(achievementLabels[id]?:id) }
         HorizontalDivider()
         Text("나의 최근 경기",style=MaterialTheme.typography.titleMedium)
         Box {

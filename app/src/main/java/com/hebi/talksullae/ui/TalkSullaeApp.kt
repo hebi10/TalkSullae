@@ -342,7 +342,7 @@ fun TalkSullaeApp(
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                AppTopBar(
+                if (!(route == Main && signedUser != null && onlineProfile != null && !profileLoading)) AppTopBar(
                     title = when (route) {
                         Welcome -> "톡술래"
                         Onboarding -> "닉네임 · 아바타"
@@ -569,7 +569,8 @@ fun TalkSullaeApp(
                                 onInviteCodeHandled = onInviteCodeHandled,
                                 incomingNotification = incomingNotification,
                                 notificationDeliveryId = notificationDeliveryId,
-                                onNotificationHandled = onNotificationHandled
+                                onNotificationHandled = onNotificationHandled,
+                                showClose = false
                             )
                             else -> ProfileScreen(
                                 darkTheme = isDark,
@@ -754,7 +755,7 @@ fun TalkSullaeApp(
 }
 
 @Composable
-private fun MainNavigation(current: String, onSelect: (String) -> Unit) {
+internal fun MainNavigation(current: String, onSelect: (String) -> Unit) {
     val tabs = listOf(
         NavItem("rooms", "내 방", Icons.Default.Groups),
         NavItem("records", "기록", Icons.Default.EmojiEvents),
@@ -1107,21 +1108,25 @@ private fun RankingsScreen(title: String) {
 }
 
 @Composable
-private fun ProfileScreen(
+internal fun ProfileScreen(
     darkTheme: Boolean,
     onThemeChange: (Boolean) -> Unit,
     onSettings: () -> Unit,
     nickname: String,
     actualProfile: UserProfile? = null,
     actualUid: String? = null,
-    onEditProfile: (() -> Unit)? = null
+    onEditProfile: (() -> Unit)? = null,
+    careerRepository: com.hebi.talksullae.firebase.CareerRepository? = null
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (actualProfile == null) PreviewNotice()
-        SectionTitle("내 프로필")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("마이", Modifier.weight(1f), style=MaterialTheme.typography.titleLarge)
+            TextButton(onClick=onSettings) { Text("설정") }
+        }
         ContentCard {
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1141,11 +1146,11 @@ private fun ProfileScreen(
                 OutlinedButton(
                     onClick = onEditProfile,
                     modifier = Modifier.fillMaxWidth().testTag("profile-edit-open")
-                ) { Text("닉네임·아바타 변경") }
+                ) { Text("프로필 편집") }
             }
         }
         if (actualUid != null && actualProfile != null) {
-            MyCareerSection(uid = actualUid)
+            MyCareerSection(uid = actualUid, repository = careerRepository)
         }
         ContentCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1157,7 +1162,6 @@ private fun ProfileScreen(
                 )
             }
         }
-        PrimaryAction("설정 화면", onClick = onSettings, modifier = Modifier.fillMaxWidth())
     }
 }
 

@@ -1,5 +1,12 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -334,17 +341,40 @@ internal fun OnlineRoomChatHost(
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        OutlinedTextField(
-            value = state.draft,
-            onValueChange = vm::updateDraft,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
-                .testTag("online-chat-input"),
-            label = { Text("메시지") },
-            maxLines = 5,
-            enabled = true,
-            supportingText = { Text("${RoomChatInputPolicy.normalize(state.draft).length}/1000자") },
-            shape = RoundedCornerShape(8.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = state.draft,
+                onValueChange = vm::updateDraft,
+                modifier = Modifier.weight(1f).testTag("online-chat-input"),
+                label = { Text("메시지") },
+                placeholder = { Text("메시지를 입력하세요.") },
+                maxLines = 5,
+                enabled = true,
+                shape = RoundedCornerShape(8.dp)
+            )
+            if (state.pending == null || state.sending) {
+                FilledIconButton(
+                    onClick = vm::send,
+                    enabled = !state.sending && !state.initialLoading &&
+                        !state.fromCache && state.readError == null && state.pending == null &&
+                        RoomChatInputPolicy.error(state.draft) == null,
+                    modifier = Modifier.size(48.dp).testTag("online-chat-send"),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary)
+                ) { Icon(Icons.Default.Send, contentDescription = if (state.sending) "메시지 전송 중…" else "전송") }
+            }
+        }
+        if (state.draft.isNotEmpty()) {
+            Text("${RoomChatInputPolicy.normalize(state.draft).length}/1000자",
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (state.pending != null && !state.sending) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -358,16 +388,6 @@ internal fun OnlineRoomChatHost(
                     Text("입력 다시 작성")
                 }
             }
-        } else {
-            PrimaryAction(
-                label = if (state.sending) "메시지 전송 중…" else "전송",
-                onClick = vm::send,
-                enabled = !state.sending && !state.initialLoading &&
-                    !state.fromCache && state.readError == null && state.pending == null &&
-                    RoomChatInputPolicy.error(state.draft) == null,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-                    .testTag("online-chat-send")
-            )
         }
         }
     }
@@ -442,24 +462,25 @@ private fun RoomChatMessageRow(message: RoomChatMessage, isOwn: Boolean) {
         verticalAlignment = Alignment.Top
     ) {
         if (!isOwn) {
-            ProfileAvatar(message.senderAvatar, Modifier.padding(end = 8.dp, top = 8.dp).size(28.dp))
+            ProfileAvatar(message.senderAvatar, Modifier.padding(end = 8.dp, top = 4.dp).size(32.dp))
         }
-        Surface(
-            color = if (isOwn) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(if (isOwn) 0.88f else 0.94f)
+        Column(
+            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(0.84f),
+            horizontalAlignment = if (isOwn) Alignment.End else Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            if (!isOwn) Text(message.senderName, style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface)
+            Surface(
+                color = if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Text(
-                    "${if (isOwn) "나" else message.senderName} · $displayTime",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(message.text, style = MaterialTheme.typography.bodyMedium)
+                Text(message.text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodyMedium)
             }
+            Text(displayTime, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

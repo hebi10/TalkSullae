@@ -1,5 +1,10 @@
 package com.hebi.talksullae.ui.profile
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.LinearProgressIndicator
+import com.hebi.talksullae.design.StatStrip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -113,6 +118,9 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
                 val progress = careerProgress(career.totalGames)
                 Text("Lv. " + progress.level + " · " + progress.title, style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.testTag("career-level"))
+                LinearProgressIndicator(progress = { (progress.xp % 100L) / 100f },
+                    modifier=Modifier.fillMaxWidth().height(8.dp),
+                    color=MaterialTheme.colorScheme.primary, trackColor=MaterialTheme.colorScheme.surfaceVariant)
                 Text("경험치 " + progress.xp + " XP · 다음 레벨까지 " + (100L - progress.xp % 100L) + " XP",
                     style = MaterialTheme.typography.bodySmall)
                 Text("완료 경기 1회당 10 XP. 서버에 보존된 전적 기준이며 승패나 게임 권한에 영향을 주지 않습니다.",
@@ -122,8 +130,8 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
                     style=MaterialTheme.typography.bodySmall)
             }
             Text("참여 중인 방 " + career.roomCount + "개 · 조회한 기록 방 " + career.recordedRoomCount + "개")
-            Text("누적 경기 " + career.totalGames + "회")
-            Text("승리 " + career.totalWins + "회 · 최고 연승 " + career.bestStreak + "회")
+            StatStrip(listOf(career.totalGames.toString() to "누적 경기",
+                career.totalWins.toString() to "승리", career.bestStreak.toString() to "최고 연승"))
             Text("획득한 시즌점 " + career.totalSeasonPoints + "점")
             if (career.achievements.isNotEmpty()) {
                 Text("업적 " + career.achievements.size + "개")
@@ -132,6 +140,7 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
                     "liar_wins_5" to "라이어 5승", "identity_wins_10" to "정체 추리 10승")
                 career.achievements.mapNotNull { labels[it] }.forEach { Text(it) }
             }
+            Text("게임별 승률",style=MaterialTheme.typography.titleMedium)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf(
                     "identity" to "너 누구야?", "liar" to "라이어",
@@ -141,7 +150,10 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
                     val plays = game?.plays ?: 0L
                     val wins = game?.wins ?: 0L
                     val rate = if (plays == 0L) "기록 없음" else "${((wins.toDouble() / plays) * 100).toInt().coerceIn(0,100)}% 승률"
-                    Text("$label · ${plays}경기 · ${wins}승 · $rate")
+                    Row(Modifier.fillMaxWidth().padding(vertical=4.dp), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Text(label, Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium)
+                        Text("${plays}경기 · ${wins}승 · $rate",style=MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         }

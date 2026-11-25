@@ -1,5 +1,9 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -32,7 +36,14 @@ internal fun LiveRoomSectionTabs(
             FilterChip(
                 selected = current == key,
                 onClick = { onSelect(key) },
-                label = { Text(label) },
+                label = { Text(label, modifier = Modifier.padding(horizontal = 4.dp)) },
+                shape = RoundedCornerShape(8.dp),
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    labelColor = MaterialTheme.colorScheme.onSurface
+                ),
                 modifier = Modifier.heightIn(min = 48.dp).testTag("live-room-tab-$key")
             )
         }

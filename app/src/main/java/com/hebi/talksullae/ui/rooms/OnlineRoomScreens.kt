@@ -82,7 +82,8 @@ internal fun OnlineRoomsHost(
     onInviteCodeHandled: () -> Unit = {},
     incomingNotification: RoomNotificationTarget? = null,
     notificationDeliveryId: Long = 0L,
-    onNotificationHandled: () -> Unit = {}
+    onNotificationHandled: () -> Unit = {},
+    showClose: Boolean = true
 ) {
     val repo = remember(repository) { repository ?: CloudRoomsRepository() }
     val factory = remember(uid, repo) {
@@ -337,11 +338,18 @@ internal fun OnlineRoomsHost(
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleLarge
             )
-            TextButton(onClick = { if (state.selectedId != null) vm.closeRoom() else onClose() }) {
-                Text(if (state.selectedId == null) "닫기" else "방 목록")
+            if (state.selectedId == null && entryMode != "records") {
+                PrimaryAction(if (createVisible) "생성 닫기" else "+ 새 방 만들기",
+                    onClick = { createVisible = !createVisible },
+                    modifier = Modifier.testTag("online-create-toggle"))
+            }
+            if (state.selectedId != null || showClose) {
+                TextButton(onClick = { if (state.selectedId != null) vm.closeRoom() else onClose() }) {
+                    Text(if (state.selectedId == null) "닫기" else "방 목록")
+                }
             }
         }
-        if (state.selectedId == null) Text(accountName, style = MaterialTheme.typography.bodySmall)
+        if (state.selectedId == null && showClose) Text(accountName, style = MaterialTheme.typography.bodySmall)
         if (state.working) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(modifier = Modifier.width(24.dp), strokeWidth = 2.dp)
@@ -362,7 +370,8 @@ internal fun OnlineRoomsHost(
             }
         }
         if (state.selectedId == null) {
-            SectionTitle(if (entryMode == "records") "방별 게임 기록" else "참여 중인 방")
+            SectionTitle(if (entryMode == "records") "방별 게임 기록" else
+                "참여 중인 방 " + state.entries.count { it.status == "active" })
             if (state.loading) {
                 CircularProgressIndicator(modifier = Modifier.testTag("live-rooms-loading"))
             } else if (state.entries.isEmpty() && state.error == null) {
@@ -374,14 +383,26 @@ internal fun OnlineRoomsHost(
                     Text("방 목록 다시 시도")
                 }
             }
-            state.entries.forEach { entry ->
+            val orderedEntries = state.entries.sortedBy {
+                when (it.status) { "active" -> 0; "pending" -> 1; else -> 2 }
+            }
+            orderedEntries.forEachIndexed { index, entry ->
+                val previous = orderedEntries.getOrNull(index - 1)
+                if (entry.status == "pending" && previous?.status != "pending")
+                    SectionTitle("가입 승인 대기 " + orderedEntries.count { it.status == "pending" })
+                if (entry.status !in listOf("active", "pending") &&
+                    (previous == null || previous.status in listOf("active", "pending")))
+                    SectionTitle("기타 가입 상태")
                 ContentCard(modifier = Modifier.testTag("online-room-${entry.id}")) {
                     Row(verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         RoomListAvatar(entry.name,entry.roomIcon)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(entry.name, style = MaterialTheme.typography.titleMedium)
-                            Text(membershipLabel(entry.status), style = MaterialTheme.typography.bodySmall)
+                            if (entry.status != "active" || entryMode == "records") {
+                                Text(membershipLabel(entry.status), style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                             if (entry.status == "active" && entryMode != "records") {
                                 entry.memberCount?.let { Text("참가 $it/20명", style = MaterialTheme.typography.bodySmall) }
                                 if (entry.gameInProgress == true) Text("진행 중인 게임 있음", style = MaterialTheme.typography.labelMedium)
@@ -390,10 +411,16 @@ internal fun OnlineRoomsHost(
                                     Text("최근 대화 " + SimpleDateFormat("M.d HH:mm", Locale.KOREA).format(Date(last)),
                                         style = MaterialTheme.typography.bodySmall)
                                 }
-                                if (unread > 0L) Text("새 메시지 " + if (unread > 99L) "99+" else unread.toString(),
+                                if (unread > 0L) androidx.compose.material3.Surface(
                                     color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.testTag("room-unread-" + entry.id))
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.testTag("room-unread-" + entry.id)
+                                ) {
+                                    Text("새 메시지 " + if (unread > 99L) "99+" else unread.toString(),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.labelMedium)
+                                }
                             }
                         }
                         if (entry.status == "active") {
@@ -405,14 +432,8 @@ internal fun OnlineRoomsHost(
                 }
             }
             if (entryMode != "records") {
-            HorizontalDivider()
-            OutlinedButton(
-                onClick = { createVisible = !createVisible },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .testTag("online-create-toggle"),
-                shape = RoundedCornerShape(8.dp)
-            ) { Text(if (createVisible) "방 생성 닫기" else "새 온라인 방 만들기") }
             if (createVisible) {
+                SectionTitle("새 방 만들기")
                 val valid = RoomInputRules.valid(roomName, description)
                 OutlinedTextField(
                     value = roomName,
