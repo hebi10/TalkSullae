@@ -322,7 +322,7 @@ internal fun RoomRecordsContent(
                 if(final.winnerCount==0L)Text("기록된 우승자가 없습니다.")
                 else {
                     Text("우승 점수 ${final.winningScore}점 · 우승자 ${final.winnerCount}명")
-                    Text("계정 삭제로 사라진 기록은 표시하지 않으며 차순위가 우승자로 변경되지는 않습니다.",
+                    Text("삭제된 기록은 제외한 보존 순위입니다. 확정된 우승자는 변경되지 않습니다.",
                         style=MaterialTheme.typography.bodySmall)
                 }
                 Text("마감 시 누적 경기 ${final.gameCount}회",style=MaterialTheme.typography.bodySmall)
@@ -344,7 +344,7 @@ internal fun RoomRecordsContent(
             ) {
                 val champion=state.closed && state.finalResult?.winningScore==item.points
                 Text(if(champion)"우승 · "+(names[item.uid] ?: "탈퇴한 멤버")
-                    else "${rank}위 · " + (names[item.uid] ?: "탈퇴한 멤버"),
+                    else (if(state.closed)"보존 순위 ${rank}위 · " else "${rank}위 · ") + (names[item.uid] ?: "탈퇴한 멤버"),
                     style = MaterialTheme.typography.bodyLarge)
                 Text("${item.points}점 · ${item.games}경기 · ${item.wins}승",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

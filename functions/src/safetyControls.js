@@ -1,18 +1,23 @@
 "use strict";
 
 const {createHash,randomUUID}=require("node:crypto");
-const {FieldValue,Timestamp}=require("firebase-admin/firestore");
+const {FieldValue,Timestamp,FieldPath}=require("firebase-admin/firestore");
 const {getAuth}=require("firebase-admin/auth");
 const {HttpsError}=require("firebase-functions/v2/https");
 const {authUid,roomIdValue}=require("./policy");
 const {removeSender}=require("./chatUnread");
+const {removeSeasonScore}=require("./game/seasonClosure");
 
 const UUID=/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
 const USER_ID=/^[^/\u0000-\u001f]{1,128}$/u;
 const HASH=value=>createHash("sha256").update(value).digest("hex");
 const MAX_ROOMS=100;
-const MAX_SESSIONS=100;
 const DELETE_ROOM_BATCH=10;
+const DELETE_ROWS=100;
+const DELETE_SEASONS=40;
+const DELETE_SESSIONS=20;
+const DELETE_BUDGET_MS=45_000;
+const DELETE_STAGES=["personal","messages","seasons","sessions","membership"];
 const RECENT_AUTH_SECONDS=300;
 const ALLOWED_CATEGORIES=new Set(["abuse","child_safety","other"]);
 
@@ -165,18 +170,50 @@ async function requestAccountDeletion(db,request,now=Date.now){
   });
 }
 
-async function removeMessages(db,ref,uid,field="senderUid"){
-  let count=0;
-  while(true){
-    const snapshots=await ref.where(field,"==",uid).limit(100).get();
-    if(snapshots.empty)break;
-    const batch=db.batch();
-    for(const row of snapshots.docs)batch.delete(row.ref);
-    await batch.commit();
-    count+=snapshots.size;
-    if(count>10000)throw new Error("User deletion requires manual high-volume review");
+// Bounded, idempotent drains: only owned records, never another member's data.
+async function drainRows(db,query){
+  const page=await query.limit(DELETE_ROWS+1).get();
+  if(page.empty)return true;
+  const batch=db.batch();
+  for(const row of page.docs.slice(0,DELETE_ROWS))batch.delete(row.ref);
+  await batch.commit();
+  return page.size<=DELETE_ROWS;
+}
+
+async function documentPage(collection,cursor,limit){
+  let query=collection.orderBy(FieldPath.documentId()).limit(limit+1);
+  if(cursor!==null)query=query.startAfter(cursor);
+  const page=await query.get();
+  return {docs:page.docs.slice(0,limit),more:page.size>limit};
+}
+
+function roomProgress(index){
+  const value=index.get("deletionProgress");
+  if(value===undefined)return {stage:"personal",cursor:null};
+  if(!value||!DELETE_STAGES.includes(value.stage)||
+     !(value.cursor===null||(typeof value.cursor==="string"&&value.cursor.length<=1500&&!value.cursor.includes("/")))){
+    throw new Error("Manual review: invalid deletion checkpoint");
   }
-  return count;
+  return {stage:value.stage,cursor:value.cursor};
+}
+
+async function assertNoActiveParticipation(roomRef,room,uid){
+  if(room.get("status")==="active"&&room.get("ownerId")===uid)
+    throw new Error("Manual review: user owns active room");
+  // The active pointer is authoritative; additionally check legacy/orphaned
+  // nonterminal sessions before touching any private records.
+  const pointer=room.get("activeGameSessionId");
+  if(typeof pointer==="string"){
+    const active=await roomRef.collection("gameSessions").doc(pointer).get();
+    if(active.exists&&Object.hasOwn(active.get("participants")||{},uid)&&
+       !["finished","cancelled"].includes(active.get("phase")))
+      throw new Error("Account still participates in an active game");
+  }
+  const active=await roomRef.collection("gameSessions")
+    .where("phase","in",["waiting","ready","assigning","playing","voting","reveal"]).limit(21).get();
+  if(active.size>20)throw new Error("Manual review: inconsistent active sessions");
+  if(active.docs.some(session=>Object.hasOwn(session.get("participants")||{},uid)))
+    throw new Error("Account still participates in an active game");
 }
 
 // Remove direct identifiers from terminal public game history; keep game totals and other members\' scores.
@@ -214,91 +251,110 @@ async function anonymizeTerminalGame(db,sessionRef,uid){
   });
 }
 
-// Server-only account removal. All user-authored message payloads are purged before Auth deletion.
-// Failures leave a retryable queued job; successful deletion is not claimed until Auth is gone.
+async function cleanupSession(db,session,uid){
+  const ref=session.ref;
+  if(!["finished","cancelled"].includes(session.get("phase"))){
+    if(Object.hasOwn(session.get("participants")||{},uid)||session.get("createdBy")===uid)
+      throw new Error("Account still participates in an active game");
+    // New sessions cannot include a queued account. Do not mutate somebody
+    // else's live round or private role assignments.
+    return true;
+  }
+  const assignmentRef=ref.collection("privateAssignments").doc(uid);
+  const assignment=await assignmentRef.get();
+  const alias=assignment.exists?assignment.get("data")?.alias:null;
+  const messages=ref.collection("publicMessages");
+  const query=session.get("gameId")==="identity"&&typeof alias==="string"
+    ?messages.where("alias","==",alias):messages.where("senderUid","==",uid);
+  if(!await drainRows(db,query))return false;
+  if(!await drainRows(db,ref.collection("privateSubmissions").where("actorUid","==",uid)))return false;
+  if(!await drainRows(db,ref.collection("processedActions").where("actorUid","==",uid)))return false;
+  await anonymizeTerminalGame(db,ref,uid);
+  // Retain the alias until all related anonymous messages and records are gone.
+  const batch=db.batch();
+  batch.delete(assignmentRef);
+  batch.delete(ref.collection("gameChatRateLimits").doc(uid));
+  await batch.commit();
+  return true;
+}
+
+async function cleanupRoom(db,index,uid,deadline){
+  const roomRef=db.collection("rooms").doc(index.id);
+  const room=await roomRef.get();
+  if(!room.exists){await index.ref.delete();return true;}
+  await assertNoActiveParticipation(roomRef,room,uid);
+  let progress=roomProgress(index);
+  async function checkpoint(stage,cursor=null){
+    progress={stage,cursor};
+    await index.ref.update({deletionProgress:progress});
+  }
+  // A checkpoint is advanced only after all writes for that page have
+  // succeeded. Retrying a failed page repeats safe, idempotent cleanup.
+  if(progress.stage==="personal"){
+    const stats=roomRef.collection("playerStats").doc(uid);
+    if(!await drainRows(db,stats.collection("games")))return false;
+    await stats.delete();
+    await roomRef.collection("recentCompletedGameSessions").doc(uid).delete();
+    await checkpoint("messages");
+  }
+  if(progress.stage==="messages"){
+    if(!await drainRows(db,roomRef.collection("messages").where("senderUid","==",uid)))return false;
+    await roomRef.collection("chatRateLimits").doc(uid).delete();
+    await checkpoint("seasons");
+  }
+  if(progress.stage==="seasons"){
+    const page=await documentPage(roomRef.collection("seasons"),progress.cursor,DELETE_SEASONS);
+    for(const season of page.docs){
+      if(Date.now()>=deadline)return false;
+      if(!await removeSeasonScore(db,season.ref,uid))return false;
+      await checkpoint("seasons",season.id);
+    }
+    if(page.more)return false;
+    await checkpoint("sessions");
+  }
+  if(progress.stage==="sessions"){
+    const page=await documentPage(roomRef.collection("gameSessions"),progress.cursor,DELETE_SESSIONS);
+    for(const session of page.docs){
+      if(Date.now()>=deadline)return false;
+      if(!await cleanupSession(db,session,uid))return false;
+      await checkpoint("sessions",session.id);
+    }
+    if(page.more)return false;
+    await checkpoint("membership");
+  }
+  if(progress.stage!=="membership")throw new Error("Manual review: invalid deletion stage");
+  await db.runTransaction(async tx=>{
+    const [current,member]=await Promise.all([
+      tx.get(roomRef),tx.get(roomRef.collection("members").doc(uid))
+    ]);
+    if(!current.exists){tx.delete(index.ref);return;}
+    if(current.get("status")==="active"&&current.get("ownerId")===uid)
+      throw new Error("Manual review: user became owner during deletion");
+    const status=member.exists?member.get("status"):null;
+    const changes={...removeSender(current.data(),uid)};
+    if(status==="active"||status==="pending")
+      changes[status==="active"?"memberCount":"pendingCount"]=FieldValue.increment(-1);
+    if(current.get("status")==="archived"&&current.get("ownerId")===uid)changes.ownerId=null;
+    if(Object.keys(changes).length)tx.update(roomRef,changes);
+    if(member.exists)tx.delete(member.ref);
+    tx.delete(index.ref);
+  });
+  return true;
+}
+
+// Server-only account removal. Successful deletion is not claimed until Auth
+// deletion and every room checkpoint have completed.
 async function processOneAccountDeletion(db,uid,auth=getAuth()){
   const jobRef=db.collection("accountDeletionJobs").doc(uid);
   const job=await jobRef.get();
   if(!job.exists||!["queued","processing"].includes(job.get("status")))return {status:"skipped"};
   await jobRef.update({status:"processing",attempts:FieldValue.increment(1)});
+  const deadline=Date.now()+DELETE_BUDGET_MS;
   const userRooms=db.collection("userRooms").doc(uid);
   const roomIndex=await userRooms.collection("rooms").limit(DELETE_ROOM_BATCH).get();
-  const refs=[];
   for(const item of roomIndex.docs){
-    const roomRef=db.collection("rooms").doc(item.id);
-    const room=await roomRef.get();
-    if(!room.exists){await item.ref.delete();continue;}
-    if(room.get("status")==="active"&&room.get("ownerId")===uid) {
-      throw new Error("Manual review: user owns active room");
-    }
-    const sessions=await roomRef.collection("gameSessions").limit(MAX_SESSIONS+1).get();
-    if(sessions.size>MAX_SESSIONS)throw new Error("Manual review: too many sessions");
-    // Recheck at deletion time, not only when the user requested removal.
-    // A game may have begun between queuing and scheduled processing.
-    if(sessions.docs.some(s=>
-       s.get("participants")?.[uid] &&
-       !["finished","cancelled"].includes(s.get("phase")))){
-      throw new Error("Account still participates in an active game");
-    }
-    const seasons=await roomRef.collection("seasons").limit(121).get();
-    if(seasons.size>120)throw new Error("Manual review: too many seasons");
-    refs.push({roomRef,indexRef:item.ref,sessions,seasons});
-  }
-  for(const {roomRef,indexRef,sessions,seasons} of refs){
-    await db.recursiveDelete(roomRef.collection("playerStats").doc(uid));
-    for(const season of seasons.docs){
-      await season.ref.collection("scores").doc(uid).delete();
-    }
-    await roomRef.collection("recentCompletedGameSessions").doc(uid).delete();
-    await removeMessages(db,roomRef.collection("messages"),uid);
-    for(const session of sessions.docs){
-      const sessionRef=session.ref;
-      const assignmentRef=sessionRef.collection("privateAssignments").doc(uid);
-      const assignment=await assignmentRef.get();
-      const alias=assignment.exists?assignment.get("data")?.alias:null;
-      if(session.get("gameId")==="identity" && typeof alias==="string"){
-        // Identity messages deliberately contain no sender UID. Resolve their
-        // server-only alias before deleting the assignment, within that session only.
-        await removeMessages(db,sessionRef.collection("publicMessages"),alias,"alias");
-      }else{
-        await removeMessages(db,sessionRef.collection("publicMessages"),uid);
-      }
-      // Remove the actor\'s private role only after anonymous messages have been purged.
-      await assignmentRef.delete();
-      const ballots=await sessionRef.collection("privateSubmissions").where("actorUid","==",uid).get();
-      for(let i=0;i<ballots.docs.length;i+=100){
-        const batch=db.batch();
-        for(const d of ballots.docs.slice(i,i+100))batch.delete(d.ref);
-        await batch.commit();
-      }
-      const receipts=await sessionRef.collection("processedActions").where("actorUid","==",uid).get();
-      for(let i=0;i<receipts.docs.length;i+=100){
-        const batch=db.batch();
-        for(const d of receipts.docs.slice(i,i+100))batch.delete(d.ref);
-        await batch.commit();
-      }
-      await anonymizeTerminalGame(db,sessionRef,uid);
-    }
-    await db.runTransaction(async tx=>{
-      const [room,member]=await Promise.all([
-        tx.get(roomRef),tx.get(roomRef.collection("members").doc(uid))
-      ]);
-      if(!room.exists){tx.delete(indexRef);return;}
-      if(room.get("status")==="active"&&room.get("ownerId")===uid){
-        throw new Error("Manual review: user became owner during deletion");
-      }
-      const current=member.exists?member.get("status"):null;
-      if(current==="active"||current==="pending"){
-        const prop=current==="active"?"memberCount":"pendingCount";
-        tx.update(roomRef,{[prop]:FieldValue.increment(-1)});
-      }
-      const senderCleanup=removeSender(room.data(),uid);
-      if(Object.keys(senderCleanup).length)tx.update(roomRef,senderCleanup);
-      if(room.get("status")==="archived"&&room.get("ownerId")===uid)tx.update(roomRef,{ownerId:null});
-      if(member.exists)tx.delete(member.ref);
-      // A room index is the durable checkpoint. Delete it only after every room cleanup has succeeded.
-      tx.delete(indexRef);
-    });
+    if(Date.now()>=deadline)break;
+    if(!await cleanupRoom(db,item,uid,deadline))break;
   }
   const remaining=await userRooms.collection("rooms").limit(1).get();
   if(!remaining.empty){
@@ -309,9 +365,16 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
   // Remove profile, per-device FCM tokens and notification cooldowns together.
   await db.recursiveDelete(db.collection("users").doc(uid));
   await db.recursiveDelete(db.collection("userSafety").doc(uid));
-  const reported=await db.collection("safetyReports").where("actorUid","==",uid).get();
-  for(const d of reported.docs){
-    await d.ref.update({actorUid:"deleted-account",requestId:FieldValue.delete()});
+  const reported=await db.collection("safetyReports").where("actorUid","==",uid).limit(DELETE_ROWS+1).get();
+  if(!reported.empty){
+    const batch=db.batch();
+    for(const d of reported.docs.slice(0,DELETE_ROWS))
+      batch.update(d.ref,{actorUid:"deleted-account",requestId:FieldValue.delete()});
+    await batch.commit();
+  }
+  if(reported.size>DELETE_ROWS){
+    await jobRef.update({status:"processing",attempts:0,updatedAt:FieldValue.serverTimestamp()});
+    return {status:"processing"};
   }
   const rateRef=db.collection("safetyReportRateLimits").doc(HASH(uid));
   await rateRef.delete();

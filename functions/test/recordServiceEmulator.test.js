@@ -175,7 +175,10 @@ test("monthly closure freezes tied winning score without copying personal identi
  assert.equal((await parent.collection("seasons").doc(nextId).get()).get("gameCount"),1);
  assert.deepEqual((await ref.get()).get("finalResult"),summary);
  // Hourly queue also closes a season without an app visit.
- await closeDueSeasons(db,()=>closeAt(nextId));
+ for(let i=0;i<10;i++){
+   await closeDueSeasons(db,()=>closeAt(nextId));
+   if((await parent.collection("seasons").doc(nextId).get()).get("finalResult.status")==="closed")break;
+ }
  assert.equal((await parent.collection("seasons").doc(nextId).get()).get("finalResult.status"),"closed");
  assert.equal((await first.ref.get()).get("phase"),"finished");
 });

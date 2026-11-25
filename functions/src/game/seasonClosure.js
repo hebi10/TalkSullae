@@ -55,7 +55,7 @@ async function closeRoomSeason(db,roomId,seasonId,now=Date.now(),uid=null){
   const roomRef=db.collection("rooms").doc(roomId),ref=roomRef.collection("seasons").doc(seasonId);
   const queue=seasonQueueRef(db,roomId,seasonId);
   return db.runTransaction(async tx=>{
-    const room=await tx.get(roomRef);
+    const [room,queued]=await Promise.all([tx.get(roomRef),tx.get(queue)]);
     if(uid!==null){
       const [member,deletion]=await Promise.all([
         tx.get(roomRef.collection("members").doc(uid)),
@@ -65,12 +65,12 @@ async function closeRoomSeason(db,roomId,seasonId,now=Date.now(),uid=null){
         member.get("status")!=="active"||deletion.exists)
         throw new HttpsError("permission-denied","현재 같은 방 멤버만 시즌 기록을 조회할 수 있습니다.");
     }
-    if(!room.exists){tx.delete(queue);return {status:"empty"};}
+    if(!room.exists){if(queued.exists)tx.delete(queue);return {status:"empty"};}
     const season=await tx.get(ref);
     const result=await prepareClosure(tx,ref,now,season);
     if(result.status==="closed"&&!season.get("finalResult"))
       tx.update(ref,{finalResult:result});
-    if(result.status==="closed"||result.status==="empty")tx.delete(queue);
+    if(queued.exists&&(result.status==="closed"||result.status==="empty"))tx.delete(queue);
     return result;
   });
 }
