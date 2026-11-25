@@ -19,14 +19,19 @@ def export_screenshots(output):
     adb("shell", "am", "force-stop", PACKAGE)
     adb("shell", "run-as", PACKAGE, "rm", "-rf", "files/play-store-captures")
     report = output / "instrumentation.txt"
-    report.write_text(adb(
+    instrumentation = adb(
         "shell", "am", "instrument", "-w", "-r", "-e", "capturePlayStore", "true",
         "-e", "class", f"{PACKAGE}.StoreScreenshotsTest",
         f"{PACKAGE}.test/androidx.test.runner.AndroidJUnitRunner",
-    ), encoding="utf-8")
-    subprocess.run([
-        sys.executable, str(Path(__file__).with_name("assert_instrumentation.py")), str(report), "2"
-    ], check=True)
+    )
+    report.write_text(instrumentation, encoding="utf-8")
+    try:
+        subprocess.run([
+            sys.executable, str(Path(__file__).with_name("assert_instrumentation.py")), str(report), "2"
+        ], check=True)
+    except subprocess.CalledProcessError:
+        print(instrumentation, file=sys.stderr)
+        raise
     for screen in SCREENS:
         filename = f"{screen}.jpg"
         screenshot = adb(
