@@ -104,6 +104,12 @@ class MainNavigationTest {
         composeRule.onNodeWithTag("privacy-policy-open").assertExists()
         composeRule.onNodeWithTag("account-deletion-request-open").assertExists()
         composeRule.onNodeWithTag("safety-report-open").assertExists()
+        composeRule.onNodeWithTag("account-deletion-in-app").performScrollTo().performClick()
+        composeRule.onNodeWithTag("account-deletion-screen").assertExists()
+        composeRule.onNodeWithTag("account-deletion-reauth").assertIsNotEnabled()
+        composeRule.onNodeWithTag("account-deletion-open-confirm").assertIsNotEnabled()
+        composeRule.runOnUiThread { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag("account-deletion-in-app").assertExists()
     }
 
     @Test

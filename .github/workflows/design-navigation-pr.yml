@@ -1,0 +1,68 @@
+name: TS-FINAL-01-B native capture navigation regression
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-design-navigation-fix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/ts-final-01-b-deletion-navigation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify exact PR head and isolated build
+        env:
+          EXPECTED: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED" =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$EXPECTED" ]]
+          test ! -f app/google-services.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify inventory and build debug/test APK
+        run: |
+          python3 -m unittest discover -s scripts/qa -p test_design_capture_inventory.py
+          sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+          ./gradlew --no-daemon --max-workers=2 assembleDebug assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run full isolated native capture on the navigation fix
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          EXPECTED: ${{ github.event.pull_request.head.sha }}
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            python3 scripts/qa/export_design_captures.py --expected-sha "$EXPECTED" --profile phone --theme dark --font-scale 1.0 --output design-captures
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: talksullae-full-design-navigation-${{ github.event.pull_request.head.sha }}
+          path: design-captures/
+          if-no-files-found: error
+          retention-days: 30
