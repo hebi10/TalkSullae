@@ -63,4 +63,10 @@ function unreadFor(state,index,uid){
   return number(carry+delta);
 }
 
-module.exports={activity,nextActivity,readBaseline,joinReadBaseline,migrationBaseline,unreadFor};
+function removeSender(room,uid){
+  const counts=room.unreadSentCounts;
+  if(!counts||typeof counts!=="object"||Array.isArray(counts)||!Object.hasOwn(counts,uid))return {};
+  return {unreadSentCounts:Object.fromEntries(Object.entries(counts).filter(([id])=>id!==uid))};
+}
+
+module.exports={activity,nextActivity,readBaseline,joinReadBaseline,migrationBaseline,unreadFor,removeSender};

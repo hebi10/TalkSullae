@@ -38,7 +38,7 @@ function messageIdFor(roomId, uid, requestId) {
   return createHash("sha256").update(JSON.stringify([roomId, uid, requestId])).digest("hex");
 }
 
-async function sendRoomMessage(db, request) {
+async function sendRoomMessage(db, request, sharedEnabled=process.env.TALKSULLAE_SHARED_UNREAD_ENABLED==="true") {
   const uid = authUid(request);
   const {roomId, requestId, text} = parseChatMessage(request.data);
   const roomRef = db.collection("rooms").doc(roomId);
@@ -87,10 +87,10 @@ async function sendRoomMessage(db, request) {
     if(activeMembers.size>ROOM_CAPACITY || !activeMembers.docs.some(doc=>doc.id===uid)){
       throw new HttpsError("failed-precondition","방의 멤버 상태를 확인할 수 없습니다.");
     }
-    const next=nextActivity(room.data(),activeMembers.docs.map(doc=>doc.id),uid,nowMillis);
+    const next=sharedEnabled||activity(room.data())?nextActivity(room.data(),activeMembers.docs.map(doc=>doc.id),uid,nowMillis):null;
     // Migrate once per existing room. Preserve each member's unread count as a
     // carry; subsequent sends write no recipient index documents.
-    const migration=next.migrating?await Promise.all(activeMembers.docs.map(async doc=>{
+    const migration=next?.migrating?await Promise.all(activeMembers.docs.map(async doc=>{
       const ref=db.collection("userRooms").doc(doc.id).collection("rooms").doc(roomId);
       const index=await transaction.get(ref);
       if(!index.exists||index.get("status")!=="active")throw new HttpsError("failed-precondition","방 목록을 다시 확인해 주세요.");
@@ -112,9 +112,23 @@ async function sendRoomMessage(db, request) {
       expiresAt: Timestamp.fromMillis(nowMillis+ROOM_CHAT_DAYS*DAY_MS)
     });
     transaction.set(rateRef, {lastSentAt: Timestamp.fromMillis(nowMillis)});
-    transaction.update(roomRef,{lastChatMessageId:messageId,lastChatAt:FieldValue.serverTimestamp(),
-      unreadEpoch:next.epoch,unreadSequence:next.sequence,unreadSentCounts:next.counts});
-    for(const row of migration)transaction.update(row.ref,row.baseline);
+    const common={lastChatMessageId:messageId,lastChatAt:FieldValue.serverTimestamp()};
+    if(next){
+      transaction.update(roomRef,{...common,unreadEpoch:next.epoch,unreadSequence:next.sequence,unreadSentCounts:next.counts});
+      for(const row of migration)transaction.update(row.ref,row.baseline);
+    }else{
+      // Before enabling migration, preserve the installed/intermediate client contract.
+      const previous=room.get("lastChatAt");
+      const reset=!(previous instanceof Timestamp)||previous.toMillis()<=nowMillis-ROOM_CHAT_DAYS*DAY_MS;
+      transaction.update(roomRef,common);
+      for(const recipient of activeMembers.docs){
+        const indexRef=db.collection("userRooms").doc(recipient.id).collection("rooms").doc(roomId);
+        const entry={roomName:room.get("name"),status:"active",...common};
+        if(reset)entry.unreadCount=recipient.id===uid?0:1;
+        else if(recipient.id!==uid)entry.unreadCount=FieldValue.increment(1);
+        transaction.set(indexRef,entry,{merge:true});
+      }
+    }
     return {messageId, deduplicated: false};
   });
 }

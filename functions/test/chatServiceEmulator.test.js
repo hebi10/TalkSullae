@@ -137,8 +137,8 @@ test("unread count excludes own sends, deduplicates retries, and rejects stale o
   await requestJoin(db,{...auth("unread-pending"),data:{code:invite.code}});
   const index=uid=>db.collection("userRooms").doc(uid).collection("rooms").doc(roomId);
   const request=message(roomId,21,"새 메시지");
-  const first=await sendRoomMessage(db,request);
-  await sendRoomMessage(db,request);
+  const first=await sendRoomMessage(db,request,true);
+  await sendRoomMessage(db,request,true);
   const roomRef=db.collection("rooms").doc(roomId);
   const unread=async uid=>unreadFor(activity((await roomRef.get()).data()),(await index(uid).get()).data(),uid);
   assert.equal(await unread("owner"),0);
@@ -178,7 +178,7 @@ test("sequence migration preserves legacy unread, new members start at join, and
  const last=Timestamp.fromMillis(Date.now()-1000);
  await ref.update({lastChatAt:last,lastChatMessageId:"a".repeat(64)});
  await idx("r3-unread-legacy").update({unreadCount:7,lastChatAt:last,lastChatMessageId:"a".repeat(64)});
- const first=await sendRoomMessage(db,message(roomId,41,"이관 후 메시지"));
+ const first=await sendRoomMessage(db,message(roomId,41,"이관 후 메시지"),true);
  const value=async uid=>unreadFor(activity((await ref.get()).data()),(await idx(uid).get()).data(),uid);
  assert.equal(await value("r3-unread-legacy"),8);
  await join("r3-unread-new");
@@ -189,11 +189,28 @@ test("sequence migration preserves legacy unread, new members start at join, and
  await ref.update({lastChatAt:Timestamp.fromMillis(Date.now()-91*24*60*60*1000)});
  await ref.collection("chatRateLimits").doc("owner").delete();
  const before=(await idx("r3-unread-new").get()).data();
- const next=await sendRoomMessage(db,message(roomId,42,"장기 공백 후"));
+ const next=await sendRoomMessage(db,message(roomId,42,"장기 공백 후"),false);
  assert.notEqual(first.messageId,next.messageId);
  assert.equal((await ref.get()).get("unreadEpoch"),2);
  assert.deepEqual((await idx("r3-unread-new").get()).data(),before);
  assert.equal(await value("r3-unread-new"),1);
  assert.equal(await value("r3-unread-legacy"),1);
  assert.equal(await value("owner"),0);
+});
+
+test("shared unread migration is opt-in, and a migrated room never falls back to legacy",async()=>{
+ const roomId=await roomWithOwner(),ref=db.collection("rooms").doc(roomId);
+ const invite=await createInvitation(db,{...auth("owner"),data:{roomId}});
+ await requestJoin(db,{...auth("r3-rollout-friend"),data:{code:invite.code}});
+ await changeMember(db,{...auth("owner"),data:{roomId,targetUid:"r3-rollout-friend",action:"approve"}});
+ const idx=db.collection("userRooms").doc("r3-rollout-friend").collection("rooms").doc(roomId);
+ await sendRoomMessage(db,message(roomId,51,"기존 방식"),false);
+ assert.equal((await ref.get()).get("unreadEpoch"),undefined);
+ assert.equal((await idx.get()).get("unreadCount"),1);
+ await ref.collection("chatRateLimits").doc("owner").delete();
+ await sendRoomMessage(db,message(roomId,52,"전환"),true);
+ assert.equal(unreadFor(activity((await ref.get()).data()),(await idx.get()).data(),"r3-rollout-friend"),2);
+ await ref.collection("chatRateLimits").doc("owner").delete();
+ await sendRoomMessage(db,message(roomId,53,"전환 유지"),false);
+ assert.equal(unreadFor(activity((await ref.get()).data()),(await idx.get()).data(),"r3-rollout-friend"),3);
 });

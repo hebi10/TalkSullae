@@ -6,7 +6,7 @@ const {
   roomDraft, roomIdValue, parseJoinCode, authUid
 } = require("./policy");
 const {memberDisplayName,profileAvatar} = require("./userProfile");
-const {joinReadBaseline}=require("./chatUnread");
+const {joinReadBaseline,removeSender}=require("./chatUnread");
 
 const ROOM_ICONS=new Set(["부엉이","토끼","고양이","강아지","곰","여우","판다","펭귄"]);
 const now = () => FieldValue.serverTimestamp();
@@ -257,7 +257,7 @@ async function changeMember(db, request) {
     }
     tx.update(memberRef,{status:"removed",updatedAt:now()});
     tx.set(indexRef,{status:"removed",roomName:room.data().name,updatedAt:now()});
-    tx.update(roomRef,{memberCount:FieldValue.increment(-1)});
+    tx.update(roomRef,{memberCount:FieldValue.increment(-1),...removeSender(room.data(),targetUid)});
     return {status:"removed"};
   });
 }
@@ -288,10 +288,10 @@ async function leaveRoom(db, request) {
     tx.update(memberRef,{status:"left",updatedAt:now()});
     tx.set(indexRef,{status:"left",roomName:room.data().name,updatedAt:now()});
     if (isOwner) {
-      tx.update(roomRef,{status:"archived",activeInviteHash:null,activeInviteExpiresAt:null,memberCount:0});
+      tx.update(roomRef,{status:"archived",activeInviteHash:null,activeInviteExpiresAt:null,memberCount:0,...(room.get("unreadEpoch")?{unreadSentCounts:{}}:{})});
     } else {
       tx.update(roomRef,active
-        ? {memberCount:FieldValue.increment(-1)}
+        ? {memberCount:FieldValue.increment(-1),...removeSender(room.data(),uid)}
         : {pendingCount:FieldValue.increment(-1)});
     }
     return {status:"left"};
@@ -392,7 +392,7 @@ async function archiveRoom(db,request) {
       tx.set(userIndex(db,member.id,roomId),{roomName:room.get("name"),status:"archived",updatedAt:now()});
     }
     tx.update(roomRef,{status:"archived",archivedAt:now(),activeInviteHash:null,
-      activeInviteExpiresAt:null,memberCount:0,pendingCount:0});
+      activeInviteExpiresAt:null,memberCount:0,pendingCount:0,...(room.get("unreadEpoch")?{unreadSentCounts:{}}:{})});
     return {status:"archived",deduplicated:false};
   });
 }
