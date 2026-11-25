@@ -32,6 +32,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hebi.talksullae.design.ContentCard
 import com.hebi.talksullae.design.PrimaryAction
 import com.hebi.talksullae.firebase.CloudMember
 import com.hebi.talksullae.game.core.GamePhase
@@ -129,12 +130,11 @@ internal fun OnlineLiarGameHost(
         }
 
         if (snap != null) {
-            Text("상태: " + (gamePhaseLabel(phase)) + " · 라운드 " + snap.session.round,
-                style = MaterialTheme.typography.titleMedium)
-            remaining?.let { GameDeadlineStatus(it) }
-            if (snap.fromCache) {
-                Text("캐시 상태입니다. 서버 동기화를 확인해 주세요.")
-            }
+            GamePhasePanel(
+                "상태: " + gamePhaseLabel(phase) + " · 라운드 " + snap.session.round,
+                remaining,
+                if (snap.fromCache) "캐시 상태입니다. 서버 동기화를 확인해 주세요." else null
+            )
             if (phase == GamePhase.WAITING || phase == GamePhase.READY) {
                 Text("참가 " + snap.participants.size + "명 / 4~10명")
                 Text(lobbyReadinessLabel(snap.participants.size, snap.participants.count { it.ready }, 4, phase, snap.fromCache),
@@ -164,16 +164,18 @@ internal fun OnlineLiarGameHost(
             }
 
             if (participant && (phase == GamePhase.PLAYING || phase == GamePhase.VOTING)) {
-                if (state.role == "liar") {
-                    Text("내 역할: 라이어 · 주제는 공개되지 않습니다.",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.testTag("liar-secret-role"))
-                } else if (state.role == "citizen") {
-                    Text("내 역할: 일반 참가자 · 비밀 주제: " + (state.topic ?: "확인 중"),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.testTag("liar-secret-role"))
-                } else {
-                    Text("개인 역할을 확인하는 중입니다.")
+                ContentCard {
+                    if (state.role == "liar") {
+                        Text("내 역할: 라이어 · 주제는 공개되지 않습니다.",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.testTag("liar-secret-role"))
+                    } else if (state.role == "citizen") {
+                        Text("내 역할: 일반 참가자 · 비밀 주제: " + (state.topic ?: "확인 중"),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.testTag("liar-secret-role"))
+                    } else {
+                        Text("개인 역할을 확인하는 중입니다.")
+                    }
                 }
                 state.personalError?.let { error ->
                     Text(error, color = MaterialTheme.colorScheme.error)
@@ -219,16 +221,15 @@ internal fun OnlineLiarGameHost(
                             Text("투표를 제출했습니다. 다른 참가자 또는 서버 마감을 기다립니다.")
                         } else {
                             options.filter { it != uid }.forEach { candidate ->
-                                OutlinedButton(
+                                GameChoiceAction(
+                                    label = (names[candidate] ?: "친구") +
+                                        if (selectedChoice == candidate) " · 선택됨" else "",
+                                    selected = selectedChoice == candidate,
                                     onClick = { selectedChoice = candidate },
                                     enabled = state.role != null && !state.busy &&
                                         state.pendingAction == null,
-                                    modifier = Modifier.fillMaxWidth()
-                                        .testTag("liar-vote-" + candidate)
-                                ) {
-                                    Text((names[candidate] ?: "친구") +
-                                        if (selectedChoice == candidate) " · 선택됨" else "")
-                                }
+                                    modifier = Modifier.fillMaxWidth().testTag("liar-vote-" + candidate)
+                                )
                             }
                             PrimaryAction("라이어 지목 제출",
                                 onClick = { vm.action("submit",mapOf("choice" to selectedChoice)) },
@@ -245,13 +246,12 @@ internal fun OnlineLiarGameHost(
                         } else {
                             Text("비밀 주제를 추리해 하나를 선택해 주세요.")
                             options.forEach { topic ->
-                                OutlinedButton(
+                                GameChoiceAction(
+                                    label = topic + if (selectedChoice == topic) " · 선택됨" else "",
+                                    selected = selectedChoice == topic,
                                     onClick = { selectedChoice = topic },
-                                    modifier = Modifier.fillMaxWidth()
-                                        .testTag("liar-topic-option-" + topic)
-                                ) {
-                                    Text(topic + if (selectedChoice == topic) " · 선택됨" else "")
-                                }
+                                    modifier = Modifier.fillMaxWidth().testTag("liar-topic-option-" + topic)
+                                )
                             }
                             PrimaryAction("주제 답안 제출",
                                 onClick = { vm.action("submit",mapOf("choice" to selectedChoice)) },
@@ -267,9 +267,11 @@ internal fun OnlineLiarGameHost(
             }
 
             if (phase == GamePhase.REVEAL || phase == GamePhase.FINISHED) {
-                Text("라이어 공개·최종 결과", style = MaterialTheme.typography.titleMedium)
-                Text(snap.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.",
-                    modifier = Modifier.testTag("liar-result"))
+                ContentCard {
+                    Text("라이어 공개·최종 결과", style = MaterialTheme.typography.titleMedium)
+                    Text(snap.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.",
+                        modifier = Modifier.testTag("liar-result"))
+                }
             }
             if (phase == GamePhase.FINISHED) {
                 PrimaryAction("방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
