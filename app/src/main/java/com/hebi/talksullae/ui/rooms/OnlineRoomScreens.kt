@@ -1,5 +1,9 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.platform.LocalDensity
 import android.content.ClipData
@@ -396,6 +400,8 @@ internal fun OnlineRoomsHost(
                     (previous == null || previous.status in listOf("active", "pending")))
                     SectionTitle("기타 가입 상태")
                 ContentCard(modifier = Modifier.testTag("online-room-${entry.id}")) {
+                    val unread = if (entry.status == "active" && entryMode != "records") entry.visibleUnread(inviteNow) else 0L
+                    val stackedBadge = LocalDensity.current.fontScale > 1.3f
                     Row(verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         RoomListAvatar(entry.name,entry.roomIcon)
@@ -408,26 +414,22 @@ internal fun OnlineRoomsHost(
                             if (entry.status == "active" && entryMode != "records") {
                                 entry.memberCount?.let { Text("참가 $it/20명", style = MaterialTheme.typography.bodySmall) }
                                 if (entry.gameInProgress == true) Text("진행 중인 게임 있음", style = MaterialTheme.typography.labelMedium)
-                                val unread = entry.visibleUnread(inviteNow)
                                 entry.lastChatAtMillis?.let { last ->
                                     Text("최근 대화 " + SimpleDateFormat("M.d HH:mm", Locale.KOREA).format(Date(last)),
                                         style = MaterialTheme.typography.bodySmall)
                                 }
-                                if (unread > 0L) androidx.compose.material3.Surface(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.testTag("room-unread-" + entry.id)
-                                ) {
-                                    Text("새 메시지 " + if (unread > 99L) "99+" else unread.toString(),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        style = MaterialTheme.typography.labelMedium)
-                                }
+                                if (stackedBadge && unread > 0L) RoomUnreadBadge(entry.id, unread)
                             }
                         }
                         if (entry.status == "active") {
-                            TextButton(onClick = { vm.openRoom(entry.id) }) {
-                                Text(if (entryMode == "records") "기록 보기" else "입장")
+                            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (!stackedBadge && unread > 0L) RoomUnreadBadge(entry.id, unread)
+                                TextButton(onClick = { vm.openRoom(entry.id) },
+                                    modifier = Modifier.heightIn(min = 48.dp)) {
+                                    Text(if (entryMode == "records") "기록 보기" else "입장")
+                                    Icon(Icons.Default.ChevronRight, contentDescription = null,
+                                        modifier = Modifier.size(18.dp))
+                                }
                             }
                         }
                     }
@@ -800,4 +802,16 @@ private fun membershipLabel(status: String) = when (status) {
     "left" -> "탈퇴"
     "archived" -> "종료된 방"
     else -> "정보 확인 중"
+}
+
+@Composable
+private fun RoomUnreadBadge(roomId: String, unread: Long) {
+    Surface(color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.testTag("room-unread-" + roomId)) {
+        Text("새 메시지 " + if (unread > 99L) "99+" else unread.toString(),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelMedium)
+    }
 }

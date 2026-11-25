@@ -1,5 +1,6 @@
 package com.hebi.talksullae.ui.rooms
 
+import com.hebi.talksullae.design.ChatBubbleWithTime
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.filled.ArrowBack
@@ -421,17 +422,10 @@ private fun IdentityMessages(
                 Column(Modifier.fillMaxWidth(0.84f), horizontalAlignment = if (own) Alignment.End else Alignment.Start,
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(if (own) "나 · ${message.alias}" else message.alias, style = MaterialTheme.typography.labelMedium)
-                    Surface(color = if (own) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = if (own) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                        shape = RoundedCornerShape(8.dp)) {
-                        Text(message.text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.bodyMedium)
+                    val time = remember(message.createdAtMillis) {
+                        message.createdAtMillis?.let { SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(it)) }
                     }
-                    message.createdAtMillis?.let {
-                        Text(remember(it) { SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(it)) },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    ChatBubbleWithTime(message.text, time, own)
                 }
             }
         }

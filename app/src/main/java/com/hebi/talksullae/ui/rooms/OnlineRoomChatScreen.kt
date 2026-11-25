@@ -1,5 +1,6 @@
 package com.hebi.talksullae.ui.rooms
 
+import com.hebi.talksullae.design.ChatBubbleWithTime
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -502,16 +503,7 @@ private fun RoomChatMessageRow(message: RoomChatMessage, isOwn: Boolean) {
         ) {
             if (!isOwn) Text(message.senderName, style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface)
-            Surface(
-                color = if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text(message.text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.bodyMedium)
-            }
-            Text(displayTime, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            ChatBubbleWithTime(message.text, displayTime, isOwn)
         }
     }
 }

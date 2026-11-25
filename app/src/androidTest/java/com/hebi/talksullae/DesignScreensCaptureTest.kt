@@ -270,8 +270,10 @@ class DesignScreensCaptureTest {
         }
         override fun watchIdentityMessages(roomId:String,sessionId:String,onPage:(IdentityChatPage)->Unit,onError:(String)->Unit):ListenerRegistration {
             val now=System.currentTimeMillis()
-            onPage(IdentityChatPage(listOf(IdentityChatMessage("one","토끼","나는 계획보다 즉흥 여행이 좋아.",now-60000),
-                IdentityChatMessage("two","부엉이","혹시 내가 누군지 알겠어?",now-30000)),null,false))
+            onPage(IdentityChatPage(listOf(IdentityChatMessage("one","토끼","나는 즉흥 여행이 좋아.",now-90000),
+                IdentityChatMessage("two","부엉이","계획이 있어야 편하지!",now-60000),
+                IdentityChatMessage("three","여우","나는 둘 다 괜찮아.",now-30000),
+                IdentityChatMessage("four","고양이","나는 미리 계획하는 게 좋아!",now-15000)),null,false))
             return ListenerRegistration {}
         }
         override fun watchLiarMessages(roomId:String,sessionId:String,onPage:(LiarChatPage)->Unit,onError:(String)->Unit):ListenerRegistration {
@@ -346,7 +348,7 @@ class DesignScreensCaptureTest {
             OnlineRoomWorkspace(room,"records",{},{}) {
                 RoomRecordsContent(room.name,state,people.associate{it.uid to it.name},
                     {},{},true,false,{},people.filter{it.uid!="owner"}.associate{it.uid to it.name},{},
-                    avatars=people.associate{it.uid to it.avatar}, showHeader=false)
+                    avatars=people.associate{it.uid to it.avatar}, showHeader=false, ownUid="owner")
             }
         }
     }
@@ -360,7 +362,7 @@ class DesignScreensCaptureTest {
         mount(""){
             OnlineRoomWorkspace(room,"records",{},{}) {
                 RoomRecordsContent(room.name,records,people.associate{it.uid to it.name},
-                    {},{},true,false,{},avatars=people.associate{it.uid to it.avatar}, showHeader=false)
+                    {},{},true,false,{},avatars=people.associate{it.uid to it.avatar}, showHeader=false, ownUid="owner")
             }
             FriendRecordsDialog("지훈",FriendRecords(20,12,3,1200,gameStats,listOf("first_game","wins_5"),pair,20,false,comparisonLoaded=detail.value),false,null,{},{},{detail.value=true},avatar="토끼")
         }

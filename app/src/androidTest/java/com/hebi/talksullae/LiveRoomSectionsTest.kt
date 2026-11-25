@@ -1,5 +1,6 @@
 package com.hebi.talksullae
 
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -53,7 +54,7 @@ class LiveRoomSectionsTest {
         }
         compose.onNodeWithTag("live-room-compact").assertExists()
         compose.onNodeWithTag("live-game-card-identity").assertExists()
-        compose.onNodeWithTag("live-room-tab-members").performScrollTo().performClick()
+        compose.onNodeWithTag("live-room-tab-members").assertIsDisplayed().performClick()
         assertEquals("members",selected)
     }
 

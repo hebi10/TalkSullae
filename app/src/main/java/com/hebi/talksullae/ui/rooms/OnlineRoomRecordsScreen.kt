@@ -265,7 +265,7 @@ internal fun OnlineRoomRecordsHost(
         friendNames=members.filter { it.uid!=uid && it.status=="active" }.associate { it.uid to it.name },
         onFriendClick={ selectedFriend=it },
         onClosureRetry={closureRetry++},
-        avatars=members.associate { it.uid to it.avatar }, showHeader=showHeader
+        avatars=members.associate { it.uid to it.avatar }, showHeader=showHeader, ownUid=uid
     )
     if(activeFriend!=null && foreground){
         FriendRecordsDialog(activeFriend.name,friendValue,friendLoading,friendError,
@@ -282,7 +282,7 @@ internal fun RoomRecordsContent(
     canPrevious:Boolean,canNext:Boolean,onBack:()->Unit,
     friendNames:Map<String,String> = emptyMap(),onFriendClick:(String)->Unit = {},
     onClosureRetry:()->Unit={},
-    avatars:Map<String,String?> = emptyMap(), showHeader:Boolean=true
+    avatars:Map<String,String?> = emptyMap(), showHeader:Boolean=true, ownUid:String?=null
 ) {
     var selectedGame by rememberSaveable(roomName) { mutableStateOf("all") }
     var filterExpanded by remember { mutableStateOf(false) }
@@ -329,8 +329,23 @@ internal fun RoomRecordsContent(
                 }
             }
         }
+        val ranked = competitionRanks(state.ranking)
         ContentCard {
             Text("내 기록",style=MaterialTheme.typography.titleMedium)
+            if(!state.closed && !state.loading && state.error==null && ownUid!=null) {
+                ranked.firstOrNull { it.second.uid == ownUid }?.let { (rank, item) ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically,
+                        horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        ProfileAvatar(avatars[ownUid], Modifier.size(32.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text((names[ownUid] ?: "나") + " (나)", style=MaterialTheme.typography.titleSmall)
+                            Text("이 시즌 ${rank}위",style=MaterialTheme.typography.bodySmall)
+                        }
+                        Text("${item.points}점",style=MaterialTheme.typography.titleMedium,
+                            modifier=Modifier.testTag("records-my-season-points"))
+                    }
+                }
+            }
             Text("경기 ${state.totalGames}회 · 승리 ${state.totalWins}회 · 최고 연승 ${state.bestStreak}회",
                 modifier=Modifier.testTag("room-records-summary"))
         }
@@ -356,16 +371,25 @@ internal fun RoomRecordsContent(
         if(state.loading)CircularProgressIndicator()
         state.error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
         if(!state.loading&&state.ranking.isEmpty())Text("해당 시즌의 경기 기록이 없습니다.")
-        competitionRanks(state.ranking).forEach{(rank,item)->
+        ranked.forEach{(rank,item)->
             Surface(Modifier.fillMaxWidth().testTag("records-ranked-" + item.uid),
                 shape=RoundedCornerShape(8.dp), color=MaterialTheme.colorScheme.surface) {
                 val champion=state.closed && state.finalResult?.winningScore==item.points
                 Row(Modifier.padding(horizontal=12.dp,vertical=8.dp).heightIn(min=48.dp),
                     verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    if (!state.closed && LocalDensity.current.fontScale <= 1.3f) {
+                        Surface(color=MaterialTheme.colorScheme.surfaceVariant,shape=RoundedCornerShape(8.dp)) {
+                            Text("${rank}위",Modifier.padding(horizontal=8.dp,vertical=6.dp)
+                                .testTag("records-rank-" + item.uid),style=MaterialTheme.typography.labelMedium)
+                        }
+                    }
                     ProfileAvatar(avatars[item.uid], Modifier.size(32.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(if(champion)"우승 · "+(names[item.uid] ?: "탈퇴한 멤버")
-                            else (if(state.closed)"보존 순위 ${rank}위 · " else "${rank}위 · ") + (names[item.uid] ?: "탈퇴한 멤버"),
+                        val name = names[item.uid] ?: "탈퇴한 멤버"
+                        Text(if(champion)"우승 · $name"
+                            else if(state.closed)"보존 순위 ${rank}위 · $name"
+                            else if(LocalDensity.current.fontScale > 1.3f)"${rank}위 · $name" else name,
+                            modifier=Modifier.testTag("records-name-" + item.uid),
                             style = MaterialTheme.typography.bodyLarge)
                         Text("${item.games}경기 · ${item.wins}승",
                             color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)

@@ -1,5 +1,7 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
@@ -53,7 +55,7 @@ internal fun roomInitial(name: String): String = name.trim().take(1).ifEmpty { "
 
 @Composable
 internal fun RoomListAvatar(name: String, icon: String? = null) {
-    Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant),
+    Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
         contentAlignment = Alignment.Center) {
         if (icon == null) Text(roomInitial(name), color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.titleMedium)
@@ -102,8 +104,12 @@ internal fun OnlineRoomWorkspace(
                         Text(room.name, style=MaterialTheme.typography.titleMedium)
                         Text("참가 ${room.memberCount}/20명", style=MaterialTheme.typography.bodySmall)
                     }
+                    IconButton(onClick={onSection("members")},
+                        modifier=Modifier.size(48.dp).testTag("live-room-tab-members")) {
+                        Icon(Icons.Default.Groups, contentDescription="멤버 관리")
+                    }
                 }
-                Box(Modifier.padding(horizontal=16.dp)) { LiveRoomSectionTabs(section,onSection) }
+                Box(Modifier.padding(horizontal=16.dp)) { LiveRoomSectionTabs(section,onSection,includeMembers=false) }
                 HorizontalDivider()
                 Box(Modifier.weight(1f).fillMaxWidth()) { content() }
             }
