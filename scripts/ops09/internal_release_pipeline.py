@@ -108,7 +108,7 @@ class Orchestrator:
             if "url" in changes:
                 summary.write(f"\nActions run: {changes['url']}\n")
 
-    def api(self, path, payload=None):
+    def api(self, path, payload=None, *, allow_not_found=False):
         require(path.startswith(f"/repos/{self.repo}/"), "Cross-repository API access forbidden")
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         request = urllib.request.Request(
@@ -127,6 +127,8 @@ class Orchestrator:
                 require(response.status == 200, "Expected JSON API response; refusing uncertain mutation")
                 return json.load(response)
         except urllib.error.HTTPError as exc:
+            if allow_not_found and payload is None and exc.code == 404:
+                return None
             raise RuntimeError(f"GitHub API rejected {path.split('?')[0]} (HTTP {exc.code})") from None
 
     def current_main(self):
@@ -165,8 +167,18 @@ class Orchestrator:
     def wait(self, workflow, run_id):
         url = f"https://github.com/{self.repo}/actions/runs/{run_id}"
         self.write(stage="running_" + workflow, url=url)
+        run_path = f"/repos/{self.repo}/actions/runs/{run_id}"
+        visibility_deadline = min(self.deadline, time.monotonic() + 60)
+        waiting_for_visibility = True
         while time.monotonic() < self.deadline:
-            run = self.api(f"/repos/{self.repo}/actions/runs/{run_id}")
+            # A just-dispatched run may take a moment to become readable.
+            allow_not_found = waiting_for_visibility and time.monotonic() < visibility_deadline
+            run = self.api(run_path, allow_not_found=allow_not_found)
+            if run is None and allow_not_found:
+                time.sleep(5)
+                continue
+            require(isinstance(run, dict), "Expected child run metadata: " + url)
+            waiting_for_visibility = False
             expected_path = ".github/workflows/" + workflow
             require(run.get("id") == run_id and run.get("head_sha") == self.sha
                     and run.get("head_branch") == "main"
