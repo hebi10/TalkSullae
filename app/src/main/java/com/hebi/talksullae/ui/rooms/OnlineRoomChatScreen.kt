@@ -75,7 +75,8 @@ internal fun OnlineRoomChatHost(
     roomName: String,
     onBack: () -> Unit,
     repository: RoomChatRepository? = null,
-    safetyRepository: UserSafetyRepository? = null
+    safetyRepository: UserSafetyRepository? = null,
+    showHeader: Boolean = true
 ) {
     val chatRepository = remember(repository) { repository ?: FirestoreRoomChatRepository() }
     val context = LocalContext.current.applicationContext
@@ -180,14 +181,16 @@ internal fun OnlineRoomChatHost(
             modifier = Modifier.fillMaxHeight().widthIn(max = 760.dp).fillMaxWidth()
                 .imePadding().testTag("online-chat-host")
         ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(roomName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onBack) { Text("방 관리") }
+        if (showHeader) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(roomName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = onBack) { Text("방 관리") }
+            }
+            HorizontalDivider()
         }
-        HorizontalDivider()
 
         if (state.fromCache) {
             Text(

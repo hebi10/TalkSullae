@@ -197,36 +197,19 @@ internal fun OnlineRoomsHost(
     if (room != null && selected?.status == "active" &&
         roomSection != "members" &&
         !(identityVisible || liarVisible || forbiddenVisible || balanceVisible)) {
-        Column(modifier = Modifier.fillMaxSize().testTag("live-room-shell")) {
-            LiveRoomSectionTabs(roomSection) { roomSection = it }
+        OnlineRoomWorkspace(
+            room = room, section = roomSection, onSection = { roomSection = it },
+            onRoomList = vm::closeRoom
+        ) {
             when (roomSection) {
                 "records" -> OnlineRoomRecordsHost(
                     uid = uid, roomId = room.id, roomName = room.name,
                     members = state.members.filter { it.status == "active" },
                     onBack = { roomSection = "chat" }
                 )
-                "games" -> Column(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                        .padding(16.dp).testTag("live-game-list"),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("어떤 게임을 할까요?", style = MaterialTheme.typography.titleLarge)
-                    Text("게임은 방 안에서 진행되며 결과가 시즌 기록에 반영됩니다.")
-                    room.activeGameSessionId?.let { sessionId ->
-                        ActiveRoomGameBanner(
-                            roomId = room.id, sessionId = sessionId,
-                            onResume = resumeGame
-                        )
-                    }
-                    PrimaryAction("너 누구야?", onClick = { identityVisible = true },
-                        modifier = Modifier.fillMaxWidth().testTag("live-game-identity"))
-                    PrimaryAction("라이어 채팅", onClick = { liarVisible = true },
-                        modifier = Modifier.fillMaxWidth().testTag("live-game-liar"))
-                    PrimaryAction("금지어 채팅", onClick = { forbiddenVisible = true },
-                        modifier = Modifier.fillMaxWidth().testTag("live-game-forbidden"))
-                    PrimaryAction("밸런스 예측", onClick = { balanceVisible = true },
-                        modifier = Modifier.fillMaxWidth().testTag("live-game-balance"))
-                }
+                "games" -> OnlineGameCatalog(
+                    room = room, onResume = resumeGame, onOpen = { gameId -> resumeGame(gameId) }
+                )
                 else -> Column(modifier = Modifier.fillMaxSize()) {
                     room.activeGameSessionId?.let { sessionId ->
                         ActiveRoomGameBanner(
@@ -237,8 +220,9 @@ internal fun OnlineRoomsHost(
                     Box(modifier = Modifier.weight(1f)) {
                         OnlineRoomChatHost(
                             uid = uid, roomId = room.id, roomName = room.name,
-                            onBack = { vm.closeRoom() },
-                            repository = chatRepository
+                            onBack = { roomSection = "members" },
+                            repository = chatRepository,
+                            showHeader = false
                         )
                     }
                 }
@@ -361,7 +345,9 @@ internal fun OnlineRoomsHost(
             }
             state.entries.forEach { entry ->
                 ContentCard(modifier = Modifier.testTag("online-room-${entry.id}")) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        RoomListAvatar(entry.name)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(entry.name, style = MaterialTheme.typography.titleMedium)
                             Text(membershipLabel(entry.status), style = MaterialTheme.typography.bodySmall)

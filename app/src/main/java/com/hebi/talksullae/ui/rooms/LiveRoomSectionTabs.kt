@@ -27,7 +27,7 @@ internal fun LiveRoomSectionTabs(
             "chat" to "채팅",
             "games" to "게임",
             "records" to "기록",
-            "members" to "멤버"
+            "members" to "멤버 관리"
         ).forEach { (key, label) ->
             FilterChip(
                 selected = current == key,
