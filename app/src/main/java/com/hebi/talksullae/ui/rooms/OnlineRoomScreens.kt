@@ -57,6 +57,7 @@ import com.hebi.talksullae.design.SectionTitle
 import com.hebi.talksullae.firebase.CloudMember
 import com.hebi.talksullae.ui.entry.InviteLinkCodec
 import com.hebi.talksullae.firebase.CloudRoomsRepository
+import com.hebi.talksullae.firebase.RoomNotificationTarget
 import com.hebi.talksullae.firebase.OnlineRoomsRepository
 import com.hebi.talksullae.firebase.OnlineRoomsViewModel
 import com.hebi.talksullae.firebase.RoomChatRepository
@@ -78,7 +79,10 @@ internal fun OnlineRoomsHost(
     onRoomDepthChanged: (Boolean) -> Unit = {},
     incomingInviteCode: String? = null,
     incomingInviteDeliveryId: Long = 0L,
-    onInviteCodeHandled: () -> Unit = {}
+    onInviteCodeHandled: () -> Unit = {},
+    incomingNotification: RoomNotificationTarget? = null,
+    notificationDeliveryId: Long = 0L,
+    onNotificationHandled: () -> Unit = {}
 ) {
     val repo = remember(repository) { repository ?: CloudRoomsRepository() }
     val factory = remember(uid, repo) {
@@ -138,6 +142,7 @@ internal fun OnlineRoomsHost(
     val selected = state.entries.firstOrNull { it.id == state.selectedId }
     val isOwner = room?.ownerId == uid
     var confirmInviteRoomId by remember { mutableStateOf<String?>(null) }
+    var revokeInvite by remember { mutableStateOf<Pair<String, String>?>(null) }
     var editRoomId by remember { mutableStateOf<String?>(null) }
     var archiveRoomId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(state.selectedId, isOwner) {
@@ -169,6 +174,27 @@ internal fun OnlineRoomsHost(
         balanceVisible = gameId == "balance"
     }
 
+    var notificationDestination by remember(uid) { mutableStateOf<RoomNotificationTarget?>(null) }
+    LaunchedEffect(incomingNotification, notificationDeliveryId, uid, state.entries, state.loading, state.error, state.working) {
+        val target = incomingNotification ?: return@LaunchedEffect
+        if (target.recipientUid != uid) {
+            onNotificationHandled()
+            return@LaunchedEffect
+        }
+        if (state.loading || state.error != null || state.working) return@LaunchedEffect
+        if (state.entries.any { it.id == target.roomId && it.status == "active" }) {
+            notificationDestination = target
+            chatVisible = false
+            identityVisible = false
+            liarVisible = false
+            forbiddenVisible = false
+            balanceVisible = false
+            recordsVisible = false
+            roomSection = target.section
+        }
+        if (vm.openNotification(target)) onNotificationHandled()
+    }
+
     LaunchedEffect(state.selectedId, selected?.status) {
         if (state.selectedId == null || selected?.status != "active") {
             roomSection = "chat"
@@ -179,7 +205,9 @@ internal fun OnlineRoomsHost(
             balanceVisible = false
             recordsVisible = false
         } else {
-            roomSection = if (entryMode == "records") "records" else "chat"
+            val destination = notificationDestination?.takeIf { it.roomId == state.selectedId }
+            roomSection = destination?.section ?: if (entryMode == "records") "records" else "chat"
+            notificationDestination = null
         }
     }
 
@@ -486,6 +514,14 @@ internal fun OnlineRoomsHost(
                     modifier = Modifier.fillMaxWidth().testTag("live-invite-generate"),
                     enabled = !state.working
                 )
+                if (hasCurrentCode) {
+                    OutlinedButton(onClick = {
+                        room.activeInviteHash?.let { revokeInvite = room.id to it }
+                    }, enabled = !state.working,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("live-invite-revoke")) {
+                        Text("기존 초대 코드 취소")
+                    }
+                }
                 currentInvite?.let { invite ->
                     ContentCard {
                         Text("만료: " + SimpleDateFormat("M월 d일 HH:mm", Locale.KOREA).format(Date(invite.expiresAtMillis)))
@@ -604,6 +640,23 @@ internal fun OnlineRoomsHost(
                 }
             },
             dismissButton = { TextButton(onClick = { archiveRoomId = null }) { Text("취소") } })
+    }
+
+    revokeInvite?.let { (roomId, hash) ->
+        if (room?.id == roomId && isOwner) {
+            AlertDialog(
+                onDismissRequest = { revokeInvite = null },
+                title = { Text("초대 코드 취소") },
+                text = { Text("현재 공유된 초대 코드를 사용할 수 없게 합니다. 기존 멤버와 가입 대기 요청은 유지됩니다.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        revokeInvite = null
+                        vm.revokeInvitation(roomId, hash)
+                    }, enabled = !state.working) { Text("초대 취소") }
+                },
+                dismissButton = { TextButton(onClick = { revokeInvite = null }) { Text("닫기") } }
+            )
+        }
     }
 
     confirmInviteRoomId?.let { roomId ->

@@ -8,6 +8,7 @@ const {authUid}=require("./policy");
 const LIMITS=Object.freeze({
   createRoom:{max:20,windowMs:60*60*1000},
   createInvitation:{max:20,windowMs:60*1000},
+  revokeInvitation:{max:20,windowMs:60*1000},
   previewInvitation:{max:60,windowMs:60*1000},
   requestJoin:{max:30,windowMs:60*1000},
   updateRoom:{max:20,windowMs:60*1000},

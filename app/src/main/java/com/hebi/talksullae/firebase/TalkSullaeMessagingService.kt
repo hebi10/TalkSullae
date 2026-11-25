@@ -39,7 +39,7 @@ class TalkSullaeMessagingService : FirebaseMessagingService() {
         val payload = message.data
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         if (payload["recipientUid"] != uid || !PushDevicePrefs.isEnabled(this, uid)) return
-        if (payload["kind"] !in listOf("message", "game", "approved")) return
+        val route = RoomNotificationTarget.parse(payload["recipientUid"], payload["roomId"], payload["kind"]) ?: return
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED) return
@@ -54,9 +54,13 @@ class TalkSullaeMessagingService : FirebaseMessagingService() {
             else -> "친구방 가입 요청이 승인되었습니다."
         }
         val target = Intent(this, MainActivity::class.java)
+            .setAction(RoomNotificationTarget.ACTION)
+            .putExtra(RoomNotificationTarget.EXTRA_UID, route.recipientUid)
+            .putExtra(RoomNotificationTarget.EXTRA_ROOM, route.roomId)
+            .putExtra(RoomNotificationTarget.EXTRA_KIND, route.kind)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val pending = PendingIntent.getActivity(
-            this, 0, target,
+            this, route.hashCode(), target,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val notification = Notification.Builder(this, channelId)

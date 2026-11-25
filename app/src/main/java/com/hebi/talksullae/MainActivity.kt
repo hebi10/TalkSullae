@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import com.hebi.talksullae.ui.entry.InviteLinkCodec
+import com.hebi.talksullae.firebase.RoomNotificationTarget
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,6 +18,18 @@ import com.hebi.talksullae.ui.TalkSullaeApp
 class MainActivity : ComponentActivity() {
     private var pendingInviteCode by mutableStateOf<String?>(null)
     private var inviteDeliveryId by mutableLongStateOf(0L)
+    private var notificationTarget by mutableStateOf<RoomNotificationTarget?>(null)
+    private var notificationDeliveryId by mutableLongStateOf(0L)
+
+    private fun readNotification(intent: Intent?) {
+        if (intent?.action != RoomNotificationTarget.ACTION) return
+        notificationTarget = RoomNotificationTarget.parse(
+            intent.getStringExtra(RoomNotificationTarget.EXTRA_UID),
+            intent.getStringExtra(RoomNotificationTarget.EXTRA_ROOM),
+            intent.getStringExtra(RoomNotificationTarget.EXTRA_KIND)
+        )
+        notificationDeliveryId++
+    }
 
     private fun readInvite(intent: Intent?) {
         val code = InviteLinkCodec.read(intent?.dataString)
@@ -30,11 +43,13 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         readInvite(intent)
+        readNotification(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         readInvite(intent)
+        readNotification(intent)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
@@ -46,6 +61,17 @@ class MainActivity : ComponentActivity() {
                 onInviteCodeHandled = {
                     pendingInviteCode = null
                     intent?.let { it.data = null }
+                },
+                incomingNotification = notificationTarget,
+                notificationDeliveryId = notificationDeliveryId,
+                onNotificationHandled = {
+                    notificationTarget = null
+                    intent?.takeIf { it.action == RoomNotificationTarget.ACTION }?.apply {
+                        action = null
+                        removeExtra(RoomNotificationTarget.EXTRA_UID)
+                        removeExtra(RoomNotificationTarget.EXTRA_ROOM)
+                        removeExtra(RoomNotificationTarget.EXTRA_KIND)
+                    }
                 },
                 onDarkThemeChanged = { isDark ->
                 WindowCompat.getInsetsController(window, window.decorView).apply {

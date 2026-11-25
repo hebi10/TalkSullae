@@ -1,5 +1,8 @@
 package com.hebi.talksullae.ui.entry
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -81,6 +84,8 @@ fun OnboardingScreen(
     authError: String? = null,
     allowDemo: Boolean = true
 ) {
+    val context = LocalContext.current
+    var policyLinkError by rememberSaveable { mutableStateOf(false) }
     var nickname by rememberSaveable { mutableStateOf("게스트") }
     var avatar by rememberSaveable { mutableStateOf("부엉이") }
     val validNickname = nickname.trim().length in 2..16 && !nickname.contains("\n")
@@ -129,6 +134,19 @@ fun OnboardingScreen(
                     .testTag("onboarding-google-signin")
             ) {
                 Text(if (signInBusy) "Google 로그인 진행 중…" else "Google 계정으로 로그인")
+            }
+            if (!allowDemo) {
+                OutlinedButton(onClick = {
+                    policyLinkError = try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW,
+                            Uri.parse("https://github.com/hebi10/TalkSullae/blob/main/docs/privacy-policy.md")))
+                        false
+                    } catch (_: Exception) { true }
+                }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("onboarding-privacy-policy")) {
+                    Text("개인정보처리방침 보기")
+                }
+                if (policyLinkError) Text("정책 문서를 열지 못했습니다. 잠시 후 다시 시도해 주세요.",
+                    color = MaterialTheme.colorScheme.error)
             }
             if (authError != null) {
                 Text(authError, color = MaterialTheme.colorScheme.error)

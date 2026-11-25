@@ -62,14 +62,40 @@ async function createInvitation(db, request) {
   const hash = hashToken(token);
   const expiresAt = Timestamp.fromMillis(Date.now()+INVITE_DURATION_MS);
   await db.runTransaction(async tx=>{
-    const [room,actor] = await Promise.all([tx.get(roomRef),tx.get(actorRef)]);
+    const [room,actor,deletion] = await Promise.all([tx.get(roomRef),tx.get(actorRef),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))]);
     requireOwner(room,actor,uid);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 초대를 발급할 수 없습니다.");
     tx.create(roomRef.collection("invites").doc(hash),{createdBy:uid,expiresAt,createdAt:now()});
     tx.update(roomRef,{activeInviteHash:hash,activeInviteExpiresAt:expiresAt});
   });
   return {code:`${roomId}.${token}`,expiresAt:expiresAt.toMillis()};
 }
 
+
+async function revokeInvitation(db,request) {
+  const uid=authUid(request),data=request.data;
+  if(!data||typeof data!=="object"||Array.isArray(data)||
+     Object.keys(data).length!==2||Object.keys(data).some(key=>!["roomId","expectedHash"].includes(key))||
+     typeof data.expectedHash!=="string"||!/^[a-f0-9]{64}$/.test(data.expectedHash)){
+    throw new HttpsError("invalid-argument","취소할 초대 코드를 확인해 주세요.");
+  }
+  const roomId=roomIdValue(data.roomId);
+  const ref=db.collection("rooms").doc(roomId);
+  return db.runTransaction(async tx=>{
+    const [room,actor,deletion]=await Promise.all([
+      tx.get(ref),tx.get(ref.collection("members").doc(uid)),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))
+    ]);
+    requireOwner(room,actor,uid);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 초대를 관리할 수 없습니다.");
+    const current=room.get("activeInviteHash");
+    if(!current)return {revoked:true,changed:false};
+    if(current!==data.expectedHash)throw new HttpsError("aborted","다른 기기에서 초대 코드가 변경됐습니다.");
+    tx.update(ref,{activeInviteHash:null,activeInviteExpiresAt:null});
+    return {revoked:true,changed:true};
+  });
+}
 
 async function previewInvitation(db, request) {
   const uid = authUid(request);
@@ -314,4 +340,4 @@ async function archiveRoom(db,request) {
   });
 }
 
-module.exports = {createRoom,createInvitation,previewInvitation,requestJoin,changeMember,leaveRoom,updateRoom,archiveRoom};
+module.exports = {createRoom,createInvitation,revokeInvitation,previewInvitation,requestJoin,changeMember,leaveRoom,updateRoom,archiveRoom};

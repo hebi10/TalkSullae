@@ -115,6 +115,7 @@ import com.hebi.talksullae.design.TalkSullaeTheme
 import com.hebi.talksullae.BuildConfig
 import com.hebi.talksullae.firebase.FirebaseBridge
 import com.hebi.talksullae.firebase.PushDeviceRepository
+import com.hebi.talksullae.firebase.RoomNotificationTarget
 import com.hebi.talksullae.firebase.GoogleLogin
 import com.hebi.talksullae.firebase.UserProfile
 import com.hebi.talksullae.firebase.UserProfileRepository
@@ -156,7 +157,10 @@ fun TalkSullaeApp(
     onDarkThemeChanged: (Boolean) -> Unit = {},
     incomingInviteCode: String? = null,
     incomingInviteDeliveryId: Long = 0L,
-    onInviteCodeHandled: () -> Unit = {}
+    onInviteCodeHandled: () -> Unit = {},
+    incomingNotification: RoomNotificationTarget? = null,
+    notificationDeliveryId: Long = 0L,
+    onNotificationHandled: () -> Unit = {}
 ) {
     var isDark by rememberSaveable { mutableStateOf(initialDarkTheme) }
     SideEffect { onDarkThemeChanged(isDark) }
@@ -196,6 +200,17 @@ fun TalkSullaeApp(
                 route = Main
                 mainTab = "rooms"
             }
+        }
+    }
+    LaunchedEffect(incomingNotification, notificationDeliveryId, signedUser?.uid, onlineProfile?.nickname, profileLoading) {
+        val target = incomingNotification ?: return@LaunchedEffect
+        val current = signedUser
+        if (current == null && configured) route = Onboarding
+        else if (current != null && current.uid != target.recipientUid) {
+            onNotificationHandled()
+        } else if (current != null && onlineProfile != null && !profileLoading) {
+            route = Main
+            mainTab = "rooms"
         }
     }
     var onlineDepth by remember { mutableStateOf(false) }
@@ -480,7 +495,10 @@ fun TalkSullaeApp(
                                 onRoomDepthChanged = { onlineDepth = it },
                                 incomingInviteCode = incomingInviteCode,
                                 incomingInviteDeliveryId = incomingInviteDeliveryId,
-                                onInviteCodeHandled = onInviteCodeHandled
+                                onInviteCodeHandled = onInviteCodeHandled,
+                                incomingNotification = incomingNotification,
+                                notificationDeliveryId = notificationDeliveryId,
+                                onNotificationHandled = onNotificationHandled
                             )
                             else -> ProfileScreen(
                                 darkTheme = isDark,
