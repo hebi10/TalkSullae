@@ -523,7 +523,7 @@ internal fun OnlineRoomsHost(
             CircularProgressIndicator()
             Text("방 정보 확인 중…")
         } else {
-            LiveRoomSectionTabs(roomSection) { roomSection = it }
+            LiveRoomSectionTabs(current = roomSection, onSelect = { roomSection = it })
             SectionTitle(room.name)
             Text(room.description.ifBlank { "설명이 없습니다." })
             Text("참가 ${room.memberCount}명 · 승인 대기 ${room.pendingCount}명")
