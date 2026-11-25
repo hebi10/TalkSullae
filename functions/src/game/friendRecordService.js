@@ -11,12 +11,13 @@ const SESSION_ID=/^[a-f0-9]{64}$/;
 
 function parseRequest(data,uid){
   if(!data||typeof data!=="object"||Array.isArray(data)||
-     Object.keys(data).length!==2||Object.keys(data).some(key=>!["roomId","targetUid"].includes(key))||
+     Object.keys(data).some(key=>!["roomId","targetUid","includeComparison"].includes(key))||
+     (Object.hasOwn(data,"includeComparison")&&typeof data.includeComparison!=="boolean")||
      typeof data.targetUid!=="string"||!data.targetUid.trim()||data.targetUid.length>128||
      data.targetUid.includes("/")||[".",".."].includes(data.targetUid)||data.targetUid===uid){
     throw new HttpsError("invalid-argument","같은 방의 다른 친구를 선택해 주세요.");
   }
-  return {roomId:roomIdValue(data.roomId),targetUid:data.targetUid};
+  return {roomId:roomIdValue(data.roomId),targetUid:data.targetUid,includeComparison:data.includeComparison!==false};
 }
 
 function emptyComparison(){
@@ -56,7 +57,7 @@ function countBalance(out,mine,theirs){
 
 async function getRoomFriendRecords(db,request){
   const uid=authUid(request);
-  const {roomId,targetUid}=parseRequest(request.data,uid);
+  const {roomId,targetUid,includeComparison}=parseRequest(request.data,uid);
   const roomRef=db.collection("rooms").doc(roomId);
   const myMember=roomRef.collection("members").doc(uid);
   const friendMember=roomRef.collection("members").doc(targetUid);
@@ -75,14 +76,14 @@ async function getRoomFriendRecords(db,request){
        !theirs.exists||theirs.get("status")!=="active"||myDeletion.exists||theirDeletion.exists){
       throw new HttpsError("permission-denied","현재 같은 방의 활성 멤버 전적만 확인할 수 있습니다.");
     }
-    const [stats,history]=await Promise.all([
-      tx.get(statsRef),
-      tx.get(ownHistory.orderBy("settledAt","desc").limit(RECENT_LIMIT+1))
-    ]);
+    const stats=await tx.get(statsRef);
     const aggregate=aggregateMyCareer([stats.exists?stats.data():{}]);
     const friend={totalGames:aggregate.totalGames,totalWins:aggregate.totalWins,
       totalSeasonPoints:aggregate.totalSeasonPoints,bestStreak:aggregate.bestStreak,
       games:aggregate.games,achievements:aggregate.achievements};
+    if(!includeComparison)return {friend,comparison:emptyComparison(),reviewedGames:0,
+      capped:false,recentLimit:RECENT_LIMIT,comparisonLoaded:false};
+    const history=await tx.get(ownHistory.orderBy("settledAt","desc").limit(RECENT_LIMIT+1));
     const recent=history.docs.slice(0,RECENT_LIMIT).filter(doc=>SESSION_ID.test(doc.id));
     const paired=await Promise.all(recent.map(doc=>tx.get(friendHistory.doc(doc.id))));
     const candidates=recent.flatMap((doc,i)=>paired[i].exists?[{mine:doc,theirs:paired[i]}]:[]);
@@ -119,8 +120,14 @@ async function getRoomFriendRecords(db,request){
         }
       }
     }
+    // Do not expose another member’s private votes or choices through a tiny sample.
+    const identitySuppressed=comparison.friendIdentityAttempts<3;
+    const balanceSuppressed=comparison.balanceCompared<3;
+    if(identitySuppressed){comparison.friendIdentityAttempts=0;comparison.friendIdentityHits=0;}
+    if(balanceSuppressed){comparison.balanceCompared=0;comparison.balanceMatched=0;}
     return {friend,comparison,reviewedGames:Math.min(history.size,RECENT_LIMIT),
-      capped:history.size>RECENT_LIMIT,recentLimit:RECENT_LIMIT};
+      capped:history.size>RECENT_LIMIT,recentLimit:RECENT_LIMIT,comparisonLoaded:true,
+      identitySuppressed,balanceSuppressed};
   },{readOnly:true});
 }
 

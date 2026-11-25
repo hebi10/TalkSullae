@@ -4,9 +4,11 @@ const assert=require("node:assert/strict");
 const {parseRequest,emptyComparison,countPair,countIdentity,countBalance}=require("../src/game/friendRecordService");
 test("only the exact room and another valid member may be requested",()=>{
  const roomId="a".repeat(20);
- assert.deepEqual(parseRequest({roomId,targetUid:"friend"},"me"),{roomId,targetUid:"friend"});
+ assert.deepEqual(parseRequest({roomId,targetUid:"friend"},"me"),{roomId,targetUid:"friend",includeComparison:true});
  for(const targetUid of ["me","","a/b","..","x".repeat(129)])assert.throws(()=>parseRequest({roomId,targetUid},"me"));
  assert.throws(()=>parseRequest({roomId,targetUid:"friend",uid:"other"},"me"));
+ assert.throws(()=>parseRequest({roomId,targetUid:"friend",includeComparison:"false"},"me"));
+ assert.equal(parseRequest({roomId,targetUid:"friend",includeComparison:false},"me").includeComparison,false);
 });
 test("friend comparisons are game-scoped and omit missing submissions",()=>{
  const out=emptyComparison();
