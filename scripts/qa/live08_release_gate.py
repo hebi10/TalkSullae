@@ -6,7 +6,8 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-INTERNAL_PUBLISHED_VERSION_CODE = 5
+INTERNAL_PUBLISHED_VERSION_CODE = 6
+CANDIDATE_VERSION_NAME = "0.6.0"
 FUNCTIONS = (
     "saveMyProfile", "previewInvitation", "getMyCareer", "registerPushToken",
     "getModerationInbox", "setModerationStatus", "notifyRoomMessage",
@@ -53,7 +54,7 @@ def audit(root=ROOT):
     checks = {
         "android_package": 'applicationId = "com.hebi.talksullae"' in gradle,
         "new_internal_version_code": code is not None
-            and code > INTERNAL_PUBLISHED_VERSION_CODE and name == "0.5.0",
+            and code > INTERNAL_PUBLISHED_VERSION_CODE and name == CANDIDATE_VERSION_NAME,
         "firebase_server_exports": all(
             re.search(r"exports\." + re.escape(f) + r"\s*=", functions)
             for f in FUNCTIONS
@@ -106,6 +107,8 @@ def audit(root=ROOT):
     external = {
         "operational_firebase_revision": "not_compared",
         "backward_compatibility_with_0_4_1": "not_tested",
+        "backward_compatibility_with_0_5_0": "not_tested",
+        "live_play_max_version_code": "not_verified",
         "real_google_accounts_2_or_more": "not_tested",
         "real_device_chat_games_push_and_deletion": "not_tested",
         "https_app_links_and_install_fallback": "not_implemented",
