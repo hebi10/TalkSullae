@@ -171,3 +171,31 @@ test("owner revokes exact active invitation without replacing it; stale and unau
  }
  assert.deepEqual(await service.revokeInvitation(db,{...auth("r2-revoke-owner"),data:{roomId,expectedHash}}),{revoked:true,changed:false});
 });
+
+
+test("room directory sync is bounded, owner icon changes are versioned, and pending members are excluded",async()=>{
+  const owner="directoryOwner",friend="directoryFriend",pending="directoryPending";
+  const {roomId}=await service.createRoom(db,{...auth(owner),data:{name:"친구 방",description:"",requiresApproval:true}});
+  const ref=db.collection("rooms").doc(roomId);
+  const invite=await service.createInvitation(db,{...auth(owner),data:{roomId}});
+  await service.requestJoin(db,{...auth(friend),data:{code:invite.code}});
+  await service.requestJoin(db,{...auth(pending),data:{code:invite.code}});
+  await service.changeMember(db,{...auth(owner),data:{roomId,targetUid:friend,action:"approve"}});
+  assert.equal(await service.syncRoomDirectory(db,roomId),1);
+  const index=uid=>db.collection("userRooms").doc(uid).collection("rooms").doc(roomId);
+  assert.equal((await index(owner).get()).get("memberCount"),2);
+  assert.equal((await index(pending).get()).get("memberCount"),undefined);
+  await assert.rejects(service.updateRoomIcon(db,{...auth(friend),data:{roomId,roomIcon:"고양이",expectedRevision:0}}),e=>e.code==="permission-denied");
+  await service.updateRoomIcon(db,{...auth(owner),data:{roomId,roomIcon:"고양이",expectedRevision:0}});
+  assert.equal((await index(friend).get()).get("roomIcon"),"고양이");
+  await assert.rejects(service.updateRoomIcon(db,{...auth(owner),data:{roomId,roomIcon:null,expectedRevision:0}}),e=>e.code==="aborted");
+  await ref.update({activeGameSessionId:"test-game"});
+  assert.equal(await service.syncRoomDirectory(db,roomId),2);
+  assert.equal((await index(friend).get()).get("gameInProgress"),true);
+  assert.equal(await service.syncRoomDirectory(db,roomId),0);
+  assert.equal(service.roomDirectoryChanged({memberCount:2,lastChatAt:1},{memberCount:2,lastChatAt:2}),false);
+  await service.changeMember(db,{...auth(owner),data:{roomId,targetUid:friend,action:"remove"}});
+  await service.syncRoomDirectory(db,roomId);
+  assert.equal((await index(friend).get()).get("status"),"removed");
+  assert.equal((await index(friend).get()).get("gameInProgress"),undefined);
+});

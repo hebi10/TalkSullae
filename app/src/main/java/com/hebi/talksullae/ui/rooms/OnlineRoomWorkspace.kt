@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.hebi.talksullae.design.ContentCard
+import com.hebi.talksullae.design.ProfileAvatar
 import com.hebi.talksullae.firebase.CloudRoom
 
 internal data class OnlineGameInfo(
@@ -43,11 +44,12 @@ internal val onlineGameCatalog = listOf(
 internal fun roomInitial(name: String): String = name.trim().take(1).ifEmpty { "방" }
 
 @Composable
-internal fun RoomListAvatar(name: String) {
+internal fun RoomListAvatar(name: String, icon: String? = null) {
     Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center) {
-        Text(roomInitial(name), color = MaterialTheme.colorScheme.onSurfaceVariant,
+        if (icon == null) Text(roomInitial(name), color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.titleMedium)
+        else ProfileAvatar(icon, Modifier.size(32.dp))
     }
 }
 
@@ -64,7 +66,7 @@ internal fun OnlineRoomWorkspace(
                     TextButton(onClick = onRoomList, modifier = Modifier.fillMaxWidth().heightIn(min=48.dp)) {
                         Text("방 목록")
                     }
-                    RoomListAvatar(room.name)
+                    RoomListAvatar(room.name,room.roomIcon)
                     Text(room.name, style = MaterialTheme.typography.titleLarge)
                     Text("참가 ${room.memberCount}/20명", style = MaterialTheme.typography.bodyMedium)
                     if (room.description.isNotBlank()) Text(room.description, style = MaterialTheme.typography.bodySmall)
@@ -84,7 +86,7 @@ internal fun OnlineRoomWorkspace(
             Column(Modifier.fillMaxSize().testTag("live-room-compact")) {
                 Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=4.dp),
                     horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically) {
-                    RoomListAvatar(room.name)
+                    RoomListAvatar(room.name,room.roomIcon)
                     Column(Modifier.weight(1f)) {
                         Text(room.name, style=MaterialTheme.typography.titleMedium)
                         Text("참가 ${room.memberCount}/20명", style=MaterialTheme.typography.bodySmall)

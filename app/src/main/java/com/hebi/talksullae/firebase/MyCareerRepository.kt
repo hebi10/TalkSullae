@@ -5,6 +5,21 @@ import kotlinx.coroutines.tasks.await
 
 internal data class CareerGame(val plays: Long, val wins: Long)
 
+internal data class CareerProgress(val xp: Long, val level: Long, val title: String)
+
+internal fun careerProgress(totalGames: Long): CareerProgress {
+    val games = totalGames.coerceIn(0L, Long.MAX_VALUE / 10L)
+    val xp = games * 10L
+    val level = xp / 100L + 1L
+    val title = when {
+        games >= 100L -> "추리 달인"
+        games >= 50L -> "숙련 탐정"
+        games >= 10L -> "초급 탐정"
+        else -> "신입 탐정"
+    }
+    return CareerProgress(xp, level, title)
+}
+
 internal data class MyCareer(
     val roomCount: Long,
     val totalGames: Long,

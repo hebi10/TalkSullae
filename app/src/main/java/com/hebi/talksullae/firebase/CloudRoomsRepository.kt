@@ -14,7 +14,10 @@ data class CloudRoomIndex(
     val status: String,
     val updatedAtMillis: Long = 0L,
     val unreadCount: Long = 0L,
-    val lastChatAtMillis: Long? = null
+    val lastChatAtMillis: Long? = null,
+    val roomIcon: String? = null,
+    val memberCount: Int? = null,
+    val gameInProgress: Boolean? = null
 ) {
     fun visibleUnread(nowMillis: Long): Long {
         val last = lastChatAtMillis ?: return 0L
@@ -34,7 +37,8 @@ data class CloudRoom(
     val activeGameSessionId: String? = null,
     val activeInviteHash: String? = null,
     val activeInviteExpiresAtMillis: Long? = null,
-    val roomRevision: Long = 0L
+    val roomRevision: Long = 0L,
+    val roomIcon: String? = null
 )
 
 data class CloudMember(
@@ -69,6 +73,7 @@ internal interface OnlineRoomsRepository {
     fun watchMembers(roomId: String, onResult: (List<CloudMember>) -> Unit, onError: (String) -> Unit): ListenerRegistration
     suspend fun createRoom(name: String, description: String, approval: Boolean): String
     suspend fun updateRoom(roomId: String, name: String, description: String, approval: Boolean, expectedRevision: Long): Unit = error("방 정보 수정 기능을 사용할 수 없습니다.")
+    suspend fun updateRoomIcon(roomId: String, icon: String?, expectedRevision: Long): Unit = error("방 아이콘 수정 기능을 사용할 수 없습니다.")
     suspend fun archiveRoom(roomId: String): Unit = error("방 종료 기능을 사용할 수 없습니다.")
     suspend fun revokeInvitation(roomId: String, expectedHash: String): Unit = error("초대 취소 기능을 사용할 수 없습니다.")
     suspend fun createInvitation(roomId: String): Invitation
@@ -105,7 +110,10 @@ internal class CloudRoomsRepository(
                             status = it.getString("status").orEmpty(),
                             updatedAtMillis = it.getTimestamp("updatedAt")?.toDate()?.time ?: 0L,
                             unreadCount = it.getLong("unreadCount")?.coerceAtLeast(0L) ?: 0L,
-                            lastChatAtMillis = it.getTimestamp("lastChatAt")?.toDate()?.time
+                            lastChatAtMillis = it.getTimestamp("lastChatAt")?.toDate()?.time,
+                            roomIcon = it.getString("roomIcon"),
+                            memberCount = it.getLong("memberCount")?.takeIf { n -> n in 0L..20L }?.toInt(),
+                            gameInProgress = it.getBoolean("gameInProgress")
                         )
                     }.sortedByDescending { maxOf(it.updatedAtMillis, it.lastChatAtMillis ?: 0L) })
                 }
@@ -142,7 +150,8 @@ internal class CloudRoomsRepository(
                     activeGameSessionId = doc.getString("activeGameSessionId"),
                     activeInviteHash = doc.getString("activeInviteHash"),
                     activeInviteExpiresAtMillis = doc.getTimestamp("activeInviteExpiresAt")?.toDate()?.time,
-                    roomRevision = doc.getLong("roomRevision") ?: 0L
+                    roomRevision = doc.getLong("roomRevision") ?: 0L,
+                    roomIcon = doc.getString("roomIcon")
                 )
                 )
             }
@@ -194,6 +203,12 @@ internal class CloudRoomsRepository(
         val result = invoke("updateRoom", mapOf("roomId" to roomId, "name" to name,
             "description" to description, "requiresApproval" to approval, "expectedRevision" to expectedRevision))
         check(result["revision"] is Number) { "방 정보 수정 결과를 확인할 수 없습니다." }
+    }
+
+    override suspend fun updateRoomIcon(roomId: String, icon: String?, expectedRevision: Long) {
+        val result = callables.getHttpsCallable("updateRoomIcon")
+            .call(mapOf("roomId" to roomId, "roomIcon" to icon, "expectedRevision" to expectedRevision)).await().data as? Map<*, *>
+        check(result?.get("revision") is Number) { "방 아이콘 수정 결과를 확인할 수 없습니다." }
     }
 
     override suspend fun archiveRoom(roomId: String) {
