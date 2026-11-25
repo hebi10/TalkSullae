@@ -31,4 +31,20 @@ class CareerDecoderTest {
             ))
         }
     }
+
+    @Test fun retainedCareerMergesDistinctPagesWithoutDroppingHistoricalWins() {
+        val games=listOf("identity","liar","forbidden","balance").associateWith { CareerGame(2,1) }
+        val first=MyCareer(1,8,4,300,2,listOf("first_game"),games,3,true,"cursor-1")
+        val second=MyCareer(0,8,4,400,3,listOf("first_game","wins_5"),games,2,true,null)
+        val all=first.append(second)
+        assertEquals(1L,all.roomCount)
+        assertEquals(5L,all.recordedRoomCount)
+        assertEquals(16L,all.totalGames)
+        assertEquals(8L,all.totalWins)
+        assertEquals(3L,all.bestStreak)
+        assertEquals(listOf("first_game","wins_5"),all.achievements)
+        assertEquals(4L,all.games["balance"]?.plays)
+        assertEquals(null,all.nextCursor)
+        assertThrows(IllegalArgumentException::class.java){first.append(second.copy(nextCursor="cursor-1"))}
+    }
 }

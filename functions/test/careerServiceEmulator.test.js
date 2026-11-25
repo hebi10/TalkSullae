@@ -51,3 +51,40 @@ test("inactive room history does not exhaust the active career limit",async()=>{
   assert.equal(summary.roomCount,0);
   assert.equal(summary.totalGames,0);
 });
+
+test("retained career pages preserve own historical counters without exposing room contents",async()=>{
+ const uid="r3-retained-career",owner="r3-retained-owner";
+ const {roomId}=await rooms.createRoom(db,{...auth(owner),data:{name:"과거 기록 방",description:"",requiresApproval:false}});
+ const inv=await rooms.createInvitation(db,{...auth(owner),data:{roomId}});
+ await rooms.requestJoin(db,{...auth(uid),data:{code:inv.code}});
+ const ref=db.collection("rooms").doc(roomId);
+ await ref.collection("playerStats").doc(uid).set({totalGames:4,totalWins:2,totalSeasonPoints:80,bestStreak:2,
+   games:{balance:{plays:4,wins:2}},achievements:{first_game:true}});
+ await ref.collection("playerStats").doc(owner).set({totalGames:99,totalWins:99});
+ await rooms.leaveRoom(db,{...auth(uid),data:{roomId}});
+ assert.equal((await getMyCareer(db,{...auth(uid),data:{}})).totalGames,0);
+ const index=db.collection("userRooms").doc(uid).collection("rooms");
+ const batch=db.batch();
+ for(let i=0;i<26;i++){
+   const id="r3Past"+String(i).padStart(14,"0");
+   const room=db.collection("rooms").doc(id);
+   batch.set(index.doc(id),{status:"left",roomName:"과거 방"});
+   batch.set(room,{status:"active"});
+   batch.set(room.collection("members").doc(uid),{status:"left"});
+   batch.set(room.collection("playerStats").doc(uid),{totalGames:1,totalWins:0, games:{identity:{plays:1,wins:0}}});
+ }
+ await batch.commit();
+ const first=await getMyCareer(db,{...auth(uid),data:{scope:"retained"}});
+ assert.ok(first.nextCursor);
+ const second=await getMyCareer(db,{...auth(uid),data:{scope:"retained",cursor:first.nextCursor}});
+ assert.equal(second.nextCursor,null);
+ assert.equal(first.totalGames+second.totalGames,30);
+ assert.equal(first.totalWins+second.totalWins,2);
+ assert.equal(first.recordedRoomCount+second.recordedRoomCount,27);
+ assert.equal(first.roomCount+second.roomCount,0);
+ assert.equal(JSON.stringify(first).includes("roomName"),false);
+ assert.equal(JSON.stringify(second).includes("r3-retained-owner"),false);
+ await assert.rejects(getMyCareer(db,{...auth(uid),data:{scope:"retained",uid:owner}}),e=>e.code==="invalid-argument");
+ await db.collection("accountDeletionJobs").doc(uid).set({status:"queued"});
+ await assert.rejects(getMyCareer(db,{...auth(uid),data:{scope:"retained",cursor:first.nextCursor}}),e=>e.code==="permission-denied");
+});
