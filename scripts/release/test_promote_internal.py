@@ -50,7 +50,7 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(EXPECTED_CODE, 3)
         code, name = version_from_source(gradle)
         self.assertGreater(code, EXPECTED_CODE)
-        self.assertEqual((code, name), (6, "0.5.0"))
+        self.assertEqual((code, name), (7, "0.6.0"))
         self.assertNotEqual((code, name), (EXPECTED_CODE, "0.3.1"))
 
     def test_missing_track_variable_uses_only_verified_alpha_fallback(self):

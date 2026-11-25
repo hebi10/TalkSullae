@@ -15,7 +15,7 @@ class Live08ReleaseGateTests(unittest.TestCase):
     def test_current_candidate_passes_source_but_not_external_gates(self):
         result = gate.audit()
         self.assertEqual(result["status"], "source_pass", result["failed_source_checks"])
-        self.assertEqual(result["candidate_version"], {"name": "0.5.0", "code": 6})
+        self.assertEqual(result["candidate_version"], {"name": "0.6.0", "code": 7})
         self.assertFalse(result["firebase_deployed"])
         self.assertFalse(result["play_uploaded"])
         self.assertFalse(result["release_complete"])
@@ -29,9 +29,9 @@ class Live08ReleaseGateTests(unittest.TestCase):
         self.assertIn("play_internal_manual_approval", result["failed_source_checks"])
 
     def test_reusing_published_code_fails_monotonic_rule(self):
-        code, name = gate.version('versionCode = 5\nversionName = "0.4.1"\n')
+        code, name = gate.version('versionCode = 6\nversionName = "0.5.0"\n')
         self.assertEqual(code, gate.INTERNAL_PUBLISHED_VERSION_CODE)
-        self.assertEqual(name, "0.4.1")
+        self.assertEqual(name, "0.5.0")
         self.assertFalse(code > gate.INTERNAL_PUBLISHED_VERSION_CODE)
 
     def test_audit_has_no_upload_or_token_api_calls(self):

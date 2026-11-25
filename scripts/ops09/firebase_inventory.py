@@ -342,7 +342,7 @@ def main():
     result = {
         "stage": "OPS-09-readonly",
         "result": "blocked",
-        "source_release": "0.5.0 (6)",
+        "source_release": "0.6.0 (7)",
         "cloud_state_confirmed": False,
         "production_ready": False,
         "play_uploaded": False,
