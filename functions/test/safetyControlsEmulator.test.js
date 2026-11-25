@@ -99,8 +99,10 @@ test("server deletion worker removes user chat, membership, preference and auth 
    .collection("gameSessions").doc("f".repeat(64));
  await identityRef.set({
    roomId,sessionId:identityRef.id,gameId:"identity",
-   phase:"finished",participants:{[member]:{ready:true}},revision:1
+   phase:"finished",participants:{[member]:{ready:true},[owner]:{ready:true}},createdBy:member,
+   publicState:{publishedResult:"개인 이름 포함 결과"},revision:1
  });
+ await identityRef.collection("results").doc("final").set({scoresByUid:{[member]:200,[owner]:100}});
  await identityRef.collection("privateAssignments").doc(member).set({
    data:{alias:"고양이"}
  });
@@ -121,6 +123,17 @@ test("server deletion worker removes user chat, membership, preference and auth 
  assert.equal((await base.collection("messages").doc(original.messageId).get()).exists,true);
  assert.equal((await identityRef.collection("publicMessages").doc("anonymous-message").get()).exists,false);
  assert.equal((await identityRef.collection("publicMessages").doc("other-message").get()).exists,true);
+ const publicSession=(await identityRef.get()).data();
+ assert.equal(Object.hasOwn(publicSession.participants,member),false);
+ assert.equal(Object.hasOwn(publicSession.participants,owner),true);
+ const anonymous=Object.keys(publicSession.participants).find(id=>id!==owner);
+ assert.match(anonymous,/^deleted-/);
+ assert.equal(publicSession.createdBy,anonymous);
+ assert.equal(publicSession.publicState.publishedResult,"개인정보 보호를 위해 일부 공개 결과가 정리되었습니다.");
+ const scores=(await identityRef.collection("results").doc("final").get()).get("scoresByUid");
+ assert.equal(scores[anonymous],200);
+ assert.equal(scores[owner],100);
+ assert.equal(Object.hasOwn(scores,member),false);
  assert.equal((await base.collection("members").doc(member).get()).exists,false);
  assert.equal((await base.collection("members").doc(owner).get()).exists,true);
  assert.equal((await base.get()).get("memberCount"),1);
@@ -204,4 +217,23 @@ test("room ownership cannot move to a user queued for deletion",async()=>{
  }}),e=>e.code==="failed-precondition");
  const room=await db.collection("rooms").doc(roomId).get();
  assert.equal(room.get("ownerId"),owner);
+});
+
+
+test("historical room indexes do not block deletion requests and large jobs resume before auth deletion",async()=>{
+ const uid="deletion-history-"+UUID(90),index=db.collection("userRooms").doc(uid).collection("rooms");
+ const batch=db.batch();
+ for(let i=0;i<101;i++)batch.set(index.doc("history-"+String(i).padStart(3,"0")),{status:"left",roomName:"종료 방"});
+ await batch.commit();
+ assert.equal((await safety.requestAccountDeletion(db,{...auth(uid),data:{confirm:"DELETE",expectedUid:uid}},()=>nowMillis)).status,"queued");
+ const deleted=[];
+ const authApi={async deleteUser(value){deleted.push(value);}};
+ assert.equal((await safety.processOneAccountDeletion(db,uid,authApi)).status,"processing");
+ assert.equal((await index.get()).size,91);
+ assert.equal(deleted.length,0);
+ for(let i=0;i<9;i++)assert.equal((await safety.processOneAccountDeletion(db,uid,authApi)).status,"processing");
+ assert.equal((await index.get()).size,1);
+ assert.equal((await safety.processOneAccountDeletion(db,uid,authApi)).status,"completed");
+ assert.deepEqual(deleted,[uid]);
+ assert.equal((await index.get()).empty,true);
 });

@@ -1,6 +1,6 @@
 "use strict";
 
-const {createHash}=require("node:crypto");
+const {createHash,randomUUID}=require("node:crypto");
 const {FieldValue,Timestamp}=require("firebase-admin/firestore");
 const {getAuth}=require("firebase-admin/auth");
 const {HttpsError}=require("firebase-functions/v2/https");
@@ -11,6 +11,7 @@ const USER_ID=/^[^/\u0000-\u001f]{1,128}$/u;
 const HASH=value=>createHash("sha256").update(value).digest("hex");
 const MAX_ROOMS=100;
 const MAX_SESSIONS=100;
+const DELETE_ROOM_BATCH=10;
 const RECENT_AUTH_SECONDS=300;
 const ALLOWED_CATEGORIES=new Set(["abuse","child_safety","other"]);
 
@@ -127,15 +128,15 @@ async function requestAccountDeletion(db,request,now=Date.now){
   }
   const ref=db.collection("accountDeletionJobs").doc(uid);
   const indexQuery=db.collection("userRooms").doc(uid)
-    .collection("rooms").limit(MAX_ROOMS+1);
+    .collection("rooms").where("status","in",["active","pending"]).limit(MAX_ROOMS+1);
   return db.runTransaction(async tx=>{
     // Read room index, room state, active sessions and job in this same
     // transaction; all join/create/game transactions read the job document.
     // A conflicting concurrent join is retried rather than stranded in a
     // waiting game after the deletion request was acknowledged.
     const [existing,index]=await Promise.all([tx.get(ref),tx.get(indexQuery)]);
-    if(existing.exists && ["queued","processing","completed"].includes(existing.get("status"))){
-      return {status:"queued"};
+    if(existing.exists && ["queued","processing","completed","manual-review","needs-attention"].includes(existing.get("status"))){
+      return {status:"queued",jobStatus:existing.get("status")};
     }
     if(index.size>MAX_ROOMS){
       throw new HttpsError("resource-exhausted","방이 많아 운영자 확인이 필요합니다.");
@@ -175,6 +176,41 @@ async function removeMessages(db,ref,uid,field="senderUid"){
   return count;
 }
 
+// Remove direct identifiers from terminal public game history; keep game totals and other members\' scores.
+async function anonymizeTerminalGame(db,sessionRef,uid){
+  await db.runTransaction(async tx=>{
+    const resultRef=sessionRef.collection("results").doc("final");
+    const [session,result]=await Promise.all([tx.get(sessionRef),tx.get(resultRef)]);
+    if(!session.exists)return;
+    const participants=session.get("participants")||{};
+    const hasParticipant=Object.hasOwn(participants,uid);
+    const hasScore=result.exists&&Object.hasOwn(result.get("scoresByUid")||{},uid);
+    const isCreator=session.get("createdBy")===uid;
+    if(!hasParticipant&&!hasScore&&!isCreator)return;
+    if(!["finished","cancelled"].includes(session.get("phase")))throw new Error("Account still participates in an active game");
+    // A fresh per-session label is not derived from the original UID. No reverse mapping is stored.
+    const anonymous="deleted-"+randomUUID();
+    const replaceKey=map=>Object.fromEntries(Object.entries(map).map(([key,value])=>[key===uid?anonymous:key,value]));
+    const changes={};
+    if(hasParticipant)changes.participants=replaceKey(participants);
+    if(isCreator){changes.createdBy=anonymous;changes.createRequestId=FieldValue.delete();}
+    const pub=session.get("publicState");
+    if(pub&&typeof pub==="object"&&!Array.isArray(pub)){
+      const state={...pub};
+      for(const key of ["options","eliminatedUids"]){
+        if(Array.isArray(state[key]))state[key]=state[key].map(value=>value===uid?anonymous:value);
+      }
+      if(hasParticipant&&typeof state.publishedResult==="string"){
+        // Historic free-form result strings contain display names; exact substitution is unsafe.
+        state.publishedResult="개인정보 보호를 위해 일부 공개 결과가 정리되었습니다.";
+      }
+      changes.publicState=state;
+    }
+    if(Object.keys(changes).length)tx.update(sessionRef,changes);
+    if(hasScore)tx.update(resultRef,{scoresByUid:replaceKey(result.get("scoresByUid"))});
+  });
+}
+
 // Server-only account removal. All user-authored message payloads are purged before Auth deletion.
 // Failures leave a retryable queued job; successful deletion is not claimed until Auth is gone.
 async function processOneAccountDeletion(db,uid,auth=getAuth()){
@@ -183,13 +219,12 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
   if(!job.exists||!["queued","processing"].includes(job.get("status")))return {status:"skipped"};
   await jobRef.update({status:"processing",attempts:FieldValue.increment(1)});
   const userRooms=db.collection("userRooms").doc(uid);
-  const roomIndex=await userRooms.collection("rooms").limit(MAX_ROOMS+1).get();
-  if(roomIndex.size>MAX_ROOMS)throw new Error("Manual review: too many rooms");
+  const roomIndex=await userRooms.collection("rooms").limit(DELETE_ROOM_BATCH).get();
   const refs=[];
   for(const item of roomIndex.docs){
     const roomRef=db.collection("rooms").doc(item.id);
     const room=await roomRef.get();
-    if(!room.exists)continue;
+    if(!room.exists){await item.ref.delete();continue;}
     if(room.get("status")==="active"&&room.get("ownerId")===uid) {
       throw new Error("Manual review: user owns active room");
     }
@@ -204,9 +239,9 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
     }
     const seasons=await roomRef.collection("seasons").limit(121).get();
     if(seasons.size>120)throw new Error("Manual review: too many seasons");
-    refs.push({roomRef,room,sessions,seasons});
+    refs.push({roomRef,indexRef:item.ref,sessions,seasons});
   }
-  for(const {roomRef,sessions,seasons} of refs){
+  for(const {roomRef,indexRef,sessions,seasons} of refs){
     await db.recursiveDelete(roomRef.collection("playerStats").doc(uid));
     for(const season of seasons.docs){
       await season.ref.collection("scores").doc(uid).delete();
@@ -225,8 +260,7 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
       }else{
         await removeMessages(db,sessionRef.collection("publicMessages"),uid);
       }
-      // Sensitive role/submission documents are server-only; shared results
-      // remain immutable until the separate shared-history privacy review.
+      // Remove the actor\'s private role only after anonymous messages have been purged.
       await assignmentRef.delete();
       const ballots=await sessionRef.collection("privateSubmissions").where("actorUid","==",uid).get();
       for(let i=0;i<ballots.docs.length;i+=100){
@@ -240,22 +274,31 @@ async function processOneAccountDeletion(db,uid,auth=getAuth()){
         for(const d of receipts.docs.slice(i,i+100))batch.delete(d.ref);
         await batch.commit();
       }
+      await anonymizeTerminalGame(db,sessionRef,uid);
     }
     await db.runTransaction(async tx=>{
       const [room,member]=await Promise.all([
         tx.get(roomRef),tx.get(roomRef.collection("members").doc(uid))
       ]);
-      if(!room.exists||!member.exists)return;
+      if(!room.exists){tx.delete(indexRef);return;}
       if(room.get("status")==="active"&&room.get("ownerId")===uid){
         throw new Error("Manual review: user became owner during deletion");
       }
-      const current=member.get("status");
+      const current=member.exists?member.get("status"):null;
       if(current==="active"||current==="pending"){
         const prop=current==="active"?"memberCount":"pendingCount";
         tx.update(roomRef,{[prop]:FieldValue.increment(-1)});
       }
-      tx.delete(member.ref);
+      if(room.get("status")==="archived"&&room.get("ownerId")===uid)tx.update(roomRef,{ownerId:null});
+      if(member.exists)tx.delete(member.ref);
+      // A room index is the durable checkpoint. Delete it only after every room cleanup has succeeded.
+      tx.delete(indexRef);
     });
+  }
+  const remaining=await userRooms.collection("rooms").limit(1).get();
+  if(!remaining.empty){
+    await jobRef.update({status:"processing",attempts:0,updatedAt:FieldValue.serverTimestamp()});
+    return {status:"processing"};
   }
   await db.recursiveDelete(userRooms);
   // Remove profile, per-device FCM tokens and notification cooldowns together.
