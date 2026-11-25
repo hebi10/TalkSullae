@@ -220,10 +220,12 @@ async function changeMember(db, request) {
   const memberRef = roomRef.collection("members").doc(targetUid);
   const indexRef = userIndex(db,targetUid,roomId);
   return db.runTransaction(async tx=>{
-    const [room,actor,target] = await Promise.all([
-      tx.get(roomRef),tx.get(actorRef),tx.get(memberRef)
+    const [room,actor,target,deletion] = await Promise.all([
+      tx.get(roomRef),tx.get(actorRef),tx.get(memberRef),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))
     ]);
     requireOwner(room,actor,uid);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 멤버를 관리할 수 없습니다.");
     if (!target.exists) throw new HttpsError("not-found", "대상 멤버가 없습니다.");
     const current = target.data().status;
     if (action==="approve" || action==="reject") {

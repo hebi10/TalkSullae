@@ -18,7 +18,9 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
 
       match /members/{userId} {
-        allow get: if signedIn() && (request.auth.uid == userId || activeMember(roomId));
+        allow get: if signedIn()
+          && !exists(/databases/$(database)/documents/accountDeletionJobs/$(request.auth.uid))
+          && (request.auth.uid == userId || activeMember(roomId));
         allow list: if activeMember(roomId);
         allow create, update, delete: if false;
       }
@@ -165,7 +167,8 @@ service cloud.firestore {
     match /userRooms/{userId} {
       allow read, write: if false;
       match /rooms/{roomId} {
-        allow get, list: if signedIn() && request.auth.uid == userId;
+        allow get, list: if signedIn() && request.auth.uid == userId
+          && !exists(/databases/$(database)/documents/accountDeletionJobs/$(request.auth.uid));
         allow create, update, delete: if false;
       }
     }

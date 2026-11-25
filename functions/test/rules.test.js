@@ -160,3 +160,19 @@ test("a removed member loses message reads even after earlier membership", async
   await assertFails(getDocs(query(collection(before,"rooms",roomId,"messages"),limit(30))));
   await assertFails(getDoc(doc(before,"rooms",roomId,"messages","old")));
 });
+
+test("account deletion tombstone blocks own room indices and membership before worker cleanup",async()=>{
+  const owner=testEnv.authenticatedContext("owner").firestore();
+  await assertSucceeds(getDocs(collection(owner,"userRooms","owner","rooms")));
+  await testEnv.withSecurityRulesDisabled(async context=>{
+    await setDoc(doc(context.firestore(),"accountDeletionJobs","owner"),{status:"queued"});
+  });
+  try{
+    await assertFails(getDoc(doc(owner,"userRooms","owner","rooms",roomId)));
+    await assertFails(getDocs(collection(owner,"userRooms","owner","rooms")));
+    await assertFails(getDoc(doc(owner,"rooms",roomId,"members","owner")));
+    await assertFails(getDoc(doc(owner,"rooms",roomId)));
+  }finally{
+    await testEnv.withSecurityRulesDisabled(async context=>deleteDoc(doc(context.firestore(),"accountDeletionJobs","owner")));
+  }
+});

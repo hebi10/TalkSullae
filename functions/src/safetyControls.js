@@ -75,9 +75,11 @@ async function reportChatMessage(db,request,now=Date.now){
   const reportRef=db.collection("safetyReports").doc(reportId);
   const rateRef=db.collection("safetyReportRateLimits").doc(HASH(uid));
   return db.runTransaction(async tx=>{
-    const [room,member,message,previous,rate]=await Promise.all([
-      tx.get(roomRef),tx.get(memberRef),tx.get(messageRef),tx.get(reportRef),tx.get(rateRef)
+    const [room,member,message,previous,rate,deletion]=await Promise.all([
+      tx.get(roomRef),tx.get(memberRef),tx.get(messageRef),tx.get(reportRef),tx.get(rateRef),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))
     ]);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 신고를 등록할 수 없습니다.");
     if(!room.exists||room.get("status")!=="active"||!member.exists||
        member.get("status")!=="active")throw new HttpsError("permission-denied","신고할 방에 접근할 수 없습니다.");
     if(previous.exists){
