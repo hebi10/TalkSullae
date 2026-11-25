@@ -434,15 +434,26 @@ async function gameSessionAction(db,request,rules=productionRules,now=Date.now){
   });
 }
 
+// All public/private game reads use a single authorization snapshot.
+async function readAuthorizedGame(db,roomRef,uid,read){
+  return db.runTransaction(async tx=>{
+    const [room,member,deletion]=await Promise.all([
+      tx.get(roomRef),tx.get(roomRef.collection("members").doc(uid)),
+      tx.get(db.collection("accountDeletionJobs").doc(uid))
+    ]);
+    if(deletion.exists)throw new HttpsError("permission-denied","계정 삭제 요청 중에는 게임에 접근할 수 없습니다.");
+    requireActive(room,member);
+    return read(tx,room);
+  },{readOnly:true});
+}
+
 async function getMyGameSession(db,request,rules=productionRules){
   const uid=authUid(request);
   const {roomId,sessionId}=validateSessionRef(request.data);
   const roomRef=db.collection("rooms").doc(roomId);
   const sessionRef=roomRef.collection("gameSessions").doc(sessionId);
-  const [room,member,snapshot]=await Promise.all([
-    roomRef.get(),roomRef.collection("members").doc(uid).get(),sessionRef.get()
-  ]);
-  requireActive(room,member);
+  return readAuthorizedGame(db,roomRef,uid,async tx=>{
+  const snapshot=await tx.get(sessionRef);
   if(!snapshot.exists)throw new HttpsError("not-found","게임 세션이 없습니다.");
   const session=snapshot.data();
   if(session.schemaVersion!==SCHEMA_VERSION){
@@ -452,13 +463,13 @@ async function getMyGameSession(db,request,rules=productionRules){
   let personal=null;
   if(rules.supported(session.gameId,session.rulesVersion)){
     const rule=rules.require(session.gameId,session.rulesVersion);
-    const doc=await sessionRef.collection("privateAssignments").doc(uid).get();
+    const doc=await tx.get(sessionRef.collection("privateAssignments").doc(uid));
     const personalData=doc.exists?doc.get("data"):null;
     if(session.gameId==="forbidden" && !LOBBY_PHASES.has(session.phase) &&
        !TERMINAL_PHASES.has(session.phase)){
       const ids=participantIds(session);
       const snaps=await Promise.all(ids.map(playerId=>
-        sessionRef.collection("privateAssignments").doc(playerId).get()));
+        tx.get(sessionRef.collection("privateAssignments").doc(playerId))));
       const assignments=Object.fromEntries(ids.map((playerId,index)=>
         [playerId,snaps[index].exists?snaps[index].get("data"):null]));
       personal=rule.projectForPlayer({session,actorUid:uid,personalData,assignments});
@@ -470,17 +481,18 @@ async function getMyGameSession(db,request,rules=productionRules){
     }
     if(personal!==null && (session.phase==="voting" ||
        (session.gameId==="balance"&&session.phase==="playing"))){
-      const vote=await sessionRef.collection("privateSubmissions")
-        .doc(submissionId(uid,session.round,session.phase)).get();
+      const vote=await tx.get(sessionRef.collection("privateSubmissions")
+        .doc(submissionId(uid,session.round,session.phase)));
       personal={...personal,submitted:vote.exists};
       if(session.gameId==="balance"){
-        const own=await sessionRef.collection("privateSubmissions")
-          .doc(submissionId(uid,session.round,"playing")).get();
+        const own=await tx.get(sessionRef.collection("privateSubmissions")
+          .doc(submissionId(uid,session.round,"playing")));
         personal={...personal,ownChoice:own.exists?own.get("data.ownChoice"):null};
       }
     }
   }
   return {public:publicSnapshot(session),personal};
+  });
 }
 
 async function findActiveGameSession(db,request){
@@ -491,15 +503,12 @@ async function findActiveGameSession(db,request){
   }
   const roomId=roomIdValue(request.data.roomId);
   const roomRef=db.collection("rooms").doc(roomId);
-  const [room,member]=await Promise.all([
-    roomRef.get(),roomRef.collection("members").doc(uid).get()
-  ]);
-  requireActive(room,member);
+  return readAuthorizedGame(db,roomRef,uid,async(tx,room)=>{
   const sessionId=room.get("activeGameSessionId");
   if(typeof sessionId!=="string" || !SESSION_ID_PATTERN.test(sessionId)){
     return {sessionId:null};
   }
-  const doc=await roomRef.collection("gameSessions").doc(sessionId).get();
+  const doc=await tx.get(roomRef.collection("gameSessions").doc(sessionId));
   if(!doc.exists){
     throw new HttpsError("failed-precondition","활성 게임 정보를 확인할 수 없습니다.");
   }
@@ -512,6 +521,7 @@ async function findActiveGameSession(db,request){
   }
   return {sessionId,gameId:session.gameId,phase:session.phase,
     revision:session.revision,joined:Object.hasOwn(session.participants||{},uid)};
+  });
 }
 
 async function findRecentCompletedGameSession(db,request){
@@ -523,20 +533,18 @@ async function findRecentCompletedGameSession(db,request){
   }
   const roomId=roomIdValue(request.data.roomId);
   const roomRef=db.collection("rooms").doc(roomId);
-  const [room,member,pointer]=await Promise.all([
-    roomRef.get(),roomRef.collection("members").doc(uid).get(),
-    roomRef.collection("recentCompletedGameSessions").doc(uid).get()
-  ]);
-  requireActive(room,member);
+  return readAuthorizedGame(db,roomRef,uid,async tx=>{
+  const pointer=await tx.get(roomRef.collection("recentCompletedGameSessions").doc(uid));
   const id=pointer.exists?pointer.get("balance"):null;
   if(typeof id!=="string"||!SESSION_ID_PATTERN.test(id))return {sessionId:null};
-  const doc=await roomRef.collection("gameSessions").doc(id).get();
+  const doc=await tx.get(roomRef.collection("gameSessions").doc(id));
   if(!doc.exists||doc.get("gameId")!=="balance"||
      doc.get("phase")!=="finished"||
      !Object.hasOwn(doc.get("participants")||{},uid)){
     return {sessionId:null};
   }
   return {sessionId:id};
+  });
 }
 
 async function cancelRevokedDueSession(db,roomRef,sessionRef,nowMillis){

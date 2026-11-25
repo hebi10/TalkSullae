@@ -247,3 +247,17 @@ test("server deadline rejects late submissions, and owner cancellation releases 
     "join",{},58),e=>e.code==="failed-precondition");
   assert.equal((await db.collection("rooms").doc(roomId).get()).get("activeGameSessionId"),null);
 });
+
+test("queued account deletion blocks all game discovery and private session restore endpoints",async()=>{
+  const roomId=await twoMembers();
+  const session=await created(roomId,991);
+  await action(roomId,session.sessionId,"member",0,"join",{},992);
+  const job=db.collection("accountDeletionJobs").doc("member");
+  await job.set({status:"queued"});
+  try {
+    await assert.rejects(game.getMyGameSession(db,{...auth("member"),data:{roomId,sessionId:session.sessionId}}),e=>e.code==="permission-denied");
+    await assert.rejects(game.findActiveGameSession(db,{...auth("member"),data:{roomId}}),e=>e.code==="permission-denied");
+    await assert.rejects(game.findRecentCompletedGameSession(db,{...auth("member"),data:{roomId,gameId:"balance"}}),e=>e.code==="permission-denied");
+    assert.equal((await game.findActiveGameSession(db,{...auth("owner"),data:{roomId}})).sessionId,session.sessionId);
+  }finally{await job.delete();}
+});

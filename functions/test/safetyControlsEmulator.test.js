@@ -237,3 +237,12 @@ test("historical room indexes do not block deletion requests and large jobs resu
  assert.deepEqual(deleted,[uid]);
  assert.equal((await index.get()).empty,true);
 });
+
+test("a queued deletion account cannot submit a new chat report even before membership cleanup",async()=>{
+ const {owner,member,roomId}=await sharedRoom();
+ const msg=await chat.sendRoomMessage(db,{...auth(owner),data:{roomId,requestId:UUID(901),text:"권한 확인용"}});
+ await safety.requestAccountDeletion(db,{...auth(member),data:{confirm:"DELETE",expectedUid:member}},()=>nowMillis);
+ await assert.rejects(safety.reportChatMessage(db,{...auth(member),data:{roomId,messageId:msg.messageId,
+   requestId:UUID(902),category:"abuse",details:"권한 회수 검증입니다."}},()=>nowMillis),e=>e.code==="permission-denied");
+ assert.equal((await db.collection("rooms").doc(roomId).collection("members").doc(member).get()).get("status"),"active");
+});
