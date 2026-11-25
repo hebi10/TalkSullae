@@ -48,6 +48,6 @@ internal fun RoomIconDialog(room:CloudRoom,working:Boolean,error:String?,onDismi
             if(stale)Text("방 정보가 변경됐습니다. 다시 열어 주세요.",color=MaterialTheme.colorScheme.error)
             error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
         }
-    },confirmButton={TextButton(onClick={onSave(selected,revision)},enabled=!working&&!stale){Text("저장")}},
+    },confirmButton={TextButton(onClick={onSave(selected,revision)},enabled=!working&&!stale,modifier=Modifier.testTag("room-icon-save")){Text("저장")}},
         dismissButton={TextButton(onClick=onDismiss,enabled=!working){Text("취소")}})
 }

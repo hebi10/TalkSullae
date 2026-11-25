@@ -18,7 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,10 +31,11 @@ import com.hebi.talksullae.firebase.ServiceNotice
 @Composable
 internal fun ServiceNoticeScreen(
     notice: ServiceNotice, busy: Boolean, error: String?,
-    onAccept: () -> Unit, onDecline: () -> Unit, onReload: () -> Unit
+    onAccept: () -> Unit, onDecline: () -> Unit, onReload: () -> Unit,
+    accountKey: String
 ) {
-    var termsAccepted by rememberSaveable(notice.termsVersion, notice.privacyVersion) { mutableStateOf(false) }
-    var privacyRead by rememberSaveable(notice.termsVersion, notice.privacyVersion) { mutableStateOf(false) }
+    var termsAccepted by remember(accountKey,notice.termsVersion, notice.privacyVersion) { mutableStateOf(false) }
+    var privacyRead by remember(accountKey,notice.termsVersion, notice.privacyVersion) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
