@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   capture:
-    if: github.event.pull_request.head.repo.full_name == github.repository && (github.event.pull_request.head.ref == 'fix/ts-final-01-b-deletion-navigation' || github.event.pull_request.head.ref == 'design/ts-final-game-polish')
+    if: github.event.pull_request.head.repo.full_name == github.repository && (github.event.pull_request.head.ref == 'fix/ts-final-01-b-deletion-navigation' || github.event.pull_request.head.ref == 'design/ts-final-game-polish' || github.event.pull_request.head.ref == 'fix/ts-final-store-capture')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -46,10 +46,11 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run full isolated native capture on the navigation fix
+      - name: Run the isolated native screenshot regression
         uses: reactivecircus/android-emulator-runner@v2
         env:
           EXPECTED: ${{ github.event.pull_request.head.sha }}
+          STORE_CAPTURE: ${{ github.event.pull_request.head.ref == 'fix/ts-final-store-capture' }}
         with:
           api-level: 36
           arch: x86_64
@@ -58,11 +59,11 @@ jobs:
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            python3 scripts/qa/export_design_captures.py --expected-sha "$EXPECTED" --profile phone --theme dark --font-scale 1.0 --output design-captures
+            if [ "$STORE_CAPTURE" = true ]; then python3 scripts/qa/export_play_store_captures.py store-captures; else python3 scripts/qa/export_design_captures.py --expected-sha "$EXPECTED" --profile phone --theme dark --font-scale 1.0 --output design-captures; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: talksullae-full-design-navigation-${{ github.event.pull_request.head.sha }}
-          path: design-captures/
+          path: ${{ github.event.pull_request.head.ref == 'fix/ts-final-store-capture' && 'store-captures/' || 'design-captures/' }}
           if-no-files-found: error
           retention-days: 30

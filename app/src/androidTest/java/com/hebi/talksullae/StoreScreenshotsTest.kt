@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -35,6 +36,7 @@ import com.hebi.talksullae.firebase.RoomChatPage
 import com.hebi.talksullae.ui.entry.OnboardingScreen
 import com.hebi.talksullae.ui.rooms.OnlineRoomsHost
 import java.io.File
+import java.security.MessageDigest
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -89,7 +91,10 @@ class StoreScreenshotsTest {
         compose.onNodeWithText("승인").performScrollTo().assertIsDisplayed()
         save("04-approval")
 
-        compose.onNodeWithText("새 초대 코드 발급 (이전 코드 폐기)").performScrollTo().performClick()
+        compose.onNodeWithTag("live-invite-generate").performScrollTo().performClick()
+        compose.waitUntil(8_000) {
+            compose.onAllNodesWithText("코드 복사").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("코드 복사").performScrollTo().assertIsDisplayed()
         save("05-invite")
 
@@ -156,7 +161,8 @@ private fun StoreScreen(title: String, subtitle: String? = null, content: @Compo
 }
 
 private class SampleRoomsRepository : OnlineRoomsRepository {
-    private val sample = CloudRoom("sample-room", "금요일 모임", "친구들과 함께하는 주말 모임", "sample-owner", 2, 1, true)
+    private var sample = CloudRoom("r".repeat(20), "금요일 모임", "친구들과 함께하는 주말 모임", "sample-owner", 2, 1, true)
+    private var roomListener: ((CloudRoom?) -> Unit)? = null
 
     override fun watchMyRooms(uid: String, onResult: (List<CloudRoomIndex>) -> Unit, onError: (String) -> Unit): ListenerRegistration {
         onResult(listOf(CloudRoomIndex(sample.id, sample.name, "active"), CloudRoomIndex("sample-pending", "동네 친구들", "pending")))
@@ -164,8 +170,9 @@ private class SampleRoomsRepository : OnlineRoomsRepository {
     }
 
     override fun watchRoom(roomId: String, onResult: (CloudRoom?) -> Unit, onError: (String) -> Unit): ListenerRegistration {
+        roomListener = onResult
         onResult(sample)
-        return ListenerRegistration {}
+        return ListenerRegistration { roomListener = null }
     }
 
     override fun watchMembers(roomId: String, onResult: (List<CloudMember>) -> Unit, onError: (String) -> Unit): ListenerRegistration {
@@ -177,7 +184,15 @@ private class SampleRoomsRepository : OnlineRoomsRepository {
         return ListenerRegistration {}
     }
 
-    override suspend fun createInvitation(roomId: String) = Invitation("sample-room.예시코드", 0)
+    override suspend fun createInvitation(roomId: String): Invitation {
+        val token = "B".repeat(43)
+        val hash = MessageDigest.getInstance("SHA-256").digest(token.toByteArray())
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        val expiresAt = System.currentTimeMillis() + 3_600_000
+        sample = sample.copy(activeInviteHash = hash, activeInviteExpiresAtMillis = expiresAt)
+        roomListener?.invoke(sample)
+        return Invitation("$roomId.$token", expiresAt)
+    }
     override suspend fun previewInvitation(code: String): InvitationPreview = error("Screenshot fixture")
     override suspend fun createRoom(name: String, description: String, approval: Boolean): String = error("Screenshot fixture")
     override suspend fun requestJoin(code: String): JoinResult = error("Screenshot fixture")
