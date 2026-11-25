@@ -239,7 +239,7 @@ internal fun OnlineRoomsHost(
                 "records" -> OnlineRoomRecordsHost(
                     uid = uid, roomId = room.id, roomName = room.name,
                     members = state.members.filter { it.status == "active" },
-                    onBack = { roomSection = "chat" }
+                    onBack = { roomSection = "chat" }, showHeader = false
                 )
                 "games" -> OnlineGameCatalog(
                     room = room, onResume = resumeGame, onOpen = { gameId -> resumeGame(gameId) }

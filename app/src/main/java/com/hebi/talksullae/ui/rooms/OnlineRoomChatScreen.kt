@@ -380,8 +380,7 @@ internal fun OnlineRoomChatHost(
             OutlinedTextField(
                 value = state.draft,
                 onValueChange = vm::updateDraft,
-                modifier = Modifier.weight(1f).testTag("online-chat-input"),
-                label = { Text("메시지") },
+                modifier = Modifier.weight(1f).semantics { contentDescription = "메시지 입력" }.testTag("online-chat-input"),
                 placeholder = { Text("메시지를 입력하세요.") },
                 maxLines = 5,
                 enabled = true,

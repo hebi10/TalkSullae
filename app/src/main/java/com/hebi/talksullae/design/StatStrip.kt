@@ -40,11 +40,12 @@ internal fun StatStrip(stats: List<Pair<String, String>>) {
 @Composable
 private fun StatTile(value: String, label: String, modifier: Modifier) {
     Surface(modifier=modifier, color=MaterialTheme.colorScheme.surfaceVariant,
-        shape=RoundedCornerShape(8.dp)) {
+        contentColor=MaterialTheme.colorScheme.onSurface, shape=RoundedCornerShape(8.dp)) {
         Column(Modifier.padding(horizontal=8.dp, vertical=12.dp),
             horizontalAlignment=Alignment.CenterHorizontally,
             verticalArrangement=Arrangement.spacedBy(4.dp)) {
-            Text(value, style=MaterialTheme.typography.titleMedium, textAlign=TextAlign.Center)
+            Text(value, style=MaterialTheme.typography.titleMedium, textAlign=TextAlign.Center,
+                color=MaterialTheme.colorScheme.onSurface)
             Text(label, style=MaterialTheme.typography.bodySmall, textAlign=TextAlign.Center,
                 color=MaterialTheme.colorScheme.onSurfaceVariant)
         }

@@ -1,5 +1,19 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import com.hebi.talksullae.design.PrimaryAction
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
@@ -13,7 +27,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,16 +43,26 @@ internal fun rateLabel(hits: Long, attempts: Long): String =
 @Composable
 internal fun FriendRecordsDialog(name: String, value: FriendRecords?, loading: Boolean, error: String?,
     onRetry: () -> Unit, onDismiss: () -> Unit, onCompare: () -> Unit = {}, avatar: String? = null) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Row(verticalAlignment=Alignment.CenterVertically,
-            horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            ProfileAvatar(avatar, Modifier.size(36.dp))
-            Text("$name · 방 전적",style=MaterialTheme.typography.titleLarge)
-        } },
-        text = {
-            Column(Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState())
-                .testTag("friend-records-dialog"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Dialog(onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 12.dp),
+            contentAlignment = Alignment.BottomCenter) {
+            Surface(Modifier.widthIn(max = 560.dp).fillMaxWidth().fillMaxHeight(0.92f),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface) {
+                Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ProfileAvatar(avatar, Modifier.size(36.dp))
+                        Text("$name · 방 전적", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "친구 전적 닫기")
+                        }
+                    }
+                    HorizontalDivider()
+                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+                        .testTag("friend-records-dialog"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("현재 같은 방의 게임 기록만 표시합니다.", style = MaterialTheme.typography.bodySmall)
                 if (loading) CircularProgressIndicator()
                 if (error != null) {
@@ -47,10 +70,13 @@ internal fun FriendRecordsDialog(name: String, value: FriendRecords?, loading: B
                     TextButton(onClick = onRetry, modifier = Modifier.testTag("friend-records-retry")) { Text("다시 조회") }
                 }
                 value?.let { record ->
-                    Text("친구의 방 누적 전적", style = MaterialTheme.typography.titleMedium)
-                    StatStrip(listOf("${record.totalGames}" to "경기", "${record.totalWins}" to "승리",
-                        (if (record.totalGames == 0L) "기록 없음" else "${(record.totalWins * 100L) / record.totalGames}%") to "승률"))
-                    Text("최고 ${record.bestStreak}연승 · 누적 시즌점 ${record.totalSeasonPoints}점 · 업적 ${record.achievements.size}개")
+                    ContentCard {
+                        StatStrip(listOf("${record.totalGames}" to "경기", "${record.totalWins}" to "승리",
+                            (if (record.totalGames == 0L) "기록 없음" else "${(record.totalWins * 100L) / record.totalGames}%") to "승률"))
+                        Text("누적 시즌점 ${record.totalSeasonPoints}점", style = MaterialTheme.typography.bodyMedium)
+                        Text("최고 ${record.bestStreak}연승 · 업적 ${record.achievements.size}개",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     val labels = listOf("identity" to "너 누구야?", "liar" to "라이어 채팅",
                         "forbidden" to "금지어 채팅", "balance" to "밸런스 예측")
                     Text("게임별 전적", style = MaterialTheme.typography.titleMedium)
@@ -58,7 +84,9 @@ internal fun FriendRecordsDialog(name: String, value: FriendRecords?, loading: B
                         record.games[id]?.let {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 Text(label, Modifier.weight(1f))
-                                Text("${it.plays}경기 · ${it.wins}승",style=MaterialTheme.typography.bodySmall)
+                                Text("${it.plays}경기 · ${it.wins}승 · " +
+                                    (if (it.plays == 0L) "기록 없음" else "${(it.wins * 100L) / it.plays}%"),
+                                    style=MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -67,9 +95,10 @@ internal fun FriendRecordsDialog(name: String, value: FriendRecords?, loading: B
                             Text("함께한 경기 상세 비교")
                         }
                     } else {
-                    Text("함께한 경기", style = MaterialTheme.typography.titleMedium)
+                    Text("상세 비교 (나 vs $name)", style = MaterialTheme.typography.titleMedium)
                     Text("내 최근 ${record.reviewedGames}경기 기준" +
-                        if (record.capped) " (최대 30경기, 전체 누적 아님)" else "")
+                        if (record.capped) " (최대 30경기, 전체 누적 아님)" else "",
+                        style = MaterialTheme.typography.bodySmall)
                     val pair = record.comparison
                     ContentCard {
                         Text("함께한 경기 ${pair.sharedGames}회", modifier = Modifier.testTag("friend-shared-games"),
@@ -88,8 +117,11 @@ internal fun FriendRecordsDialog(name: String, value: FriendRecords?, loading: B
                         style = MaterialTheme.typography.bodySmall)
                     }
                 }
+                    }
+                    PrimaryAction("닫기", onClick = onDismiss, modifier = Modifier.fillMaxWidth()
+                        .testTag("friend-records-close"))
+                }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } }
-    )
+        }
+    }
 }

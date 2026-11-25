@@ -1,5 +1,6 @@
 package com.hebi.talksullae
 
+import androidx.compose.ui.test.performTextInput
 import com.hebi.talksullae.ui.MainNavigation
 import com.hebi.talksullae.ui.ProfileScreen
 import android.graphics.Color
@@ -305,7 +306,12 @@ class DesignScreensCaptureTest {
         }
     }
     @Test fun d14Lobby(){mountGame("identity",GamePhase.WAITING);capture("D14_lobby",tag("identity-ready"),true)}
-    @Test fun d15IdentityChat(){mountGame("identity",GamePhase.PLAYING);capture("D15_identity_chat",label("내 동물 별칭: 고양이"),true);capture("D15_identity_input",tag("identity-chat-input"),true)}
+    @Test fun d15IdentityChat(){
+        mountGame("identity",GamePhase.PLAYING)
+        capture("D15_identity_chat",label("내 동물 별칭: 고양이"),true)
+        tag("identity-chat-input").performClick().performTextInput("나는 미리 계획하는 게 좋아!")
+        capture("D15_identity_input",tag("identity-chat-input"),true)
+    }
     @Test fun d16IdentityGuess(){
         mountGame("identity",GamePhase.VOTING)
         tag("identity-guess-select-토끼").performScrollTo().performClick()
@@ -340,7 +346,7 @@ class DesignScreensCaptureTest {
             OnlineRoomWorkspace(room,"records",{},{}) {
                 RoomRecordsContent(room.name,state,people.associate{it.uid to it.name},
                     {},{},true,false,{},people.filter{it.uid!="owner"}.associate{it.uid to it.name},{},
-                    avatars=people.associate{it.uid to it.avatar})
+                    avatars=people.associate{it.uid to it.avatar}, showHeader=false)
             }
         }
     }
@@ -354,7 +360,7 @@ class DesignScreensCaptureTest {
         mount(""){
             OnlineRoomWorkspace(room,"records",{},{}) {
                 RoomRecordsContent(room.name,records,people.associate{it.uid to it.name},
-                    {},{},true,false,{},avatars=people.associate{it.uid to it.avatar})
+                    {},{},true,false,{},avatars=people.associate{it.uid to it.avatar}, showHeader=false)
             }
             FriendRecordsDialog("지훈",FriendRecords(20,12,3,1200,gameStats,listOf("first_game","wins_5"),pair,20,false,comparisonLoaded=detail.value),false,null,{},{},{detail.value=true},avatar="토끼")
         }

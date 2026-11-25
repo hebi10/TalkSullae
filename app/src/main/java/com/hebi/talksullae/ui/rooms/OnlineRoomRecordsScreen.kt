@@ -1,5 +1,14 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Alignment
 import com.hebi.talksullae.design.ContentCard
@@ -96,7 +105,7 @@ private val gameLabels=mapOf(
 @Composable
 internal fun OnlineRoomRecordsHost(
     uid:String,roomId:String,roomName:String,
-    members:List<CloudMember>,onBack:()->Unit
+    members:List<CloudMember>,onBack:()->Unit,showHeader:Boolean=true
 ) {
     var offset by remember(roomId){mutableIntStateOf(0)}
     val zone=remember{ZoneId.of("Asia/Seoul")}
@@ -256,7 +265,7 @@ internal fun OnlineRoomRecordsHost(
         friendNames=members.filter { it.uid!=uid && it.status=="active" }.associate { it.uid to it.name },
         onFriendClick={ selectedFriend=it },
         onClosureRetry={closureRetry++},
-        avatars=members.associate { it.uid to it.avatar }
+        avatars=members.associate { it.uid to it.avatar }, showHeader=showHeader
     )
     if(activeFriend!=null && foreground){
         FriendRecordsDialog(activeFriend.name,friendValue,friendLoading,friendError,
@@ -273,7 +282,7 @@ internal fun RoomRecordsContent(
     canPrevious:Boolean,canNext:Boolean,onBack:()->Unit,
     friendNames:Map<String,String> = emptyMap(),onFriendClick:(String)->Unit = {},
     onClosureRetry:()->Unit={},
-    avatars:Map<String,String?> = emptyMap()
+    avatars:Map<String,String?> = emptyMap(), showHeader:Boolean=true
 ) {
     var selectedGame by rememberSaveable(roomName) { mutableStateOf("all") }
     var filterExpanded by remember { mutableStateOf(false) }
@@ -282,35 +291,42 @@ internal fun RoomRecordsContent(
             .padding(horizontal=16.dp,vertical=12.dp).testTag("room-records-screen"),
         verticalArrangement=Arrangement.spacedBy(12.dp)
     ){
-        Row(Modifier.fillMaxWidth()){
-            Text("방 기록 · $roomName",Modifier.weight(1f),
-                style=MaterialTheme.typography.titleLarge)
-            TextButton(onClick=onBack){Text("방 관리")}
+        if (showHeader) {
+            Row(Modifier.fillMaxWidth()){
+                Text("방 기록 · $roomName",Modifier.weight(1f),
+                    style=MaterialTheme.typography.titleLarge)
+                TextButton(onClick=onBack){Text("방 관리")}
+            }
+            HorizontalDivider()
         }
-        HorizontalDivider()
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                state.seasonId + " · " + (if (state.closed) "종료" else "진행 중"),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.testTag("records-season-heading")
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onPrevious, enabled = canPrevious,
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                        .testTag("records-previous-season")
-                ) { Text("이전 시즌") }
-                OutlinedButton(
-                    onClick = onNext, enabled = canNext,
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                        .testTag("records-next-season")
-                ) { Text("다음 시즌") }
+        Text("시즌 랭킹", style=MaterialTheme.typography.titleLarge)
+        Surface(Modifier.fillMaxWidth(), color=MaterialTheme.colorScheme.surfaceVariant, shape=RoundedCornerShape(8.dp)) {
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(4.dp)) {
+                val heading: @Composable (Modifier) -> Unit = { modifier ->
+                    Text(state.seasonId + " · " + (if (state.closed) "종료" else "진행 중"),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = modifier.testTag("records-season-heading"))
+                }
+                if (maxWidth < 260.dp || LocalDensity.current.fontScale > 1.3f) {
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment=Alignment.CenterHorizontally) {
+                        heading(Modifier.padding(8.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick=onPrevious, enabled=canPrevious,
+                                modifier=Modifier.weight(1f).heightIn(min=48.dp).testTag("records-previous-season")) { Text("이전 시즌") }
+                            OutlinedButton(onClick=onNext, enabled=canNext,
+                                modifier=Modifier.weight(1f).heightIn(min=48.dp).testTag("records-next-season")) { Text("다음 시즌") }
+                        }
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically,
+                        horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+                        IconButton(onClick=onPrevious, enabled=canPrevious, modifier=Modifier.size(48.dp)
+                            .testTag("records-previous-season")) { Icon(Icons.Default.ChevronLeft, contentDescription="이전 시즌") }
+                        Box(Modifier.weight(1f), contentAlignment=Alignment.Center) { heading(Modifier) }
+                        IconButton(onClick=onNext, enabled=canNext, modifier=Modifier.size(48.dp)
+                            .testTag("records-next-season")) { Icon(Icons.Default.ChevronRight, contentDescription="다음 시즌") }
+                    }
+                }
             }
         }
         ContentCard {
@@ -341,9 +357,11 @@ internal fun RoomRecordsContent(
         state.error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
         if(!state.loading&&state.ranking.isEmpty())Text("해당 시즌의 경기 기록이 없습니다.")
         competitionRanks(state.ranking).forEach{(rank,item)->
-            ContentCard(Modifier.testTag("records-ranked-" + item.uid)) {
+            Surface(Modifier.fillMaxWidth().testTag("records-ranked-" + item.uid),
+                shape=RoundedCornerShape(8.dp), color=MaterialTheme.colorScheme.surface) {
                 val champion=state.closed && state.finalResult?.winningScore==item.points
-                Row(verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.padding(horizontal=12.dp,vertical=8.dp).heightIn(min=48.dp),
+                    verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     ProfileAvatar(avatars[item.uid], Modifier.size(32.dp))
                     Column(Modifier.weight(1f)) {
                         Text(if(champion)"우승 · "+(names[item.uid] ?: "탈퇴한 멤버")

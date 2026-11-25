@@ -1120,33 +1120,25 @@ internal fun ProfileScreen(
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (actualProfile == null) PreviewNotice()
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("마이", Modifier.weight(1f), style=MaterialTheme.typography.titleLarge)
             TextButton(onClick=onSettings, modifier=Modifier.testTag("profile-settings-open")) { Text("설정") }
         }
-        ContentCard {
-            Row(verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                com.hebi.talksullae.design.ProfileAvatar(actualProfile?.avatar,
-                    Modifier.size(48.dp))
-                Text(
-                    if (actualProfile != null) nickname else "$nickname · 데모 미리보기",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-            Text(
-                if (actualProfile != null) "친구에게 표시되는 닉네임입니다."
-                else "로그인 및 개인 통계는 연결 전입니다.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            if (onEditProfile != null) {
-                OutlinedButton(
-                    onClick = onEditProfile,
-                    modifier = Modifier.fillMaxWidth().testTag("profile-edit-open")
-                ) { Text("프로필 편집") }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            com.hebi.talksullae.design.ProfileAvatar(actualProfile?.avatar, Modifier.size(56.dp))
+            Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Text(if (actualProfile != null) nickname else "$nickname · 데모 미리보기",
+                    style = MaterialTheme.typography.titleMedium)
+                if (onEditProfile != null) {
+                    TextButton(onClick = onEditProfile,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("profile-edit-open")) { Text("프로필 편집") }
+                } else if (actualProfile == null) {
+                    Text("로그인 및 개인 통계는 연결 전입니다.", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
         if (actualUid != null && actualProfile != null) {

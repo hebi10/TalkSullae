@@ -1,5 +1,14 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.size
@@ -120,19 +129,25 @@ internal fun OnlineIdentityGameHost(
         state.error == null && state.personalError == null && state.info == null &&
         state.pendingAction == null && state.pendingMessage == null && snapshot?.fromCache == false
     val pageScroll = rememberScrollState()
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+    val pageHeight = maxHeight
     Column(
-        modifier = Modifier.fillMaxSize().then(if (fixedChat) Modifier else Modifier.verticalScroll(pageScroll))
-            .imePadding().padding(horizontal = 16.dp, vertical = 12.dp)
+        modifier = Modifier.fillMaxSize().then(if (fixedChat) Modifier else
+            Modifier.verticalScroll(pageScroll).heightIn(min = pageHeight))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
             .testTag("identity-game-host"),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "방으로 돌아가기")
+            }
             Column(Modifier.weight(1f)) {
-                Text("너 누구야?", style = MaterialTheme.typography.titleLarge)
+                Text(if (phase == GamePhase.REVEAL || phase == GamePhase.FINISHED)
+                    "정체 공개·결과" else "너 누구야?", style = MaterialTheme.typography.titleLarge)
                 Text(roomName, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            TextButton(onClick = onBack) { Text("방 관리") }
         }
         if (phase == null) Text("4~10명의 친구와 익명으로 대화한 뒤 정체를 추리합니다.",
             style = MaterialTheme.typography.bodySmall)
@@ -180,10 +195,21 @@ internal fun OnlineIdentityGameHost(
                     }
                 }
             }
-            ContentCard {
-                Text(gamePhaseLabel(phase) + " · 라운드 " + snapshot.session.round,
-                    style = MaterialTheme.typography.titleSmall)
-                remaining?.let { GameDeadlineStatus(it) }
+            if (phase != GamePhase.WAITING && phase != GamePhase.READY &&
+                phase != GamePhase.REVEAL && phase != GamePhase.FINISHED) {
+                Surface(Modifier.fillMaxWidth(), color=MaterialTheme.colorScheme.surfaceVariant,
+                    shape=RoundedCornerShape(8.dp)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                        Text(gamePhaseLabel(phase) + " · 라운드 " + snapshot.session.round,
+                            style = MaterialTheme.typography.titleSmall)
+                        remaining?.let {
+                            Text(gameDeadlineLabel(it), style=MaterialTheme.typography.bodyMedium,
+                                color=if(it in 0L..30L) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+            } else if (phase == GamePhase.WAITING || phase == GamePhase.READY) {
+                remaining?.let { Text(gameDeadlineLabel(it), style=MaterialTheme.typography.bodySmall) }
             }
             if (snapshot.fromCache) {
                 Text("캐시 화면입니다. 서버 동기화를 확인해 주세요.",
@@ -210,6 +236,7 @@ internal fun OnlineIdentityGameHost(
                         }
                     }
                 }
+                Spacer(Modifier.weight(1f))
                 if (!player) {
                     PrimaryAction("게임 참가", onClick = { vm.action("join") },
                         enabled = !state.busy && state.pendingAction == null,
@@ -250,9 +277,11 @@ internal fun OnlineIdentityGameHost(
                     OutlinedTextField(
                         value = state.draft, onValueChange = vm::editMessage,
                         enabled = ownAlias != null && state.pendingMessage == null && !state.sending,
-                        label = { Text("익명 메시지 · 500자 이내") },
+                        placeholder = { Text("익명 메시지를 입력하세요.") },
                         maxLines = 3,
-                        modifier = Modifier.weight(1f).testTag("identity-chat-input")
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f).semantics { contentDescription = "익명 메시지 · 500자 이내" }
+                            .testTag("identity-chat-input")
                     )
                     if (state.pendingMessage == null || state.sending) {
                         FilledIconButton(onClick = vm::sendMessage,
@@ -301,6 +330,7 @@ internal fun OnlineIdentityGameHost(
                         }
                     )
                 }
+                Spacer(Modifier.weight(1f))
                 if (state.hasSubmitted) {
                     Text("추리가 제출됐습니다. 다른 참가자의 제출을 기다리는 중입니다.")
                 } else {
@@ -312,10 +342,18 @@ internal fun OnlineIdentityGameHost(
             }
 
             if (phase == GamePhase.REVEAL || phase == GamePhase.FINISHED) {
-                Text("정체 공개·결과", style = MaterialTheme.typography.titleLarge)
-                ContentCard {
+                Column(Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (phase == GamePhase.FINISHED && !snapshot.fromCache &&
+                        snapshot.publicState["publishedResult"] is String) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null,
+                            modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
                     Text(if (phase == GamePhase.FINISHED) "결과 공개 및 게임 종료" else "정체 공개",
                         style = MaterialTheme.typography.titleMedium)
+                }
+                ContentCard {
                     val result = snapshot.publicState["publishedResult"] as? String
                     if (result == null) {
                         Text("결과를 불러오는 중입니다.")
@@ -337,6 +375,7 @@ internal fun OnlineIdentityGameHost(
                 }
             }
             if (phase == GamePhase.FINISHED) {
+                Spacer(Modifier.weight(1f))
                 PrimaryAction("방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
             }
             if (phase == GamePhase.CANCELLED) Text("게임이 취소됐습니다.")
@@ -350,6 +389,7 @@ internal fun OnlineIdentityGameHost(
                 }
             }
         }
+    }
     }
 }
 
@@ -413,8 +453,13 @@ private fun IdentityGuessRow(
         Text(alias, modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyLarge)
         OutlinedButton(onClick = { expanded = true }, enabled = enabled,
-            modifier = Modifier.heightIn(min = 48.dp).testTag("identity-guess-select-$alias")) {
-            Text(selected?.let { names[it] } ?: "친구 선택")
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("identity-guess-select-$alias")) {
+            Text(selected?.let { names[it] } ?: "친구 선택", Modifier.weight(1f))
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
+        }
+        if (selected != null) {
+            Icon(Icons.Default.Check, contentDescription = "선택 완료", modifier = Modifier.size(20.dp))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             candidates.forEach { candidate ->
