@@ -85,6 +85,21 @@ class InventoryTests(unittest.TestCase):
         self.assertIn("createRoom", report["observed"]["missing_source_functions"])
         self.assertIn("auditSafetyBacklog", report["observed"]["scheduled_functions_missing"])
 
+    def test_required_field_index_is_not_satisfied_by_composite_or_building_index(self):
+        expected = [{"collectionGroup":"messages","fieldPath":"expiresAt",
+                     "indexes":[{"queryScope":"COLLECTION_GROUP","order":"ASCENDING"}]}]
+        cfg = {"messages/expiresAt":{"indexConfig":{"indexes":[
+            {"state":"READY","queryScope":"COLLECTION_GROUP","fields":[{"fieldPath":"expiresAt","order":"ASCENDING"}]}
+        ]}}}
+        self.assertEqual(audit.missing_field_overrides(expected,cfg), [])
+        cfg["messages/expiresAt"]["indexConfig"]["indexes"][0]["state"]="CREATING"
+        self.assertEqual(audit.missing_field_overrides(expected,cfg), ["messages/expiresAt"])
+        self.assertEqual(audit.missing_field_overrides(expected,{}), ["messages/expiresAt"])
+        report = audit.summarize([], [], [], [], "rules", "rules", [], {"name":"db"},
+                                 expected, cfg, {"registration":"unverified"})
+        self.assertFalse(report["resource_inventory_matches_source"])
+        self.assertFalse(report["production_ready"])
+
     def test_no_mutating_cloud_command_or_dangerous_output(self):
         source = SCRIPT.read_text(encoding="utf-8")
         for forbidden in (

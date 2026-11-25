@@ -6,6 +6,15 @@ const {authUid,memberName} = require("./policy");
 
 const AVATARS = new Set(["부엉이","토끼","고양이","강아지","곰","여우","판다","펭귄"]);
 const MAX_ROOMS = 100;
+const LEGACY_AVATARS=new Set(["부엉이","토끼","고양이"]);
+function storedAvatar(avatar){
+  return {avatar:LEGACY_AVATARS.has(avatar)?avatar:"부엉이",avatarV2:avatar};
+}
+function profileAvatar(profile){
+  const modern=profile?.exists?profile.get("avatarV2"):null;
+  const legacy=profile?.exists?profile.get("avatar"):null;
+  return AVATARS.has(modern)?modern:AVATARS.has(legacy)?legacy:"부엉이";
+}
 
 function validateProfile(input) {
   if (!input || typeof input !== "object" || Array.isArray(input) ||
@@ -36,7 +45,7 @@ async function saveMyProfile(db,request) {
   const ref = db.collection("users").doc(uid);
   const deletionRef = db.collection("accountDeletionJobs").doc(uid);
   const indexQuery = db.collection("userRooms").doc(uid)
-    .collection("rooms").limit(MAX_ROOMS + 1);
+    .collection("rooms").where("status","in",["active","pending"]).limit(MAX_ROOMS + 1);
 
   return db.runTransaction(async tx => {
     const [existing,deletion,rooms] = await Promise.all([
@@ -52,11 +61,12 @@ async function saveMyProfile(db,request) {
       .filter(item => ["active","pending"].includes(item.get("status")))
       .map(item => db.collection("rooms").doc(item.id).collection("members").doc(uid));
     const memberships = await Promise.all(memberRefs.map(item => tx.get(item)));
+    const persisted={nickname:values.nickname,...storedAvatar(values.avatar)};
     if (existing.exists) {
-      tx.update(ref,{...values,updatedAt:FieldValue.serverTimestamp()});
+      tx.update(ref,{...persisted,updatedAt:FieldValue.serverTimestamp()});
     } else {
       tx.create(ref,{
-        ...values,createdAt:FieldValue.serverTimestamp(),
+        ...persisted,createdAt:FieldValue.serverTimestamp(),
         updatedAt:FieldValue.serverTimestamp()
       });
     }
@@ -72,4 +82,4 @@ async function saveMyProfile(db,request) {
   });
 }
 
-module.exports={AVATARS,MAX_ROOMS,validateProfile,memberDisplayName,saveMyProfile};
+module.exports={AVATARS,MAX_ROOMS,validateProfile,memberDisplayName,profileAvatar,storedAvatar,saveMyProfile};

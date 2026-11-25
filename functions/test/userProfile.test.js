@@ -2,7 +2,7 @@
 
 const {test}=require("node:test");
 const assert=require("node:assert/strict");
-const {validateProfile,memberDisplayName}=require("../src/userProfile");
+const {validateProfile,memberDisplayName,storedAvatar,profileAvatar}=require("../src/userProfile");
 
 test("nickname is normalized and avatar is restricted",()=>{
   assert.deepEqual(validateProfile({nickname:"  해비  ",avatar:"고양이"}),
@@ -30,4 +30,13 @@ test("all eight profile avatars remain valid while unknown values are rejected",
     assert.equal(validateProfile({nickname:"테스트",avatar}).avatar,avatar);
   }
   assert.throws(()=>validateProfile({nickname:"테스트",avatar:"기타"}));
+});
+
+test("extended avatars preserve a legacy-compatible profile field",()=>{
+ assert.deepEqual(storedAvatar("펭귄"),{avatar:"부엉이",avatarV2:"펭귄"});
+ assert.deepEqual(storedAvatar("토끼"),{avatar:"토끼",avatarV2:"토끼"});
+ const snap=values=>({exists:true,get:key=>values[key]});
+ assert.equal(profileAvatar(snap({avatar:"부엉이",avatarV2:"펭귄"})),"펭귄");
+ assert.equal(profileAvatar(snap({avatar:"여우"})),"여우");
+ assert.equal(profileAvatar(snap({avatar:"알 수 없음"})),"부엉이");
 });

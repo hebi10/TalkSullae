@@ -5,7 +5,7 @@ const {
   ROOM_CAPACITY, PENDING_CAPACITY, INVITE_DURATION_MS,
   roomDraft, roomIdValue, parseJoinCode, authUid
 } = require("./policy");
-const {memberDisplayName} = require("./userProfile");
+const {memberDisplayName,profileAvatar} = require("./userProfile");
 
 const now = () => FieldValue.serverTimestamp();
 const hashToken = value => createHash("sha256").update(value).digest("hex");
@@ -47,7 +47,7 @@ async function createRoom(db, request) {
       memberCount:1,pendingCount:0,activeInviteHash:null,createdAt:now()
     });
     tx.create(memberRef,{displayName:memberDisplayName(profile,request.auth),
-      avatar:profile.exists?profile.get("avatar"):"부엉이",status:"active",joinedAt:now()});
+      avatar:profileAvatar(profile),status:"active",joinedAt:now()});
     tx.create(indexRef,{roomName:draft.name,status:"active",updatedAt:now()});
   });
   return {roomId:roomRef.id};
@@ -133,7 +133,7 @@ async function requestJoin(db, request) {
     }
     const status = pending ? "pending" : "active";
     tx.set(memberRef,{status,displayName:memberDisplayName(profile,request.auth),
-      avatar:profile.exists?profile.get("avatar"):"부엉이",joinedAt:now()});
+      avatar:profileAvatar(profile),joinedAt:now()});
     tx.set(indexRef,{status,roomName:room.data().name,updatedAt:now()});
     tx.update(roomRef,pending
       ? {pendingCount:FieldValue.increment(1)}
