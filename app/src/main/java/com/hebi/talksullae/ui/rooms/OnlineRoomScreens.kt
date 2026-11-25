@@ -1,5 +1,7 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalDensity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -471,21 +473,40 @@ internal fun OnlineRoomsHost(
             }
             HorizontalDivider()
             SectionTitle("초대 코드로 가입")
-            OutlinedTextField(
-                value = joinCode,
-                onValueChange = { joinCode = it },
-                modifier = Modifier.fillMaxWidth().testTag("online-join-code"),
-                label = { Text("방 ID.초대 코드") },
-                supportingText = { Text("방장이 전달한 코드 전체를 붙여넣어 주세요.") },
-                minLines = 2,
-                maxLines = 4
-            )
-            PrimaryAction(
-                "가입 신청",
-                onClick = { vm.previewInvite(joinCode) },
-                modifier = Modifier.fillMaxWidth().testTag("online-join-submit"),
-                enabled = joinCode.trim().isNotBlank() && !state.working
-            )
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val stacked = maxWidth < 320.dp || LocalDensity.current.fontScale > 1.3f
+                val input: @Composable (Modifier) -> Unit = { modifier ->
+                    OutlinedTextField(
+                        value = joinCode,
+                        onValueChange = { joinCode = it },
+                        modifier = modifier.testTag("online-join-code"),
+                        label = { Text("방 ID.초대 코드") },
+                        minLines = 1,
+                        maxLines = 4,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                val submit: @Composable (Modifier) -> Unit = { modifier ->
+                    PrimaryAction("가입 신청", onClick = { vm.previewInvite(joinCode) },
+                        modifier = modifier.testTag("online-join-submit"),
+                        enabled = joinCode.trim().isNotBlank() && !state.working)
+                }
+                if (stacked) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        input(Modifier.fillMaxWidth())
+                        submit(Modifier.fillMaxWidth())
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        input(Modifier.weight(1f))
+                        submit(Modifier)
+                    }
+                }
+            }
+            Text("방장이 전달한 코드 전체를 붙여넣어 주세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             OutlinedButton(
                 onClick = onSignOut,

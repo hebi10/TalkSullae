@@ -8,8 +8,6 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -133,12 +131,14 @@ internal fun OnlineGameCatalog(room: CloudRoom, onResume:(String)->Unit, onOpen:
                     Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(4.dp)) {
                         Text(game.name,style=MaterialTheme.typography.titleMedium)
                         Text(game.rules,style=MaterialTheme.typography.bodyMedium)
-                        Text("${game.players} · ${game.duration}",style=MaterialTheme.typography.bodySmall,
-                            color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                com.hebi.talksullae.design.PrimaryAction("게임 열기", onClick={onOpen(game.id)},
-                    modifier=Modifier.fillMaxWidth().testTag("live-game-${game.id}"))
+                Row(verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("${game.players} · ${game.duration}",Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,
+                        color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    com.hebi.talksullae.design.PrimaryAction("게임 열기", onClick={onOpen(game.id)},
+                        modifier=Modifier.testTag("live-game-${game.id}"))
+                }
             }
         }
     }

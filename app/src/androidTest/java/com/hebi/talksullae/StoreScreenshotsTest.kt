@@ -76,7 +76,7 @@ class StoreScreenshotsTest {
                     chatRepository = SampleChatRepository())
             }
         }
-        compose.onNodeWithText("참여 중인 방").assertIsDisplayed()
+        compose.onNodeWithText("참여 중인 방", substring = true).assertIsDisplayed()
         save("02-rooms")
 
         compose.onNodeWithTag("online-create-toggle").performScrollTo().performClick()

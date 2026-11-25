@@ -1125,7 +1125,7 @@ internal fun ProfileScreen(
         if (actualProfile == null) PreviewNotice()
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("마이", Modifier.weight(1f), style=MaterialTheme.typography.titleLarge)
-            TextButton(onClick=onSettings) { Text("설정") }
+            TextButton(onClick=onSettings, modifier=Modifier.testTag("profile-settings-open")) { Text("설정") }
         }
         ContentCard {
             Row(verticalAlignment = Alignment.CenterVertically,

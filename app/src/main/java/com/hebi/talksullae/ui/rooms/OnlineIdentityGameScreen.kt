@@ -1,9 +1,8 @@
 package com.hebi.talksullae.ui.rooms
 
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
@@ -114,8 +113,10 @@ internal fun OnlineIdentityGameHost(
         selections.keys.containsAll(guessAliases) &&
         selections.values.toSet().size == targets.size
 
+    val density = LocalDensity.current
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val fixedChat = player && phase == GamePhase.PLAYING &&
-        LocalConfiguration.current.screenHeightDp >= 650 && LocalDensity.current.fontScale <= 1.3f &&
+        LocalConfiguration.current.screenHeightDp >= 650 && density.fontScale <= 1.3f && !imeVisible &&
         state.error == null && state.personalError == null && state.info == null &&
         state.pendingAction == null && state.pendingMessage == null && snapshot?.fromCache == false
     val pageScroll = rememberScrollState()
@@ -315,8 +316,23 @@ internal fun OnlineIdentityGameHost(
                 ContentCard {
                     Text(if (phase == GamePhase.FINISHED) "결과 공개 및 게임 종료" else "정체 공개",
                         style = MaterialTheme.typography.titleMedium)
-                    Text(snapshot.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.",
-                        style = MaterialTheme.typography.bodyLarge)
+                    val result = snapshot.publicState["publishedResult"] as? String
+                    if (result == null) {
+                        Text("결과를 불러오는 중입니다.")
+                    } else {
+                        result.lineSequence().filter { it.isNotBlank() }.forEach { line ->
+                            val alias = line.substringBefore(" = ").substringBefore(":").trim()
+                            val recognizedAlias = alias in setOf("고양이", "토끼", "부엉이", "여우", "판다",
+                                "펭귄", "강아지", "곰")
+                            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                if (recognizedAlias) ProfileAvatar(alias, Modifier.size(32.dp))
+                                // Display the original server-published line without calculating or inferring scores.
+                                Text(line, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
                     if (phase == GamePhase.REVEAL) Text("곧 게임이 최종 종료됩니다.")
                 }
             }

@@ -1,12 +1,17 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +28,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -57,7 +61,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.hebi.talksullae.design.PrimaryAction
 import com.hebi.talksullae.design.ProfileAvatar
 import com.hebi.talksullae.firebase.FirestoreRoomChatRepository
 import com.hebi.talksullae.firebase.RoomChatInputPolicy
@@ -234,6 +237,11 @@ internal fun OnlineRoomChatHost(
             ) { CircularProgressIndicator() }
         }
 
+        val reversedMessages = visibleMessages.asReversed()
+        val dayLabels = remember(visibleMessages) {
+            val format = SimpleDateFormat("yyyy.MM.dd (E)", Locale.KOREA)
+            reversedMessages.map { it.createdAtMillis?.let { time -> format.format(Date(time)) } }
+        }
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth().testTag("online-chat-messages"),
             reverseLayout = true,
@@ -257,7 +265,7 @@ internal fun OnlineRoomChatHost(
                     }
                 }
             }
-            items(visibleMessages.asReversed(), key = { it.id }) { message ->
+            itemsIndexed(reversedMessages, key = { _, message -> message.id }) { index, message ->
                 if (message.senderUid in safety.blocked) {
                     Column(Modifier.fillMaxWidth().padding(8.dp)) {
                         Text("차단한 사용자의 메시지입니다.")
@@ -266,27 +274,50 @@ internal fun OnlineRoomChatHost(
                     }
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        RoomChatMessageRow(message, isOwn = message.senderUid == uid)
-                        if (message.senderUid == uid && !message.deleted && repository == null) {
-                            TextButton(onClick = { deleteTarget = message.id },
-                                enabled = state.deletingId == null && !state.fromCache && state.readError == null,
-                                modifier = Modifier.align(Alignment.End).testTag("chat-delete-" + message.id)) { Text("삭제") }
+                        val day = dayLabels[index]
+                        if (day != null && day != dayLabels.getOrNull(index + 1)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                Text(day, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
-                        if (message.senderUid != uid && safetyVm != null && !message.deleted) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(
-                                    onClick = {
-                                        reportTarget = message
-                                        reportCategory = "abuse"
-                                        reportDetails = ""
-                                    },
-                                    modifier = Modifier.testTag("chat-report-" + message.id)
-                                ) { Text("신고") }
-                                TextButton(
-                                    onClick = { safetyVm.setBlocked(message.senderUid,true) },
-                                    enabled = !safety.working,
-                                    modifier = Modifier.testTag("chat-block-" + message.id)
-                                ) { Text("사용자 차단") }
+                        val own = message.senderUid == uid
+                        val canDelete = own && !message.deleted && repository == null
+                        val canModerate = !own && safetyVm != null && !message.deleted
+                        var menuVisible by remember(message.id) { mutableStateOf(false) }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) {
+                                RoomChatMessageRow(message, isOwn = own)
+                            }
+                            if (canDelete || canModerate) {
+                                Box {
+                                    IconButton(onClick = { menuVisible = true },
+                                        modifier = Modifier.size(48.dp).testTag("chat-menu-" + message.id)) {
+                                        Icon(Icons.Default.MoreVert, contentDescription = "메시지 메뉴")
+                                    }
+                                    DropdownMenu(expanded = menuVisible, onDismissRequest = { menuVisible = false }) {
+                                        if (canDelete) DropdownMenuItem(
+                                            text = { Text("삭제") },
+                                            onClick = { menuVisible = false; deleteTarget = message.id },
+                                            enabled = state.deletingId == null && !state.fromCache && state.readError == null,
+                                            modifier = Modifier.testTag("chat-delete-" + message.id))
+                                        if (canModerate) {
+                                            DropdownMenuItem(
+                                                text = { Text("신고") },
+                                                onClick = {
+                                                    menuVisible = false
+                                                    reportTarget = message
+                                                    reportCategory = "abuse"
+                                                    reportDetails = ""
+                                                }, modifier = Modifier.testTag("chat-report-" + message.id))
+                                            DropdownMenuItem(
+                                                text = { Text("사용자 차단") },
+                                                onClick = { menuVisible = false; safetyVm?.setBlocked(message.senderUid, true) },
+                                                enabled = !safety.working,
+                                                modifier = Modifier.testTag("chat-block-" + message.id))
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -465,7 +496,8 @@ private fun RoomChatMessageRow(message: RoomChatMessage, isOwn: Boolean) {
             ProfileAvatar(message.senderAvatar, Modifier.padding(end = 8.dp, top = 4.dp).size(32.dp))
         }
         Column(
-            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(0.84f),
+            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(0.84f)
+                .then(if (isOwn) Modifier.semantics { contentDescription = "내 메시지" } else Modifier),
             horizontalAlignment = if (isOwn) Alignment.End else Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {

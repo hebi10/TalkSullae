@@ -155,7 +155,7 @@ class IdentityGameComposeTest {
         compose.waitUntil(6000) {
             compose.onAllNodesWithTag("identity-ready").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("민지").assertExists()
+        compose.onNodeWithText("민지 (나)").assertExists()
         compose.onNodeWithText("지훈").assertExists()
         compose.onNodeWithTag("identity-ready").performClick()
         compose.waitUntil(6000) { repo.lastAction != null }

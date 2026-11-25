@@ -18,7 +18,7 @@ class DesignNavigationCaptureTest {
         compose.onNodeWithTag("welcome-start").performClick()
         compose.onNodeWithTag("onboarding-continue").performClick()
         compose.onNodeWithTag("main-tab-profile").performClick()
-        compose.onNodeWithText("설정 화면").performScrollTo().performClick()
+        compose.onNodeWithTag("profile-settings-open").performScrollTo().performClick()
         compose.onNodeWithTag("privacy-policy-open").performScrollTo().assertIsDisplayed()
         compose.waitForIdle();DesignCaptureIO.save("D32_settings_demo")
         compose.onNodeWithTag("safety-report-open").performScrollTo().performClick()

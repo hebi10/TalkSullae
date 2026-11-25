@@ -227,7 +227,7 @@
     },
     {
       "name": "D30_career_section",
-      "dataType": "component-fixture"
+      "dataType": "compose-fixture"
     },
     {
       "name": "D31_profile_edit",

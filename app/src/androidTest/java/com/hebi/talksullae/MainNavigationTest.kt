@@ -100,7 +100,7 @@ class MainNavigationTest {
         openDemo()
         composeRule.onNodeWithTag("main-tab-profile").performClick()
         composeRule.onNodeWithContentDescription("프로필 다크 모드 전환").assertExists()
-        composeRule.onNodeWithText("설정 화면").performScrollTo().performClick()
+        composeRule.onNodeWithTag("profile-settings-open").performScrollTo().performClick()
         composeRule.onNodeWithTag("privacy-policy-open").assertExists()
         composeRule.onNodeWithTag("account-deletion-request-open").assertExists()
         composeRule.onNodeWithTag("safety-report-open").assertExists()
@@ -110,7 +110,7 @@ class MainNavigationTest {
     fun safetyReportOpensFromSettingsForGuests() {
         openDemo()
         composeRule.onNodeWithTag("main-tab-profile").performClick()
-        composeRule.onNodeWithText("설정 화면").performScrollTo().performClick()
+        composeRule.onNodeWithTag("profile-settings-open").performScrollTo().performClick()
         composeRule.onNodeWithTag("safety-report-open").performScrollTo().performClick()
         composeRule.onNodeWithTag("safety-report-screen").assertExists()
         composeRule.onNodeWithTag("safety-report-details").performTextInput("기능 확인용 신고입니다.")
