@@ -1,5 +1,15 @@
 package com.hebi.talksullae.ui.rooms
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Balance
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,7 +55,7 @@ internal fun roomInitial(name: String): String = name.trim().take(1).ifEmpty { "
 
 @Composable
 internal fun RoomListAvatar(name: String, icon: String? = null) {
-    Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant),
+    Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
         contentAlignment = Alignment.Center) {
         if (icon == null) Text(roomInitial(name), color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.titleMedium)
@@ -86,14 +96,20 @@ internal fun OnlineRoomWorkspace(
             Column(Modifier.fillMaxSize().testTag("live-room-compact")) {
                 Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=4.dp),
                     horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically) {
+                    IconButton(onClick = onRoomList, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "방 목록")
+                    }
                     RoomListAvatar(room.name,room.roomIcon)
                     Column(Modifier.weight(1f)) {
                         Text(room.name, style=MaterialTheme.typography.titleMedium)
                         Text("참가 ${room.memberCount}/20명", style=MaterialTheme.typography.bodySmall)
                     }
-                    TextButton(onClick=onRoomList, modifier=Modifier.heightIn(min=48.dp)) { Text("방 목록") }
+                    IconButton(onClick={onSection("members")},
+                        modifier=Modifier.size(48.dp).testTag("live-room-tab-members")) {
+                        Icon(Icons.Default.Groups, contentDescription="멤버 관리")
+                    }
                 }
-                Box(Modifier.padding(horizontal=12.dp)) { LiveRoomSectionTabs(section,onSection) }
+                Box(Modifier.padding(horizontal=16.dp)) { LiveRoomSectionTabs(section,onSection,includeMembers=false) }
                 HorizontalDivider()
                 Box(Modifier.weight(1f).fillMaxWidth()) { content() }
             }
@@ -105,16 +121,30 @@ internal fun OnlineRoomWorkspace(
 internal fun OnlineGameCatalog(room: CloudRoom, onResume:(String)->Unit, onOpen:(String)->Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
         .testTag("live-game-list"), verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        Text("어떤 게임을 할까요?", style=MaterialTheme.typography.titleLarge)
-        Text("게임은 방 안에서 진행되며 결과가 시즌 기록에 반영됩니다.")
+        Text("게임 선택", style=MaterialTheme.typography.titleLarge)
+        Text("함께 플레이할 게임을 선택하세요.", style=MaterialTheme.typography.bodySmall,
+            color=MaterialTheme.colorScheme.onSurfaceVariant)
         room.activeGameSessionId?.let { ActiveRoomGameBanner(room.id,it,onResume) }
         onlineGameCatalog.forEach { game ->
             ContentCard(Modifier.testTag("live-game-card-${game.id}")) {
-                Text(game.name,style=MaterialTheme.typography.titleMedium)
-                Text("${game.players} · ${game.duration}",style=MaterialTheme.typography.bodySmall)
-                Text(game.rules,style=MaterialTheme.typography.bodyMedium)
-                OutlinedButton(onClick={onOpen(game.id)},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)
-                    .testTag("live-game-${game.id}")) { Text("게임 열기") }
+                Row(horizontalArrangement=Arrangement.spacedBy(12.dp), verticalAlignment=Alignment.Top) {
+                    Icon(when(game.id) {
+                        "identity" -> Icons.Default.Search
+                        "liar" -> Icons.Default.VisibilityOff
+                        "forbidden" -> Icons.Default.Block
+                        else -> Icons.Default.Balance
+                    }, contentDescription=null, modifier=Modifier.size(32.dp))
+                    Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                        Text(game.name,style=MaterialTheme.typography.titleMedium)
+                        Text(game.rules,style=MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                Row(verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("${game.players} · ${game.duration}",Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,
+                        color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    com.hebi.talksullae.design.PrimaryAction("게임 열기", onClick={onOpen(game.id)},
+                        modifier=Modifier.testTag("live-game-${game.id}"))
+                }
             }
         }
     }

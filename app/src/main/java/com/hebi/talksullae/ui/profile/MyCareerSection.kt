@@ -1,5 +1,10 @@
 package com.hebi.talksullae.ui.profile
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.LinearProgressIndicator
+import com.hebi.talksullae.design.StatStrip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -103,35 +108,26 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
     LaunchedEffect(uid) { vm.load(uid) }
     DisposableEffect(vm,uid) { onDispose { vm.clear() } }
 
-    ContentCard(modifier = Modifier.testTag("my-career-summary")) {
-        Text("나의 누적 전적", style = MaterialTheme.typography.titleMedium)
+    Column(modifier = Modifier.fillMaxWidth().testTag("my-career-summary"),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (state.loading) CircularProgressIndicator()
         state.value?.let { career ->
-            Text(if(career.retainedScope) "탈퇴·종료된 방을 포함하여 서버에 보존된 본인 전적만 집계합니다."
-                else "현재 참여 중인 방의 전적만 집계합니다.",style=MaterialTheme.typography.bodySmall)
             if(career.nextCursor == null) {
                 val progress = careerProgress(career.totalGames)
                 Text("Lv. " + progress.level + " · " + progress.title, style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.testTag("career-level"))
+                LinearProgressIndicator(progress = { (progress.xp % 100L) / 100f },
+                    modifier=Modifier.fillMaxWidth().height(8.dp),
+                    color=MaterialTheme.colorScheme.primary, trackColor=MaterialTheme.colorScheme.surfaceVariant)
                 Text("경험치 " + progress.xp + " XP · 다음 레벨까지 " + (100L - progress.xp % 100L) + " XP",
-                    style = MaterialTheme.typography.bodySmall)
-                Text("완료 경기 1회당 10 XP. 서버에 보존된 전적 기준이며 승패나 게임 권한에 영향을 주지 않습니다.",
                     style = MaterialTheme.typography.bodySmall)
             } else {
                 Text("아직 모든 기록을 조회하지 않았습니다. 전체 전적과 레벨은 추가 조회 후 확인할 수 있습니다.",
                     style=MaterialTheme.typography.bodySmall)
             }
-            Text("참여 중인 방 " + career.roomCount + "개 · 조회한 기록 방 " + career.recordedRoomCount + "개")
-            Text("누적 경기 " + career.totalGames + "회")
-            Text("승리 " + career.totalWins + "회 · 최고 연승 " + career.bestStreak + "회")
-            Text("획득한 시즌점 " + career.totalSeasonPoints + "점")
-            if (career.achievements.isNotEmpty()) {
-                Text("업적 " + career.achievements.size + "개")
-                val labels = mapOf("first_game" to "첫 게임 완료", "games_10" to "10경기 참가",
-                    "wins_5" to "5승 달성", "streak_3" to "3연승", "streak_5" to "5연승",
-                    "liar_wins_5" to "라이어 5승", "identity_wins_10" to "정체 추리 10승")
-                career.achievements.mapNotNull { labels[it] }.forEach { Text(it) }
-            }
+            StatStrip(listOf(career.totalGames.toString() to "누적 경기",
+                career.totalWins.toString() to "승리", career.bestStreak.toString() to "최고 연승"))
+            Text("게임별 승률",style=MaterialTheme.typography.titleMedium)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf(
                     "identity" to "너 누구야?", "liar" to "라이어",
@@ -141,9 +137,28 @@ internal fun MyCareerSection(uid: String, repository: CareerRepository? = null) 
                     val plays = game?.plays ?: 0L
                     val wins = game?.wins ?: 0L
                     val rate = if (plays == 0L) "기록 없음" else "${((wins.toDouble() / plays) * 100).toInt().coerceIn(0,100)}% 승률"
-                    Text("$label · ${plays}경기 · ${wins}승 · $rate")
+                    Row(Modifier.fillMaxWidth().padding(vertical=4.dp), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Text(label, Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium)
+                        Text("${plays}경기 · ${wins}승 · $rate",style=MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
+            ContentCard {
+                Text("획득한 시즌점 " + career.totalSeasonPoints + "점")
+                if (career.achievements.isNotEmpty()) {
+                    Text("획득 업적 " + career.achievements.size + "개", style=MaterialTheme.typography.titleMedium)
+                    val labels = mapOf("first_game" to "첫 게임 완료", "games_10" to "10경기 참가",
+                        "wins_5" to "5승 달성", "streak_3" to "3연승", "streak_5" to "5연승",
+                        "liar_wins_5" to "라이어 5승", "identity_wins_10" to "정체 추리 10승")
+                    career.achievements.mapNotNull { labels[it] }.forEach { Text(it) }
+                }
+            }
+            Text("참여 중인 방 " + career.roomCount + "개 · 조회한 기록 방 " + career.recordedRoomCount + "개",
+                style=MaterialTheme.typography.bodySmall)
+            Text(if(career.retainedScope) "탈퇴·종료된 방을 포함하여 서버에 보존된 본인 전적만 집계합니다."
+                else "현재 참여 중인 방의 전적만 집계합니다.", style=MaterialTheme.typography.bodySmall)
+            if(career.nextCursor == null) Text("완료 경기 1회당 10 XP. 서버에 보존된 전적 기준이며 승패나 게임 권한에 영향을 주지 않습니다.",
+                style=MaterialTheme.typography.bodySmall)
         }
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if(state.value?.nextCursor != null) {

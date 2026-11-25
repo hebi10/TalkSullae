@@ -1,5 +1,6 @@
 package com.hebi.talksullae
 
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -36,7 +37,7 @@ class RoomRecordsComposeTest {
                 RoomRecordsContent("친구방",sample(),
                     mapOf("owner" to "민지","friend" to "지훈"),
                     onPrevious={},onNext={},canPrevious=true,
-                    canNext=false,onBack={}
+                    canNext=false,onBack={},ownUid="owner"
                 )
             }
         }
@@ -44,8 +45,11 @@ class RoomRecordsComposeTest {
         compose.onNodeWithText("경기 3회 · 승리 2회 · 최고 연승 2회").assertExists()
         compose.onNodeWithText("첫 게임 완료").assertExists()
         compose.onNodeWithText("5승 달성").assertExists()
-        compose.onNodeWithText("1위 · 민지").assertExists()
-        compose.onNodeWithText("2위 · 지훈").assertExists()
+        compose.onNodeWithTag("records-rank-owner").assertTextEquals("1위")
+        compose.onNodeWithTag("records-name-owner").assertTextEquals("민지")
+        compose.onNodeWithTag("records-rank-friend").assertTextEquals("2위")
+        compose.onNodeWithTag("records-name-friend").assertTextEquals("지훈")
+        compose.onNodeWithTag("records-my-season-points").assertTextEquals("225점")
     }
     @Test fun previousSeasonControlInvokesOnlyNavigationCallback(){
         var previous=0
@@ -86,6 +90,7 @@ class RoomRecordsComposeTest {
         }
         compose.onNodeWithTag("season-final").performScrollTo().assertExists()
         compose.onNodeWithText("우승 점수 225점 · 우승자 1명").assertExists()
+        compose.onNodeWithTag("records-name-friend").assertTextEquals("보존 순위 1위 · 지훈")
         compose.onNodeWithText("우승 · 지훈").assertDoesNotExist()
     }
 }

@@ -1,5 +1,18 @@
 package com.hebi.talksullae.ui.rooms
 
+import com.hebi.talksullae.design.ChatBubbleWithTime
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +29,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -50,7 +62,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.hebi.talksullae.design.PrimaryAction
 import com.hebi.talksullae.design.ProfileAvatar
 import com.hebi.talksullae.firebase.FirestoreRoomChatRepository
 import com.hebi.talksullae.firebase.RoomChatInputPolicy
@@ -227,6 +238,11 @@ internal fun OnlineRoomChatHost(
             ) { CircularProgressIndicator() }
         }
 
+        val reversedMessages = visibleMessages.asReversed()
+        val dayLabels = remember(visibleMessages) {
+            val format = SimpleDateFormat("yyyy.MM.dd (E)", Locale.KOREA)
+            reversedMessages.map { it.createdAtMillis?.let { time -> format.format(Date(time)) } }
+        }
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth().testTag("online-chat-messages"),
             reverseLayout = true,
@@ -250,7 +266,7 @@ internal fun OnlineRoomChatHost(
                     }
                 }
             }
-            items(visibleMessages.asReversed(), key = { it.id }) { message ->
+            itemsIndexed(reversedMessages, key = { _, message -> message.id }) { index, message ->
                 if (message.senderUid in safety.blocked) {
                     Column(Modifier.fillMaxWidth().padding(8.dp)) {
                         Text("차단한 사용자의 메시지입니다.")
@@ -259,27 +275,50 @@ internal fun OnlineRoomChatHost(
                     }
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        RoomChatMessageRow(message, isOwn = message.senderUid == uid)
-                        if (message.senderUid == uid && !message.deleted && repository == null) {
-                            TextButton(onClick = { deleteTarget = message.id },
-                                enabled = state.deletingId == null && !state.fromCache && state.readError == null,
-                                modifier = Modifier.align(Alignment.End).testTag("chat-delete-" + message.id)) { Text("삭제") }
+                        val day = dayLabels[index]
+                        if (day != null && day != dayLabels.getOrNull(index + 1)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                Text(day, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
-                        if (message.senderUid != uid && safetyVm != null && !message.deleted) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(
-                                    onClick = {
-                                        reportTarget = message
-                                        reportCategory = "abuse"
-                                        reportDetails = ""
-                                    },
-                                    modifier = Modifier.testTag("chat-report-" + message.id)
-                                ) { Text("신고") }
-                                TextButton(
-                                    onClick = { safetyVm.setBlocked(message.senderUid,true) },
-                                    enabled = !safety.working,
-                                    modifier = Modifier.testTag("chat-block-" + message.id)
-                                ) { Text("사용자 차단") }
+                        val own = message.senderUid == uid
+                        val canDelete = own && !message.deleted && repository == null
+                        val canModerate = !own && safetyVm != null && !message.deleted
+                        var menuVisible by remember(message.id) { mutableStateOf(false) }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) {
+                                RoomChatMessageRow(message, isOwn = own)
+                            }
+                            if (canDelete || canModerate) {
+                                Box {
+                                    IconButton(onClick = { menuVisible = true },
+                                        modifier = Modifier.size(48.dp).testTag("chat-menu-" + message.id)) {
+                                        Icon(Icons.Default.MoreVert, contentDescription = "메시지 메뉴")
+                                    }
+                                    DropdownMenu(expanded = menuVisible, onDismissRequest = { menuVisible = false }) {
+                                        if (canDelete) DropdownMenuItem(
+                                            text = { Text("삭제") },
+                                            onClick = { menuVisible = false; deleteTarget = message.id },
+                                            enabled = state.deletingId == null && !state.fromCache && state.readError == null,
+                                            modifier = Modifier.testTag("chat-delete-" + message.id))
+                                        if (canModerate) {
+                                            DropdownMenuItem(
+                                                text = { Text("신고") },
+                                                onClick = {
+                                                    menuVisible = false
+                                                    reportTarget = message
+                                                    reportCategory = "abuse"
+                                                    reportDetails = ""
+                                                }, modifier = Modifier.testTag("chat-report-" + message.id))
+                                            DropdownMenuItem(
+                                                text = { Text("사용자 차단") },
+                                                onClick = { menuVisible = false; safetyVm?.setBlocked(message.senderUid, true) },
+                                                enabled = !safety.working,
+                                                modifier = Modifier.testTag("chat-block-" + message.id))
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -334,17 +373,39 @@ internal fun OnlineRoomChatHost(
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        OutlinedTextField(
-            value = state.draft,
-            onValueChange = vm::updateDraft,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
-                .testTag("online-chat-input"),
-            label = { Text("메시지") },
-            maxLines = 5,
-            enabled = true,
-            supportingText = { Text("${RoomChatInputPolicy.normalize(state.draft).length}/1000자") },
-            shape = RoundedCornerShape(8.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = state.draft,
+                onValueChange = vm::updateDraft,
+                modifier = Modifier.weight(1f).semantics { contentDescription = "메시지 입력" }.testTag("online-chat-input"),
+                placeholder = { Text("메시지를 입력하세요.") },
+                maxLines = 5,
+                enabled = true,
+                shape = RoundedCornerShape(8.dp)
+            )
+            if (state.pending == null || state.sending) {
+                FilledIconButton(
+                    onClick = vm::send,
+                    enabled = !state.sending && !state.initialLoading &&
+                        !state.fromCache && state.readError == null && state.pending == null &&
+                        RoomChatInputPolicy.error(state.draft) == null,
+                    modifier = Modifier.size(48.dp).testTag("online-chat-send"),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary)
+                ) { Icon(Icons.Default.Send, contentDescription = if (state.sending) "메시지 전송 중…" else "전송") }
+            }
+        }
+        if (state.draft.isNotEmpty()) {
+            Text("${RoomChatInputPolicy.normalize(state.draft).length}/1000자",
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (state.pending != null && !state.sending) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -358,16 +419,6 @@ internal fun OnlineRoomChatHost(
                     Text("입력 다시 작성")
                 }
             }
-        } else {
-            PrimaryAction(
-                label = if (state.sending) "메시지 전송 중…" else "전송",
-                onClick = vm::send,
-                enabled = !state.sending && !state.initialLoading &&
-                    !state.fromCache && state.readError == null && state.pending == null &&
-                    RoomChatInputPolicy.error(state.draft) == null,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-                    .testTag("online-chat-send")
-            )
         }
         }
     }
@@ -442,24 +493,17 @@ private fun RoomChatMessageRow(message: RoomChatMessage, isOwn: Boolean) {
         verticalAlignment = Alignment.Top
     ) {
         if (!isOwn) {
-            ProfileAvatar(message.senderAvatar, Modifier.padding(end = 8.dp, top = 8.dp).size(28.dp))
+            ProfileAvatar(message.senderAvatar, Modifier.padding(end = 8.dp, top = 4.dp).size(32.dp))
         }
-        Surface(
-            color = if (isOwn) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(if (isOwn) 0.88f else 0.94f)
+        Column(
+            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(0.84f)
+                .then(if (isOwn) Modifier.semantics { contentDescription = "내 메시지" } else Modifier),
+            horizontalAlignment = if (isOwn) Alignment.End else Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    "${if (isOwn) "나" else message.senderName} · $displayTime",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(message.text, style = MaterialTheme.typography.bodyMedium)
-            }
+            if (!isOwn) Text(message.senderName, style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface)
+            ChatBubbleWithTime(message.text, displayTime, isOwn)
         }
     }
 }

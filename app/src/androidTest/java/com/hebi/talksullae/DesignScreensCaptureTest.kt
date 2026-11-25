@@ -1,16 +1,16 @@
 package com.hebi.talksullae
 
+import androidx.compose.ui.test.performTextInput
+import com.hebi.talksullae.ui.MainNavigation
+import com.hebi.talksullae.ui.ProfileScreen
 import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -33,7 +33,6 @@ import com.hebi.talksullae.firebase.*
 import com.hebi.talksullae.game.core.*
 import com.hebi.talksullae.game.online.*
 import com.hebi.talksullae.ui.entry.*
-import com.hebi.talksullae.ui.profile.MyCareerSection
 import com.hebi.talksullae.ui.rooms.*
 import java.security.MessageDigest
 import org.junit.Before
@@ -66,10 +65,12 @@ class DesignScreensCaptureTest {
             )
         }
     }
-    private fun mount(title:String,content:@Composable ()->Unit) {
+    private fun mount(title:String,mainTab:String?=null,content:@Composable ()->Unit) {
         compose.setContent {
             TalkSullaeTheme(darkTheme=dark) {
-                Scaffold(topBar={AppTopBar(title,onBack={})}) { padding ->
+                Scaffold(containerColor=androidx.compose.material3.MaterialTheme.colorScheme.background,
+                    topBar={if(title.isNotBlank())AppTopBar(title,onBack={})},
+                    bottomBar={mainTab?.let { MainNavigation(it,{}) }}) { padding ->
                     Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { content() }
                 }
             }
@@ -84,7 +85,7 @@ class DesignScreensCaptureTest {
         return compose.onNodeWithText(value)
     }
     private fun capture(name:String,anchor:SemanticsNodeInteraction,scroll:Boolean=false) {
-        if(scroll) anchor.performScrollTo()
+        if(scroll && runCatching { anchor.assertIsDisplayed() }.isFailure) anchor.performScrollTo()
         anchor.assertIsDisplayed()
         compose.waitForIdle()
         DesignCaptureIO.save(name)
@@ -133,11 +134,12 @@ class DesignScreensCaptureTest {
         override suspend fun sendMessage(roomId:String,requestId:String,text:String):String=error("capture only")
         override suspend fun markRead(roomId:String,messageId:String)=true
     }
-    private fun mountRooms(pending:Boolean=false,invite:Boolean=false) {
+    private fun mountRooms(pending:Boolean=false,invite:Boolean=false,showMainNav:Boolean=false) {
         val repo=Rooms(pending)
-        mount("톡술래") {
+        mount(if(showMainNav)"" else "톡술래",mainTab=if(showMainNav)"rooms" else null) {
             OnlineRoomsHost("owner","민지",{},{},repo,chatRepository=Chat(),
-                incomingInviteCode=if(invite)code else null,incomingInviteDeliveryId=if(invite)1L else 0L)
+                incomingInviteCode=if(invite)code else null,incomingInviteDeliveryId=if(invite)1L else 0L,
+                showClose=!showMainNav)
         }
     }
     private fun enterManagement() {
@@ -169,7 +171,7 @@ class DesignScreensCaptureTest {
         capture("D04_profile_setup_bottom",tag("profile-save"),true)
     }
     @Test fun d05Rooms(){
-        mountRooms()
+        mountRooms(showMainNav=true)
         capture("D05_rooms",tag("online-room-"+roomId),true)
     }
     @Test fun d06Create(){
@@ -188,7 +190,7 @@ class DesignScreensCaptureTest {
     }
     @Test fun d09Chat(){
         val chat=Chat()
-        mount("톡술래"){
+        mount(""){
             OnlineRoomWorkspace(room,"chat",{},{}) {
                 OnlineRoomChatHost("owner",roomId,room.name,{},chat,showHeader=false)
             }
@@ -197,7 +199,7 @@ class DesignScreensCaptureTest {
     }
     @Test fun d09CacheHidden(){
         val chat=Chat(true)
-        mount("톡술래"){
+        mount(""){
             OnlineRoomWorkspace(room,"chat",{},{}) {
                 OnlineRoomChatHost("owner",roomId,room.name,{},chat,showHeader=false)
             }
@@ -227,7 +229,7 @@ class DesignScreensCaptureTest {
         capture("D12_room_icon",tag("room-icon-고양이"),true)
     }
     @Test fun d13Catalog(){
-        mount("톡술래"){
+        mount(""){
             OnlineRoomWorkspace(room,"games",{},{}){OnlineGameCatalog(room,{},{})}
         }
         capture("D13_catalog",tag("live-game-card-identity"),true)
@@ -268,8 +270,10 @@ class DesignScreensCaptureTest {
         }
         override fun watchIdentityMessages(roomId:String,sessionId:String,onPage:(IdentityChatPage)->Unit,onError:(String)->Unit):ListenerRegistration {
             val now=System.currentTimeMillis()
-            onPage(IdentityChatPage(listOf(IdentityChatMessage("one","토끼","나는 계획보다 즉흥 여행이 좋아.",now-60000),
-                IdentityChatMessage("two","부엉이","혹시 내가 누군지 알겠어?",now-30000)),null,false))
+            onPage(IdentityChatPage(listOf(IdentityChatMessage("one","토끼","나는 즉흥 여행이 좋아.",now-90000),
+                IdentityChatMessage("two","부엉이","계획이 있어야 편하지!",now-60000),
+                IdentityChatMessage("three","여우","나는 둘 다 괜찮아.",now-30000),
+                IdentityChatMessage("four","고양이","나는 미리 계획하는 게 좋아!",now-15000)),null,false))
             return ListenerRegistration {}
         }
         override fun watchLiarMessages(roomId:String,sessionId:String,onPage:(LiarChatPage)->Unit,onError:(String)->Unit):ListenerRegistration {
@@ -294,7 +298,7 @@ class DesignScreensCaptureTest {
     }
     private fun mountGame(id:String,phase:GamePhase,role:String="citizen",guess:Boolean=false,eliminated:Boolean=false,submitted:Boolean=false){
         val repo=Game(id,phase,role,guess,eliminated,submitted)
-        mount("톡술래"){
+        mount(if(id=="identity")"" else "톡술래"){
             when(id){
                 "identity"->OnlineIdentityGameHost("owner",roomId,room.name,"owner",people,{},repo)
                 "liar"->OnlineLiarGameHost("owner",roomId,room.name,"owner",people,{},repo)
@@ -304,8 +308,23 @@ class DesignScreensCaptureTest {
         }
     }
     @Test fun d14Lobby(){mountGame("identity",GamePhase.WAITING);capture("D14_lobby",tag("identity-ready"),true)}
-    @Test fun d15IdentityChat(){mountGame("identity",GamePhase.PLAYING);capture("D15_identity_chat",label("내 동물 별칭: 고양이"),true);capture("D15_identity_input",tag("identity-chat-input"),true)}
-    @Test fun d16IdentityGuess(){mountGame("identity",GamePhase.VOTING);capture("D16_identity_guess",tag("identity-guess-select-토끼"),true);capture("D16_identity_guess_bottom",tag("identity-guess-send"),true)}
+    @Test fun d15IdentityChat(){
+        mountGame("identity",GamePhase.PLAYING)
+        capture("D15_identity_chat",label("내 동물 별칭: 고양이"),true)
+        tag("identity-chat-input").performClick().performTextInput("나는 미리 계획하는 게 좋아!")
+        capture("D15_identity_input",tag("identity-chat-input"),true)
+    }
+    @Test fun d16IdentityGuess(){
+        mountGame("identity",GamePhase.VOTING)
+        tag("identity-guess-select-토끼").performScrollTo().performClick()
+        tag("identity-guess-option-토끼-friend1").performClick()
+        tag("identity-guess-select-부엉이").performScrollTo().performClick()
+        tag("identity-guess-option-부엉이-friend2").performClick()
+        tag("identity-guess-select-여우").performScrollTo().performClick()
+        tag("identity-guess-option-여우-friend3").performClick()
+        capture("D16_identity_guess",tag("identity-guess-select-토끼"),true)
+        capture("D16_identity_guess_bottom",tag("identity-guess-send"),true)
+    }
     @Test fun d17IdentityResult(){mountGame("identity",GamePhase.FINISHED);capture("D17_identity_result",label("정체 공개·결과"),true)}
     @Test fun d18Liar(){mountGame("liar",GamePhase.PLAYING,role="liar");capture("D18_liar_secret",tag("liar-secret-role"),true)}
     @Test fun d18Citizen(){mountGame("liar",GamePhase.PLAYING);capture("D18_citizen_secret",tag("liar-secret-role"),true);capture("D18_liar_input",tag("liar-chat-input"),true)}
@@ -325,10 +344,11 @@ class DesignScreensCaptureTest {
         recentGames=listOf(RecentGameRecord("identity",110,true,"2026-11"),RecentGameRecord("liar",85,false,"2026-11")),
         events=listOf(RoomRecordEvent("identity","2026-11",4),RoomRecordEvent("balance","2026-11",4)),loading=false)
     private fun mountRecords(state:RoomRecordsState){
-        mount("톡술래"){
+        mount(""){
             OnlineRoomWorkspace(room,"records",{},{}) {
                 RoomRecordsContent(room.name,state,people.associate{it.uid to it.name},
-                    {},{},true,false,{},people.filter{it.uid!="owner"}.associate{it.uid to it.name},{})
+                    {},{},true,false,{},people.filter{it.uid!="owner"}.associate{it.uid to it.name},{},
+                    avatars=people.associate{it.uid to it.avatar}, showHeader=false, ownUid="owner")
             }
         }
     }
@@ -339,7 +359,13 @@ class DesignScreensCaptureTest {
     private val pair=FriendComparison(12,5,4,3,mapOf("identity" to 4L,"liar" to 3L,"forbidden" to 2L,"balance" to 3L),4,3,4,2,3,2)
     @Test fun d29Friend(){
         val detail=mutableStateOf(false)
-        mount("친구 전적"){FriendRecordsDialog("지훈",FriendRecords(20,12,3,1200,gameStats,listOf("first_game","wins_5"),pair,20,false,comparisonLoaded=detail.value),false,null,{},{},{detail.value=true})}
+        mount(""){
+            OnlineRoomWorkspace(room,"records",{},{}) {
+                RoomRecordsContent(room.name,records,people.associate{it.uid to it.name},
+                    {},{},true,false,{},avatars=people.associate{it.uid to it.avatar}, showHeader=false, ownUid="owner")
+            }
+            FriendRecordsDialog("지훈",FriendRecords(20,12,3,1200,gameStats,listOf("first_game","wins_5"),pair,20,false,comparisonLoaded=detail.value),false,null,{},{},{detail.value=true},avatar="토끼")
+        }
         capture("D29_friend_summary",tag("friend-records-dialog"))
         tag("friend-load-comparison").performScrollTo().performClick()
         capture("D29_friend_comparison",tag("friend-shared-games"),true)
@@ -349,7 +375,10 @@ class DesignScreensCaptureTest {
         val value=MyCareer(3,28,16,1600,4,listOf("first_game","games_10","wins_5"),
             listOf("identity","liar","forbidden","balance").associateWith{CareerGame(7,4)},5,true,null)
         val repo=object:CareerRepository{override suspend fun getMyCareer()=value}
-        mount("내 프로필"){Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())){MyCareerSection("owner",repo)}}
+        mount("",mainTab="profile"){
+            ProfileScreen(true,{},{},"민지",actualProfile=UserProfile("민지","고양이"),
+                actualUid="owner",onEditProfile={},careerRepository=repo)
+        }
         capture("D30_career_section",tag("career-level"),true)
     }
     @Test fun d31ProfileEdit(){
