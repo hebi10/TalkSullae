@@ -59,11 +59,7 @@ jobs:
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            if [ "$STORE_CAPTURE" = true ]; then
-              python3 scripts/qa/export_play_store_captures.py store-captures
-            else
-              python3 scripts/qa/export_design_captures.py --expected-sha "$EXPECTED" --profile phone --theme dark --font-scale 1.0 --output design-captures
-            fi
+            if [ "$STORE_CAPTURE" = true ]; then python3 scripts/qa/export_play_store_captures.py store-captures; else python3 scripts/qa/export_design_captures.py --expected-sha "$EXPECTED" --profile phone --theme dark --font-scale 1.0 --output design-captures; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
