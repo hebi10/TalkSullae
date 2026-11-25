@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ListenerRegistration
 import com.hebi.talksullae.game.core.GamePhase
+import com.hebi.talksullae.firebase.unexpiredMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -104,10 +105,16 @@ internal class LiarGameViewModel(private val repository: OnlineGameSessionReposi
                 }else bind(room,active)
             }catch(e: Exception){
                 if(generation == sessionGeneration && roomId == room){
-                    mutable.update { it.copy(loading = false, error = e.localizedMessage ?: "게임 조회에 실패했습니다.") }
+                    invalidateAccess(e.localizedMessage ?: "게임 조회에 실패했습니다.")
                 }
             }
         }
+    }
+
+    private fun invalidateAccess(message: String) {
+        sessionGeneration++
+        unbind()
+        mutable.value = LiarGameState(loading = false, error = message)
     }
 
     private fun unbind() {
@@ -138,8 +145,9 @@ internal class LiarGameViewModel(private val repository: OnlineGameSessionReposi
         sessionListener = repository.watchSession(room,id, { snapshot ->
             if(generation != sessionGeneration || sessionId != id) return@watchSession
             if(snapshot == null){
-                unbind()
-                mutable.update { it.copy(loading = false, error = "게임 세션이 없어졌습니다.") }
+                invalidateAccess("게임 세션이 없어졌습니다.")
+            }else if(snapshot.fromCache){
+                invalidateAccess("서버에서 게임 접근 권한을 확인할 수 없습니다.")
             }else{
                 if(snapshot.session.gameId != "liar"){
                     mutable.update { it.copy(
@@ -175,8 +183,7 @@ internal class LiarGameViewModel(private val repository: OnlineGameSessionReposi
             }
         }, { error ->
             if(generation == sessionGeneration && sessionId == id){
-                unbind()
-                mutable.update { it.copy(loading = false, error = error) }
+                invalidateAccess(error)
             }
         })
     }
@@ -243,7 +250,7 @@ internal class LiarGameViewModel(private val repository: OnlineGameSessionReposi
     }
 
     private fun mergeMessages(): List<LiarChatMessage> =
-        (older + recent).associateBy { it.id }.values.sortedWith(
+        (older + recent).associateBy { it.id }.values.filter { unexpiredMessage(it.expiresAtMillis) }.sortedWith(
             compareBy<LiarChatMessage> { it.createdAtMillis ?: Long.MAX_VALUE }
                 .thenBy { it.id }
         )
@@ -263,9 +270,7 @@ internal class LiarGameViewModel(private val repository: OnlineGameSessionReposi
             ) }
         }, { message ->
             if(generation == sessionGeneration && sessionId == id){
-                recent = emptyList()
-                older = emptyList()
-                mutable.update { it.copy(messages = emptyList(), error = message) }
+                invalidateAccess(message)
             }
         })
     }

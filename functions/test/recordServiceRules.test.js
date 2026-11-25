@@ -106,6 +106,20 @@ test("pending, outsider, unauthenticated and archived room users cannot see rank
  await assertFails(getDocs(query(collection(member,"rooms",roomId,"playerStats","owner","games"),limit(30))));
  await assertFails(getDocs(query(collection(member,"rooms",roomId,"seasons"),limit(24))));
  await assertFails(getDocs(query(collection(member,"rooms",roomId,"recordEvents"),limit(20))));
+ await assertFails(getDoc(doc(member,"rooms",roomId)));
+ await assertFails(getDocs(collection(member,"rooms",roomId,"members")));
  await assertFails(getDocs(query(collection(member,"rooms",roomId,
    "seasons",seasonId,"scores"),limit(20))));
+});
+
+test("a queued deletion immediately revokes room, member list and record access",async()=>{
+ const owner=env.authenticatedContext("owner").firestore();
+ await assertSucceeds(getDoc(doc(owner,"rooms",roomId)));
+ await env.withSecurityRulesDisabled(async c=>{
+   await setDoc(doc(c.firestore(),"accountDeletionJobs","owner"),{status:"queued"});
+ });
+ await assertFails(getDoc(doc(owner,"rooms",roomId)));
+ await assertFails(getDocs(collection(owner,"rooms",roomId,"members")));
+ await assertFails(getDoc(doc(owner,"rooms",roomId,"playerStats","owner")));
+ await assertFails(getDocs(query(collection(owner,"rooms",roomId,"recordEvents"),limit(20))));
 });

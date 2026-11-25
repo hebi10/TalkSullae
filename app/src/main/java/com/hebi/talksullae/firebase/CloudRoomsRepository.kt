@@ -2,6 +2,8 @@ package com.hebi.talksullae.firebase
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.MetadataChanges
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
@@ -77,14 +79,24 @@ internal interface OnlineRoomsRepository {
 
 internal class CloudRoomsRepository(
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
-    private val callables: FirebaseFunctions = FirebaseFunctions.getInstance("asia-northeast3")
+    private val callables: FirebaseFunctions = FirebaseFunctions.getInstance("asia-northeast3"),
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) : OnlineRoomsRepository {
-    override fun watchMyRooms(uid: String, onResult: (List<CloudRoomIndex>) -> Unit, onError: (String) -> Unit): ListenerRegistration =
-        db.collection("userRooms").document(uid).collection("rooms")
-            .addSnapshotListener { snapshot, error ->
+    override fun watchMyRooms(uid: String, onResult: (List<CloudRoomIndex>) -> Unit, onError: (String) -> Unit): ListenerRegistration {
+        val gate = ServerSnapshotGate(reportInitialCache = true)
+        return db.collection("userRooms").document(uid).collection("rooms")
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                 if (error != null) {
                     onError("방 목록을 가져올 수 없습니다.")
                 } else if (snapshot != null) {
+                    when (gate.evaluate(snapshot.metadata.isFromCache, auth.currentUser?.uid == uid)) {
+                        SnapshotAccess.WAIT -> return@addSnapshotListener
+                        SnapshotAccess.HIDE -> {
+                            onError("서버에서 방 접근 권한을 확인할 수 없습니다. 연결을 확인해 주세요.")
+                            return@addSnapshotListener
+                        }
+                        SnapshotAccess.ACCEPT -> Unit
+                    }
                     onResult(snapshot.documents.map {
                         CloudRoomIndex(
                             id = it.id,
@@ -97,12 +109,27 @@ internal class CloudRoomsRepository(
                     }.sortedByDescending { maxOf(it.updatedAtMillis, it.lastChatAtMillis ?: 0L) })
                 }
             }
+    }
 
-    override fun watchRoom(roomId: String, onResult: (CloudRoom?) -> Unit, onError: (String) -> Unit): ListenerRegistration =
-        db.collection("rooms").document(roomId).addSnapshotListener { doc, error ->
+    override fun watchRoom(roomId: String, onResult: (CloudRoom?) -> Unit, onError: (String) -> Unit): ListenerRegistration {
+        val uid = auth.currentUser?.uid
+        val gate = ServerSnapshotGate()
+        return db.collection("rooms").document(roomId).addSnapshotListener(MetadataChanges.INCLUDE) { doc, error ->
             if (error != null) onError("방 정보를 확인할 수 없습니다.")
-            else if (doc == null || !doc.exists()) onResult(null)
-            else onResult(
+            else if (doc != null) {
+                when (gate.evaluate(doc.metadata.isFromCache, uid != null && uid == auth.currentUser?.uid)) {
+                    SnapshotAccess.WAIT -> return@addSnapshotListener
+                    SnapshotAccess.HIDE -> {
+                        onError("방 접근 권한을 서버에서 확인하지 못했습니다.")
+                        return@addSnapshotListener
+                    }
+                    SnapshotAccess.ACCEPT -> Unit
+                }
+                if (!doc.exists() || doc.getString("status") != "active") {
+                    onError("현재 접근할 수 없는 방입니다.")
+                    return@addSnapshotListener
+                }
+                onResult(
                 CloudRoom(
                     id = doc.id,
                     name = doc.getString("name").orEmpty(),
@@ -116,22 +143,42 @@ internal class CloudRoomsRepository(
                     activeInviteExpiresAtMillis = doc.getTimestamp("activeInviteExpiresAt")?.toDate()?.time,
                     roomRevision = doc.getLong("roomRevision") ?: 0L
                 )
-            )
+                )
+            }
         }
+    }
 
-    override fun watchMembers(roomId: String, onResult: (List<CloudMember>) -> Unit, onError: (String) -> Unit): ListenerRegistration =
-        db.collection("rooms").document(roomId).collection("members")
-            .addSnapshotListener { snapshot, error ->
+    override fun watchMembers(roomId: String, onResult: (List<CloudMember>) -> Unit, onError: (String) -> Unit): ListenerRegistration {
+        val uid = auth.currentUser?.uid
+        val gate = ServerSnapshotGate()
+        return db.collection("rooms").document(roomId).collection("members")
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                 if (error != null) onError("멤버 정보를 불러올 수 없습니다.")
-                else if (snapshot != null) onResult(snapshot.documents.map {
+                else if (snapshot != null) {
+                    when (gate.evaluate(snapshot.metadata.isFromCache, uid != null && uid == auth.currentUser?.uid)) {
+                        SnapshotAccess.WAIT -> return@addSnapshotListener
+                        SnapshotAccess.HIDE -> {
+                            onError("멤버 권한을 서버에서 확인하지 못했습니다.")
+                            return@addSnapshotListener
+                        }
+                        SnapshotAccess.ACCEPT -> Unit
+                    }
+                    val own = snapshot.documents.firstOrNull { it.id == uid }
+                    if (own?.getString("status") != "active") {
+                        onError("방 접근 권한이 변경되었습니다.")
+                        return@addSnapshotListener
+                    }
+                    onResult(snapshot.documents.map {
                     CloudMember(
                         uid = it.id,
                         name = it.getString("displayName").orEmpty(),
                         status = it.getString("status").orEmpty(),
                         avatar = it.getString("avatar")
                     )
-                }.filter { it.status == "active" || it.status == "pending" })
+                    }.filter { it.status == "active" || it.status == "pending" })
+                }
             }
+    }
 
     private suspend fun invoke(action: String, args: Map<String, Any>): Map<*, *> {
         val data = callables.getHttpsCallable(action).call(args).await().data

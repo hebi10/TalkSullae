@@ -74,11 +74,15 @@ internal class BalanceGameViewModel(
                     mutable.update{BalanceGameState(loading=false)}
                 }else bind(currentRoom,found)
             }catch(e:Exception){
-                if(generation==token)mutable.update{
-                    it.copy(loading=false,error=e.localizedMessage?:"게임 조회 오류")
-                }
+                if(generation==token)invalidateAccess(e.localizedMessage?:"게임 조회 오류")
             }
         }
+    }
+    private fun invalidateAccess(message: String) {
+        generation++
+        listener?.remove(); listener=null; gameId=null
+        personalPending=false; personalRequestRevision=null
+        mutable.value=BalanceGameState(loading=false,error=message)
     }
     private fun bind(currentRoom:String,id:String){
         if(gameId==id&&listener!=null){
@@ -90,9 +94,8 @@ internal class BalanceGameViewModel(
         val token=generation
         listener=repository.watchSession(currentRoom,id,{snap->
             if(generation!=token||gameId!=id)return@watchSession
-            if(snap==null){
-                gameId=null;listener?.remove();listener=null
-                mutable.update{BalanceGameState(loading=false,error="게임 세션을 확인할 수 없습니다.")}
+            if(snap==null || snap.fromCache){
+                invalidateAccess("게임 세션 또는 접근 권한을 확인할 수 없습니다.")
             }else if(snap.session.gameId!="balance"){
                 mutable.update{BalanceGameState(loading=false,otherGameActive=true)}
             }else{
@@ -106,7 +109,7 @@ internal class BalanceGameViewModel(
             }
         },{error->
             if(generation==token&&gameId==id){
-                mutable.update{it.copy(loading=false,error=error)}
+                invalidateAccess(error)
             }
         })
     }

@@ -1,6 +1,7 @@
 package com.hebi.talksullae.firebase
 
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import com.google.firebase.functions.FirebaseFunctions
 import java.text.Normalizer
 import kotlinx.coroutines.tasks.await
@@ -26,7 +27,7 @@ internal class UserProfileRepository(
     private val functions: FirebaseFunctions = FirebaseFunctions.getInstance("asia-northeast3")
 ) {
     suspend fun load(uid: String): UserProfile? {
-        val snapshot = firestore.collection("users").document(uid).get().await()
+        val snapshot = firestore.collection("users").document(uid).get(Source.SERVER).await()
         if (!snapshot.exists()) return null
         val nickname = snapshot.getString("nickname") ?: return null
         val avatar = snapshot.getString("avatar") ?: return null
