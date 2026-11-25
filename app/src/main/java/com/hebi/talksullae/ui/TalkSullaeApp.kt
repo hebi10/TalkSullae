@@ -404,6 +404,19 @@ fun TalkSullaeApp(
                             onClick = { profileRetry++ },
                             modifier = Modifier.fillMaxWidth().testTag("profile-retry")
                         )
+                        OutlinedButton(onClick = {
+                            profileRequestVersions.invalidateSave()
+                            scope.launch {
+                                try {
+                                    if (activity != null) GoogleLogin(activity).signOut() else auth?.signOut()
+                                } finally {
+                                    auth?.signOut()
+                                    route = Welcome
+                                }
+                            }
+                        },modifier=Modifier.fillMaxWidth().testTag("profile-error-signout")) {
+                            Text("로그아웃")
+                        }
                     }
                     ServiceNotices -> {
                         val currentNotice = notice
@@ -444,7 +457,7 @@ fun TalkSullaeApp(
                                     if(activity != null) scope.launch { GoogleLogin(activity).signOut(); route=Welcome }
                                     else { auth?.signOut(); route=Welcome }
                                 },
-                                onReload={profileRetry++})
+                                onReload={profileRetry++},accountKey=requestUid)
                         }
                     }
                     ProfileSetup, ProfileEditor -> UserProfileEditorScreen(

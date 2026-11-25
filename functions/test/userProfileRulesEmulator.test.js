@@ -34,3 +34,19 @@ test("only owner can read their profile; no client writes or listing",async()=>{
   await assertFails(updateDoc(own,{nickname:"위조"}));
   await assertFails(deleteDoc(own));
 });
+
+test("policy receipts are written and read only through trusted server callables",async()=>{
+  const a=env.authenticatedContext("profile-a").firestore();
+  const b=env.authenticatedContext("profile-b").firestore();
+  await env.withSecurityRulesDisabled(async c=>{
+    await setDoc(doc(c.firestore(),"users","profile-a","policyReceipts","version"),{termsAccepted:true});
+  });
+  for(const db of [a,b]){
+    const receipt=doc(db,"users","profile-a","policyReceipts","version");
+    await assertFails(getDoc(receipt));
+    await assertFails(getDocs(collection(db,"users","profile-a","policyReceipts")));
+    await assertFails(updateDoc(receipt,{termsAccepted:false}));
+    await assertFails(setDoc(receipt,{termsAccepted:true}));
+    await assertFails(deleteDoc(receipt));
+  }
+});
