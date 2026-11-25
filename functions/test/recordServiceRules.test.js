@@ -118,8 +118,14 @@ test("a queued deletion immediately revokes room, member list and record access"
  await env.withSecurityRulesDisabled(async c=>{
    await setDoc(doc(c.firestore(),"accountDeletionJobs","owner"),{status:"queued"});
  });
- await assertFails(getDoc(doc(owner,"rooms",roomId)));
- await assertFails(getDocs(collection(owner,"rooms",roomId,"members")));
- await assertFails(getDoc(doc(owner,"rooms",roomId,"playerStats","owner")));
- await assertFails(getDocs(query(collection(owner,"rooms",roomId,"recordEvents"),limit(20))));
+ try {
+   await assertFails(getDoc(doc(owner,"rooms",roomId)));
+   await assertFails(getDocs(collection(owner,"rooms",roomId,"members")));
+   await assertFails(getDoc(doc(owner,"rooms",roomId,"playerStats","owner")));
+   await assertFails(getDocs(query(collection(owner,"rooms",roomId,"recordEvents"),limit(20))));
+ } finally {
+   await env.withSecurityRulesDisabled(async c=>{
+     await deleteDoc(doc(c.firestore(),"accountDeletionJobs","owner"));
+   });
+ }
 });
