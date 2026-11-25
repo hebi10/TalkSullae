@@ -97,6 +97,7 @@ import com.hebi.talksullae.ui.entry.CreateRoomScreen
 import com.hebi.talksullae.ui.entry.OnboardingScreen
 import com.hebi.talksullae.ui.entry.WelcomeScreen
 import com.hebi.talksullae.ui.entry.UserProfileEditorScreen
+import com.hebi.talksullae.ui.entry.ServiceNoticeScreen
 import com.hebi.talksullae.ui.rooms.InviteScreen
 import com.hebi.talksullae.ui.rooms.MembersScreen
 import com.hebi.talksullae.data.DemoCatalog
@@ -119,6 +120,8 @@ import com.hebi.talksullae.firebase.RoomNotificationTarget
 import com.hebi.talksullae.firebase.GoogleLogin
 import com.hebi.talksullae.firebase.UserProfile
 import com.hebi.talksullae.firebase.UserProfileRepository
+import com.hebi.talksullae.firebase.ServiceNotice
+import com.hebi.talksullae.firebase.ServiceNoticeRepository
 import com.hebi.talksullae.ui.profile.MyCareerSection
 import com.hebi.talksullae.ui.profile.PushNotificationSettings
 import com.hebi.talksullae.firebase.ProfileResponseGuard
@@ -148,6 +151,7 @@ private const val AccountDeletion = "account-deletion"
 private const val ProfileSetup = "profile-setup"
 private const val ProfileEditor = "profile-editor"
 private const val ProfileLoadError = "profile-load-error"
+private const val ServiceNotices = "service-notices"
 
 private data class NavItem(val id: String, val title: String, val icon: ImageVector)
 
@@ -172,8 +176,10 @@ fun TalkSullaeApp(
     var loginBusy by remember { mutableStateOf(false) }
     var loginError by remember { mutableStateOf<String?>(null) }
     val profileRepository = remember(configured) { if (configured) UserProfileRepository() else null }
-    var onlineProfile by remember { mutableStateOf<UserProfile?>(null) }
-    var profileLoading by remember { mutableStateOf(signedUser != null) }
+    val noticeRepository = remember(configured) { if(configured) ServiceNoticeRepository() else null }
+    var notice by remember(signedUser?.uid) { mutableStateOf<ServiceNotice?>(null) }
+    var onlineProfile by remember(signedUser?.uid) { mutableStateOf<UserProfile?>(null) }
+    var profileLoading by remember(signedUser?.uid) { mutableStateOf(signedUser != null) }
     var profileSaving by remember { mutableStateOf(false) }
     var profileError by remember { mutableStateOf<String?>(null) }
     var profileRetry by remember { mutableStateOf(0) }
@@ -223,13 +229,22 @@ fun TalkSullaeApp(
             onlineProfile = null
             profileLoading = false
             profileError = null
-            if (route == ProfileSetup || route == ProfileEditor || route == ProfileLoadError) {
+            notice = null
+            if (route == ProfileSetup || route == ProfileEditor || route == ProfileLoadError || route == ServiceNotices) {
                 route = Welcome
             }
         } else {
             profileLoading = true
             profileError = null
             try {
+                val requiredNotice = requireNotNull(noticeRepository).load()
+                if(signedUser?.uid != user.uid || !profileRequestVersions.isLatestLoad(loadToken)) return@LaunchedEffect
+                notice = requiredNotice
+                if(requiredNotice != null) {
+                    onlineProfile = null
+                    route = ServiceNotices
+                    return@LaunchedEffect
+                }
                 val saved = requireNotNull(profileRepository).load(user.uid)
                 if (signedUser?.uid != user.uid || !profileRequestVersions.isLatestLoad(loadToken)) {
                     return@LaunchedEffect
@@ -238,7 +253,7 @@ fun TalkSullaeApp(
                 if (saved == null) {
                     route = ProfileSetup
                 } else if (route == Welcome || route == Onboarding ||
-                    route == ProfileSetup || route == ProfileLoadError
+                    route == ProfileSetup || route == ProfileLoadError || route == ServiceNotices
                 ) {
                     route = Main
                     mainTab = "rooms"
@@ -302,7 +317,7 @@ fun TalkSullaeApp(
                 mainTab = "profile"
             }
             ProfileLoadError -> profileRetry++
-            ProfileSetup -> Unit
+            ProfileSetup, ServiceNotices -> Unit
             Create, Settings -> route = Main
             SafetyReport -> if (reportModel?.close() == true) route = Settings
             AccountDeletion -> route = Settings
@@ -316,7 +331,7 @@ fun TalkSullaeApp(
         }
     }
     BackHandler(enabled = route != Main && route != Welcome && route != ProfileSetup &&
-        route != ProfileLoadError) { goBack() }
+        route != ProfileLoadError && route != ServiceNotices) { goBack() }
 
     val currentRoom = previewRooms.firstOrNull { it.id == selectedRoom } ?: previewRooms.first()
     val selectedGame = DemoCatalog.games.firstOrNull { it.id == gameId } ?: DemoCatalog.games.first()
@@ -343,6 +358,7 @@ fun TalkSullaeApp(
                         ProfileSetup -> "닉네임 설정"
                         ProfileEditor -> "프로필 편집"
                         ProfileLoadError -> "프로필 확인"
+                        ServiceNotices -> "이용약관 및 개인정보 안내"
                         else -> "톡술래"
                     },
                     subtitle = when (route) {
@@ -350,11 +366,11 @@ fun TalkSullaeApp(
                         Game -> "게임 흐름 미리보기 · 실제 플레이 아님"
                         Online -> "초대 코드 · 멤버 관리"
                         Welcome, Onboarding, SafetyReport, AccountDeletion,
-                        ProfileSetup, ProfileEditor, ProfileLoadError -> null
+                        ProfileSetup, ProfileEditor, ProfileLoadError, ServiceNotices -> null
                         else -> if (BuildConfig.DEBUG && !configured) "채팅으로 즐기는 추리 게임 · 데모" else null
                     },
                     onBack = if (route == Main || route == Welcome || route == ProfileSetup ||
-                        route == ProfileLoadError) null else goBack
+                        route == ProfileLoadError || route == ServiceNotices) null else goBack
                 )
             },
             bottomBar = {
@@ -388,6 +404,48 @@ fun TalkSullaeApp(
                             onClick = { profileRetry++ },
                             modifier = Modifier.fillMaxWidth().testTag("profile-retry")
                         )
+                    }
+                    ServiceNotices -> {
+                        val currentNotice = notice
+                        val requestUid = signedUser?.uid
+                        if(currentNotice == null || requestUid == null) {
+                            PrimaryAction("정책 다시 불러오기",onClick={profileRetry++},modifier=Modifier.fillMaxWidth())
+                        } else {
+                            ServiceNoticeScreen(currentNotice,profileSaving,profileError,
+                                onAccept={
+                                    if(!profileSaving) {
+                                        val token = profileRequestVersions.beginSave()
+                                        profileSaving=true
+                                        profileError=null
+                                        scope.launch {
+                                            try {
+                                                requireNotNull(noticeRepository).accept(requestUid,currentNotice)
+                                                if(ProfileResponseGuard.isCurrent(requestUid,signedUser?.uid,ServiceNotices,route,
+                                                    token,profileRequestVersions.saveVersion)){
+                                                    profileLoading=true
+                                                    profileRetry++
+                                                }
+                                            } catch(e: CancellationException) {
+                                                throw e
+                                            } catch(e: Exception) {
+                                                if(ProfileResponseGuard.isCurrent(requestUid,signedUser?.uid,ServiceNotices,route,
+                                                    token,profileRequestVersions.saveVersion)){
+                                                    profileError=e.localizedMessage?:"정책 확인 기록을 저장할 수 없습니다."
+                                                }
+                                            } finally {
+                                                if(ProfileResponseGuard.isCurrent(requestUid,signedUser?.uid,ServiceNotices,route,
+                                                    token,profileRequestVersions.saveVersion)) profileSaving=false
+                                            }
+                                        }
+                                    }
+                                },
+                                onDecline={
+                                    profileRequestVersions.invalidateSave()
+                                    if(activity != null) scope.launch { GoogleLogin(activity).signOut(); route=Welcome }
+                                    else { auth?.signOut(); route=Welcome }
+                                },
+                                onReload={profileRetry++})
+                        }
                     }
                     ProfileSetup, ProfileEditor -> UserProfileEditorScreen(
                         current = if (route == ProfileEditor) onlineProfile else null,

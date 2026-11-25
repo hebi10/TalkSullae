@@ -6,6 +6,7 @@ const {onDocumentCreated,onDocumentUpdated}=require("firebase-functions/v2/fires
 const {getMessaging}=require("firebase-admin/messaging");
 const room = require("./src/roomService");
 const {saveMyProfile} = require("./src/userProfile");
+const {getServiceNoticeStatus,acceptServiceNotices}=require("./src/serviceNotices");
 const { submitSafetyReport } = require("./src/safetyReport");
 const { sendRoomMessage, deleteRoomMessage, markRoomChatRead } = require("./src/chatService");
 const gameSession = require("./src/game/sessionService");
@@ -38,6 +39,8 @@ exports.syncRoomDirectory = onDocumentUpdated({document:"rooms/{roomId}",region:
 });
 exports.archiveRoom = onCall(config, request=>guardRoomOperation(db,request,"archiveRoom",room.archiveRoom));
 exports.saveMyProfile = onCall(config, request=>saveMyProfile(db,request));
+exports.getServiceNoticeStatus = onCall(config, request=>getServiceNoticeStatus(db,request));
+exports.acceptServiceNotices = onCall(config, request=>acceptServiceNotices(db,request));
 exports.createInvitation = onCall(config, request=>guardRoomOperation(db,request,"createInvitation",room.createInvitation));
 exports.revokeInvitation = onCall(config, request=>guardRoomOperation(db,request,"revokeInvitation",room.revokeInvitation));
 exports.previewInvitation = onCall(config, request=>guardRoomOperation(db,request,"previewInvitation",room.previewInvitation));

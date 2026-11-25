@@ -69,3 +69,35 @@ test("inactive room history does not block profile editing",async()=>{
  const saved=await saveMyProfile(db,{...auth(uid),data:{nickname:"이력보존",avatar:"고양이"}});
  assert.equal(saved.nickname,"이력보존");
 });
+
+test("policy notice receipts are account-bound, versioned and idempotent before profile setup",async()=>{
+ const {catalog,getServiceNoticeStatus,acceptServiceNotices}=require("../src/serviceNotices");
+ const uid="r3-notice-test",request=auth(uid);
+ const initial=await getServiceNoticeStatus(db,{...request,data:{}},true);
+ assert.equal(initial.required,true);
+ assert.equal(initial.termsText,catalog.termsText);
+ assert.deepEqual(await getServiceNoticeStatus(db,{...request,data:{}},false),{enabled:false,required:false});
+ const body={expectedUid:uid,termsVersion:catalog.termsVersion,privacyVersion:catalog.privacyVersion,
+   termsAccepted:true,privacyNoticeRead:true};
+ for(const data of [{...body,expectedUid:"other"},{...body,termsAccepted:false},{...body,extra:true}]){
+   await assert.rejects(acceptServiceNotices(db,{...request,data},true),e=>e.code==="invalid-argument");
+ }
+ await assert.rejects(acceptServiceNotices(db,{...request,data:{...body,termsVersion:"old"}},true),e=>e.code==="failed-precondition");
+ await assert.rejects(acceptServiceNotices(db,{...request,data:body},false),e=>e.code==="failed-precondition");
+ assert.deepEqual(await acceptServiceNotices(db,{...request,data:body},true),{accepted:true,deduplicated:false});
+ const user=db.collection("users").doc(uid);
+ assert.equal((await user.get()).exists,false);
+ const receipt=user.collection("policyReceipts").doc(catalog.id);
+ const saved=await receipt.get();
+ assert.ok(saved.get("acceptedAt"));
+ assert.equal(saved.get("privacyNoticeRead"),true);
+ assert.deepEqual(await acceptServiceNotices(db,{...request,data:body},true),{accepted:true,deduplicated:true});
+ assert.equal((await receipt.get()).updateTime.toMillis(),saved.updateTime.toMillis());
+ assert.deepEqual(await getServiceNoticeStatus(db,{...request,data:{}},true),{enabled:true,required:false});
+ assert.equal((await getServiceNoticeStatus(db,{...auth("r3-notice-other"),data:{}},true)).required,true);
+ await saveMyProfile(db,{...request,data:{nickname:"약관테스트",avatar:"토끼"}});
+ assert.equal((await receipt.get()).exists,true);
+ await db.collection("accountDeletionJobs").doc(uid).set({status:"queued"});
+ await assert.rejects(getServiceNoticeStatus(db,{...request,data:{}},true),e=>e.code==="permission-denied");
+ await assert.rejects(acceptServiceNotices(db,{...request,data:body},true),e=>e.code==="permission-denied");
+});
