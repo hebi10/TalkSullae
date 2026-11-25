@@ -48,6 +48,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build debug and test APK only
         run: |
+          python3 -m unittest discover -s scripts/qa -p test_design_capture_inventory.py
           sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
           ./gradlew --no-daemon --max-workers=2 assembleDebug assembleDebugAndroidTest
       - name: Enable KVM
@@ -67,11 +68,9 @@ jobs:
           profile: ${{ inputs.profile == 'tablet' && 'pixel_tablet' || 'pixel_6' }}
           disable-animations: true
           script: |
-            set -euo pipefail
-            if [ "$CAP_PROFILE" = tablet ]; then size=1600x2560; density=240; else size=1080x2400; density=420; fi
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            python3 scripts/qa/export_design_captures.py --expected-sha "$GITHUB_SHA" --profile "$CAP_PROFILE" --size "$size" --density "$density" --theme "$CAP_THEME" --font-scale "$FONT_SCALE" --output design-captures
+            python3 scripts/qa/export_design_captures.py --expected-sha "$GITHUB_SHA" --profile "$CAP_PROFILE" --theme "$CAP_THEME" --font-scale "$FONT_SCALE" --output design-captures
       - uses: actions/upload-artifact@v4
         if: always()
         with:
