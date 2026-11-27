@@ -1,0 +1,78 @@
+name: DESIGN-AUDIT-02-F exact-main native captures (QA only)
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+jobs:
+  capture:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'qa/ts-design-audit-02-f-main-capture-20261127' && github.event.pull_request.base.sha == 'a0f375d9eb251bcaa8890e4d8c13eeb7307f1776'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - theme: dark
+            font_scale: '1.0'
+          - theme: light
+            font_scale: '2.0'
+    env:
+      SOURCE_SHA: 'a0f375d9eb251bcaa8890e4d8c13eeb7307f1776'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Verify source and isolated test configuration
+        env:
+          EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_BASE_REF" == main && "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ && "$EXPECTED_BASE" == "$SOURCE_SHA" ]]
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_SHA" ]]
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" == "$SOURCE_SHA" ]]
+          test ! -f app/google-services.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build debug and test APK only
+        run: |
+          python3 -m unittest discover -s scripts/qa -p test_design_capture_inventory.py
+          sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+          ./gradlew --no-daemon --max-workers=2 assembleDebug assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Capture native screens using isolated test fixtures
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          CAP_PROFILE: phone
+          CAP_THEME: ${{ matrix.theme }}
+          FONT_SCALE: ${{ matrix.font_scale }}
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            python3 scripts/qa/export_design_captures.py --expected-sha "$SOURCE_SHA" --profile "$CAP_PROFILE" --theme "$CAP_THEME" --font-scale "$FONT_SCALE" --output design-captures
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: talksullae-audit-02-f-exact-main-phone-${{ matrix.theme }}-${{ matrix.font_scale }}
+          path: design-captures/
+          if-no-files-found: error
+          retention-days: 30
