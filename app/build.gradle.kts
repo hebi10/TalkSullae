@@ -38,7 +38,9 @@ android {
     buildTypes {
         getByName("release") {
             isDebuggable = false
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             if (signingConfigs.names.contains("talkPlayUpload")) {
                 signingConfig = signingConfigs.getByName("talkPlayUpload")
             }
