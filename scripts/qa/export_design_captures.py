@@ -18,7 +18,7 @@ PROFILE_GEOMETRY = {"phone": ("1080x2400", 420), "tablet": ("1600x2560", 240)}
 CORE_IDS = {"D05","D09","D13","D14","D15","D16","D17","D27","D29","D30"}
 CORE_METHODS = ("d05Rooms","d09Chat","d09CacheHidden","d13Catalog","d14Lobby",
                 "d15IdentityChat","d16IdentityGuess","d17IdentityResult","d27Ranking",
-                "d27Closed","d29Friend","d30Career")
+                "d27Closed","d29Friend","d30Career","d30CareerPartial")
 
 
 def validate_png(raw, size):
@@ -120,7 +120,7 @@ def run(args):
                 "foregroundGuard":guard})
         if instrument_failed:
             raise RuntimeError("Instrumentation command failed")
-        subprocess.run([sys.executable,str(Path(__file__).with_name("assert_instrumentation.py")),str(report),str(len(CORE_METHODS) if args.core_only else 34)],check=True)
+        subprocess.run([sys.executable,str(Path(__file__).with_name("assert_instrumentation.py")),str(report),str(len(CORE_METHODS) if args.core_only else 41)],check=True)
         if actual!=expected or manifest["invalid"]:
             raise RuntimeError("Capture set does not match inventory")
         manifest["result"]="passed"

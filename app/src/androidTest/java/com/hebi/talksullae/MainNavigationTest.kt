@@ -1,6 +1,8 @@
 package com.hebi.talksullae
 
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -17,11 +19,13 @@ class MainNavigationTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     private fun openDemo() {
-        composeRule.onNodeWithTag("welcome-start").assertExists().performClick()
+        composeRule.onNodeWithTag("welcome-start").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        composeRule.waitUntil(10000) { composeRule.onAllNodesWithTag("onboarding-nickname").fetchSemanticsNodes().size == 1 }
         composeRule.onNodeWithTag("onboarding-nickname").assertExists()
         composeRule.onNodeWithText("닉네임").assertExists()
-        composeRule.onNodeWithTag("onboarding-continue").performClick()
-        composeRule.onNodeWithTag("room-list").assertExists()
+        composeRule.onNodeWithTag("onboarding-continue").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        composeRule.waitUntil(10000) { composeRule.onAllNodesWithTag("room-list").fetchSemanticsNodes().size == 1 }
+        composeRule.onNodeWithTag("room-list").assertIsDisplayed()
     }
 
     @Test
