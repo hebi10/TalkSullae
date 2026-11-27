@@ -104,9 +104,9 @@ class DesignScreensCaptureTest {
         compose.waitForIdle()
     }
 
-    private fun assertForbiddenImeViewport(control: SemanticsNodeInteraction) {
+    private fun assertGameImeViewport(viewportTag: String, control: SemanticsNodeInteraction) {
         waitForCaptureIme()
-        val host = tag("forbidden-game-host").fetchSemanticsNode().boundsInWindow
+        val host = tag(viewportTag).fetchSemanticsNode().boundsInWindow
         val node = control.fetchSemanticsNode()
         val bounds = node.boundsInWindow
         check(bounds.height >= node.size.height - 1f) { "IME action is vertically clipped" }
@@ -126,9 +126,12 @@ class DesignScreensCaptureTest {
                 val frame = activity.windowManager.currentWindowMetrics.bounds
                 val statusBottom = frame.top + insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
                 val imeTop = frame.bottom - insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-                check(host.top + offset >= statusBottom - 1f) { "Game viewport overlaps status bar" }
-                check(bounds.top + offset >= statusBottom - 1f &&
-                    bounds.bottom + offset <= imeTop + 1f) { "IME action overlaps system bars or keyboard" }
+                val detail = "$viewportTag host=$host control=$bounds offset=$offset statusBottom=$statusBottom imeTop=$imeTop"
+                check(host.top + offset >= statusBottom - 1f &&
+                    host.bottom + offset <= imeTop + 1f) { "Game viewport overlaps system bars or keyboard: $detail" }
+                check(bounds.top >= host.top - 1f && bounds.bottom <= host.bottom + 1f &&
+                    bounds.top + offset >= statusBottom - 1f &&
+                    bounds.bottom + offset <= imeTop + 1f) { "IME action overlaps system bars or keyboard: $detail" }
             }
         }
     }
@@ -376,9 +379,8 @@ class DesignScreensCaptureTest {
     }
     private fun mountGame(id:String,phase:GamePhase,role:String="citizen",guess:Boolean=false,eliminated:Boolean=false,submitted:Boolean=false){
         val repo=Game(id,phase,role,guess,eliminated,submitted)
-        // Match the normal signed-in Main route for the forbidden-word host.
-        // It has its own heading/back action and no outer AppTopBar.
-        mount(if(id=="identity" || id=="forbidden")"" else "톡술래"){
+        // These chat hosts own their heading/back action in the signed-in Main route.
+        mount(if(id=="identity" || id=="forbidden" || id=="liar")"" else "톡술래"){
             when(id){
                 "identity"->OnlineIdentityGameHost("owner",roomId,room.name,"owner",people,{},repo)
                 "liar"->OnlineLiarGameHost("owner",roomId,room.name,"owner",people,{},repo)
@@ -417,7 +419,12 @@ class DesignScreensCaptureTest {
         label("비밀 주제: 커피").assertExists()
         capture("D18_citizen_secret",tag("liar-secret-role"),true)
         tag("liar-chat-input").performScrollTo().performClick().performTextInput("나는 아침에 마시는 편이야.")
+        waitForCaptureIme()
         capture("D18_liar_input",tag("liar-chat-input"),true)
+        val send=tag("liar-chat-send").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        assertGameImeViewport("liar-game-viewport",send)
+        capture("D18_liar_send",send)
+        assertGameImeViewport("liar-game-viewport",send)
     }
     @Test fun d19LiarVote(){
         mountGame("liar",GamePhase.VOTING)
@@ -439,9 +446,9 @@ class DesignScreensCaptureTest {
         waitForCaptureIme()
         capture("D22_forbidden_input",tag("forbidden-chat-input"),true)
         val send=tag("forbidden-chat-send").performScrollTo().assertIsDisplayed().assertIsEnabled()
-        assertForbiddenImeViewport(send)
+        assertGameImeViewport("forbidden-game-viewport",send)
         capture("D22_forbidden_send",send) // No actual message is sent.
-        assertForbiddenImeViewport(send)
+        assertGameImeViewport("forbidden-game-viewport",send)
     }
     @Test fun d22Eliminated(){mountGame("forbidden",GamePhase.PLAYING,eliminated=true);capture("D22_eliminated",label("금지어를 말해 탈락했습니다. 채팅을 보낼 수 없습니다."),true)}
     @Test fun d23ForbiddenResult(){mountGame("forbidden",GamePhase.FINISHED);capture("D23_forbidden_result",tag("forbidden-result"),true)}

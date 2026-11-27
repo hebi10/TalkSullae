@@ -170,6 +170,10 @@
       "dataType": "compose-fixture"
     },
     {
+      "name": "D18_liar_send",
+      "dataType": "compose-fixture"
+    },
+    {
       "name": "D19_liar_vote",
       "dataType": "compose-fixture"
     },

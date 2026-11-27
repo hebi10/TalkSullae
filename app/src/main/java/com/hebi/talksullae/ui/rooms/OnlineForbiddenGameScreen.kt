@@ -1,12 +1,13 @@
 package com.hebi.talksullae.ui.rooms
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +26,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -76,157 +78,161 @@ internal fun OnlineForbiddenGameHost(
         }
     }
     val remaining=deadline?.let{max(0L,(it-nowMillis+999L)/1000L)}
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .imePadding().padding(horizontal=16.dp,vertical=12.dp)
-            .testTag("forbidden-game-host"),
-        verticalArrangement=Arrangement.spacedBy(12.dp)
-    ){
-        Row(Modifier.fillMaxWidth()){
-            Text("금지어 채팅 · $roomName",Modifier.weight(1f),
-                style=MaterialTheme.typography.titleLarge)
-            TextButton(onClick=onBack){Text("방 관리")}
-        }
-        Text("3~10명이 다른 친구의 금지어를 유도합니다. 본인 금지어는 공개되지 않습니다.")
-        HorizontalDivider()
-        if(state.loading)CircularProgressIndicator()
-        state.error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
-        state.info?.let{Text(it)}
-        if(state.pendingAction!=null&&!state.busy){
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                TextButton(onClick=vm::retryAction){Text("같은 요청 재시도")}
-                TextButton(onClick=vm::discardFailedAction){Text("서버 상태 재확인")}
+    // Apply system and IME insets to the viewport, not to the scroll content.
+    Box(Modifier.fillMaxSize().safeDrawingPadding().clipToBounds()
+        .testTag("forbidden-game-viewport")) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                .padding(horizontal=16.dp,vertical=12.dp)
+                .testTag("forbidden-game-host"),
+            verticalArrangement=Arrangement.spacedBy(12.dp)
+        ){
+            Row(Modifier.fillMaxWidth()){
+                Text("금지어 채팅 · $roomName",Modifier.weight(1f),
+                    style=MaterialTheme.typography.titleLarge)
+                TextButton(onClick=onBack){Text("방 관리")}
             }
-        }
-        if(state.otherGameActive){
-            Text("이 방에서 다른 게임이 진행 중입니다. 종료 후 금지어 게임을 시작할 수 있습니다.")
-            OutlinedButton(onClick=vm::refresh,
-                modifier=Modifier.fillMaxWidth()){Text("진행 중인 게임 재조회")}
-        }else if(!state.loading&&snap==null){
-            Text("현재 진행 중인 금지어 게임이 없습니다.")
-            if(uid==ownerId){
-                PrimaryAction("새 금지어 게임 만들기",onClick=vm::create,
-                    enabled=!state.busy,modifier=Modifier.fillMaxWidth().testTag("forbidden-create"))
-            }else Text("방장이 게임을 생성하면 참여할 수 있습니다.")
-            OutlinedButton(onClick=vm::refresh,
-                modifier=Modifier.fillMaxWidth()){Text("게임 다시 확인")}
-        }
-        if(snap!=null){
-            GamePhasePanel(
-                "상태: ${gamePhaseLabel(phase)} · 라운드 ${snap.session.round}",
-                remaining,
-                if (snap.fromCache) "저장된 상태입니다. 서버 동기화를 확인해 주세요." else null
-            )
-            if(phase==GamePhase.WAITING||phase==GamePhase.READY){
-                Text("참가 ${snap.participants.size}명 · 최소 3명, 최대 10명")
-                Text(lobbyReadinessLabel(snap.participants.size, snap.participants.count { it.ready }, 3, phase, snap.fromCache),
-                    style = MaterialTheme.typography.bodySmall)
-                snap.participants.forEach{player->
-                    Row(Modifier.fillMaxWidth()){
-                        Text(names[player.uid]?:"친구",Modifier.weight(1f))
-                        Text(if(player.ready)"준비 완료" else "준비 중")
-                    }
+            Text("3~10명이 다른 친구의 금지어를 유도합니다. 본인 금지어는 공개되지 않습니다.")
+            HorizontalDivider()
+            if(state.loading)CircularProgressIndicator()
+            state.error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
+            state.info?.let{Text(it)}
+            if(state.pendingAction!=null&&!state.busy){
+                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                    TextButton(onClick=vm::retryAction){Text("같은 요청 재시도")}
+                    TextButton(onClick=vm::discardFailedAction){Text("서버 상태 재확인")}
                 }
-                if(!participant){
-                    PrimaryAction("참가",onClick={vm.action("join")},
-                        enabled=!state.busy&&state.pendingAction==null,
-                        modifier=Modifier.fillMaxWidth().testTag("forbidden-join"))
-                }else{
-                    val ready=snap.participants.first{it.uid==uid}.ready
-                    PrimaryAction(if(ready)"준비 취소" else "준비 완료",
-                        onClick={vm.action("set_ready",mapOf("ready" to !ready))},
-                        enabled=!state.busy&&state.pendingAction==null,
-                        modifier=Modifier.fillMaxWidth().testTag("forbidden-ready"))
-                }
+            }
+            if(state.otherGameActive){
+                Text("이 방에서 다른 게임이 진행 중입니다. 종료 후 금지어 게임을 시작할 수 있습니다.")
+                OutlinedButton(onClick=vm::refresh,
+                    modifier=Modifier.fillMaxWidth()){Text("진행 중인 게임 재조회")}
+            }else if(!state.loading&&snap==null){
+                Text("현재 진행 중인 금지어 게임이 없습니다.")
                 if(uid==ownerId){
-                    PrimaryAction("금지어 게임 시작",onClick={vm.action("start")},
-                        enabled = phase == GamePhase.READY && !snap.fromCache && !state.busy&&state.pendingAction==null,
-                        modifier=Modifier.fillMaxWidth().testTag("forbidden-start"))
-                }
+                    PrimaryAction("새 금지어 게임 만들기",onClick=vm::create,
+                        enabled=!state.busy,modifier=Modifier.fillMaxWidth().testTag("forbidden-create"))
+                }else Text("방장이 게임을 생성하면 참여할 수 있습니다.")
+                OutlinedButton(onClick=vm::refresh,
+                    modifier=Modifier.fillMaxWidth()){Text("게임 다시 확인")}
             }
-            if(participant&&phase==GamePhase.PLAYING){
-                Text(snap.publicState["prompt"] as? String ?: "금지어를 유도해 주세요.",
-                    style=MaterialTheme.typography.titleMedium)
-                ContentCard {
-                    Text("다른 친구의 금지어",style=MaterialTheme.typography.titleMedium)
-                    Text("내 금지어는 공개되지 않습니다.", style=MaterialTheme.typography.bodySmall,
-                        color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    if(state.personal==null){
-                        Text("개인 금지어 정보를 확인 중입니다.")
-                    }else{
-                        state.otherWords.filter { (target, _) -> target != uid }.forEachIndexed { index, (target, word) ->
-                            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            Text((names[target]?:"친구")+" · "+word,
-                                style=MaterialTheme.typography.bodyLarge,
-                                modifier=Modifier.testTag("forbidden-other-"+target))
-                        }
-                    }
-                }
-                state.personalError?.let{error->
-                    Text(error,color=MaterialTheme.colorScheme.error)
-                    TextButton(onClick=vm::retryPersonal,enabled=!state.personalLoading,
-                        modifier=Modifier.testTag("forbidden-personal-retry")){
-                        Text("금지어 정보 다시 불러오기")
-                    }
-                }
-                ContentCard {
-                    Text("탈락 ${eliminated.size}명 / 참가 ${snap.participants.size}명",
-                        style=MaterialTheme.typography.titleSmall)
-                    if(uid in eliminated)Text("금지어를 말해 탈락했습니다. 채팅을 보낼 수 없습니다.",
-                        color = MaterialTheme.colorScheme.error)
-                }
-                Column(Modifier.fillMaxWidth().heightIn(max=280.dp)
-                    .verticalScroll(rememberScrollState()).testTag("forbidden-chat-messages"),
-                    verticalArrangement=Arrangement.spacedBy(8.dp)){
-                    if(state.canLoadOlder){
-                        TextButton(onClick=vm::loadOlder,enabled=!state.loadingOlder){
-                            Text(if(state.loadingOlder)"이전 대화 조회 중…" else "이전 대화 보기")
-                        }
-                    }
-                    state.messages.forEach{message->
-                        GameConversationMessage(message, names[message.senderUid] ?: "친구",
-                            own = message.senderUid == uid)
-                    }
-                    if(state.messages.isEmpty())Text("아직 대화가 없습니다.")
-                }
-                OutlinedTextField(
-                    value=state.draft,onValueChange=vm::editMessage,
-                    enabled=state.personal!=null&&uid !in eliminated &&
-                        state.pendingMessage==null&&!state.sending,
-                    label={Text("게임 메시지 · 최대 500자")},
-                    supportingText={Text("${state.draft.length}/500자")},maxLines=3,
-                    modifier=Modifier.fillMaxWidth().testTag("forbidden-chat-input")
+            if(snap!=null){
+                GamePhasePanel(
+                    "상태: ${gamePhaseLabel(phase)} · 라운드 ${snap.session.round}",
+                    remaining,
+                    if (snap.fromCache) "저장된 상태입니다. 서버 동기화를 확인해 주세요." else null
                 )
-                if(state.pendingMessage!=null&&!state.sending){
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                        TextButton(onClick=vm::retryMessage){Text("메시지 재시도")}
-                        TextButton(onClick=vm::abandonMessage){Text("다시 작성")}
+                if(phase==GamePhase.WAITING||phase==GamePhase.READY){
+                    Text("참가 ${snap.participants.size}명 · 최소 3명, 최대 10명")
+                    Text(lobbyReadinessLabel(snap.participants.size, snap.participants.count { it.ready }, 3, phase, snap.fromCache),
+                        style = MaterialTheme.typography.bodySmall)
+                    snap.participants.forEach{player->
+                        Row(Modifier.fillMaxWidth()){
+                            Text(names[player.uid]?:"친구",Modifier.weight(1f))
+                            Text(if(player.ready)"준비 완료" else "준비 중")
+                        }
                     }
-                }else{
-                    PrimaryAction("게임 채팅 전송",onClick=vm::sendMessage,
+                    if(!participant){
+                        PrimaryAction("참가",onClick={vm.action("join")},
+                            enabled=!state.busy&&state.pendingAction==null,
+                            modifier=Modifier.fillMaxWidth().testTag("forbidden-join"))
+                    }else{
+                        val ready=snap.participants.first{it.uid==uid}.ready
+                        PrimaryAction(if(ready)"준비 취소" else "준비 완료",
+                            onClick={vm.action("set_ready",mapOf("ready" to !ready))},
+                            enabled=!state.busy&&state.pendingAction==null,
+                            modifier=Modifier.fillMaxWidth().testTag("forbidden-ready"))
+                    }
+                    if(uid==ownerId){
+                        PrimaryAction("금지어 게임 시작",onClick={vm.action("start")},
+                            enabled = phase == GamePhase.READY && !snap.fromCache && !state.busy&&state.pendingAction==null,
+                            modifier=Modifier.fillMaxWidth().testTag("forbidden-start"))
+                    }
+                }
+                if(participant&&phase==GamePhase.PLAYING){
+                    Text(snap.publicState["prompt"] as? String ?: "금지어를 유도해 주세요.",
+                        style=MaterialTheme.typography.titleMedium)
+                    ContentCard {
+                        Text("다른 친구의 금지어",style=MaterialTheme.typography.titleMedium)
+                        Text("내 금지어는 공개되지 않습니다.", style=MaterialTheme.typography.bodySmall,
+                            color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        if(state.personal==null){
+                            Text("개인 금지어 정보를 확인 중입니다.")
+                        }else{
+                            state.otherWords.filter { (target, _) -> target != uid }.forEachIndexed { index, (target, word) ->
+                                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                Text((names[target]?:"친구")+" · "+word,
+                                    style=MaterialTheme.typography.bodyLarge,
+                                    modifier=Modifier.testTag("forbidden-other-"+target))
+                            }
+                        }
+                    }
+                    state.personalError?.let{error->
+                        Text(error,color=MaterialTheme.colorScheme.error)
+                        TextButton(onClick=vm::retryPersonal,enabled=!state.personalLoading,
+                            modifier=Modifier.testTag("forbidden-personal-retry")){
+                            Text("금지어 정보 다시 불러오기")
+                        }
+                    }
+                    ContentCard {
+                        Text("탈락 ${eliminated.size}명 / 참가 ${snap.participants.size}명",
+                            style=MaterialTheme.typography.titleSmall)
+                        if(uid in eliminated)Text("금지어를 말해 탈락했습니다. 채팅을 보낼 수 없습니다.",
+                            color = MaterialTheme.colorScheme.error)
+                    }
+                    Column(Modifier.fillMaxWidth().heightIn(max=280.dp)
+                        .verticalScroll(rememberScrollState()).testTag("forbidden-chat-messages"),
+                        verticalArrangement=Arrangement.spacedBy(8.dp)){
+                        if(state.canLoadOlder){
+                            TextButton(onClick=vm::loadOlder,enabled=!state.loadingOlder){
+                                Text(if(state.loadingOlder)"이전 대화 조회 중…" else "이전 대화 보기")
+                            }
+                        }
+                        state.messages.forEach{message->
+                            GameConversationMessage(message, names[message.senderUid] ?: "친구",
+                                own = message.senderUid == uid)
+                        }
+                        if(state.messages.isEmpty())Text("아직 대화가 없습니다.")
+                    }
+                    OutlinedTextField(
+                        value=state.draft,onValueChange=vm::editMessage,
                         enabled=state.personal!=null&&uid !in eliminated &&
-                            !state.sending&&state.pendingMessage==null&&
-                            state.draft.trim().length in 1..500,
-                        modifier=Modifier.fillMaxWidth().testTag("forbidden-chat-send"))
+                            state.pendingMessage==null&&!state.sending,
+                        label={Text("게임 메시지 · 최대 500자")},
+                        supportingText={Text("${state.draft.length}/500자")},maxLines=3,
+                        modifier=Modifier.fillMaxWidth().testTag("forbidden-chat-input")
+                    )
+                    if(state.pendingMessage!=null&&!state.sending){
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                            TextButton(onClick=vm::retryMessage){Text("메시지 재시도")}
+                            TextButton(onClick=vm::abandonMessage){Text("다시 작성")}
+                        }
+                    }else{
+                        PrimaryAction("게임 채팅 전송",onClick=vm::sendMessage,
+                            enabled=state.personal!=null&&uid !in eliminated &&
+                                !state.sending&&state.pendingMessage==null&&
+                                state.draft.trim().length in 1..500,
+                            modifier=Modifier.fillMaxWidth().testTag("forbidden-chat-send"))
+                    }
                 }
-            }
-            if(phase==GamePhase.REVEAL||phase==GamePhase.FINISHED){
-                ContentCard {
-                    Text("금지어 결과",style=MaterialTheme.typography.titleMedium)
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Text(snap.publicState["publishedResult"] as? String ?: "결과 집계 중",
-                        style=MaterialTheme.typography.bodyLarge,
-                        modifier=Modifier.testTag("forbidden-result"))
+                if(phase==GamePhase.REVEAL||phase==GamePhase.FINISHED){
+                    ContentCard {
+                        Text("금지어 결과",style=MaterialTheme.typography.titleMedium)
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Text(snap.publicState["publishedResult"] as? String ?: "결과 집계 중",
+                            style=MaterialTheme.typography.bodyLarge,
+                            modifier=Modifier.testTag("forbidden-result"))
+                    }
                 }
-            }
-            if (phase == GamePhase.FINISHED) {
-                PrimaryAction("방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
-            }
-            if(phase==GamePhase.CANCELLED)Text("게임이 취소됐습니다.")
-            if(uid==ownerId&&phase!=GamePhase.FINISHED&&phase!=GamePhase.CANCELLED){
-                OutlinedButton(onClick={vm.action("cancel")},
-                    enabled=!state.busy&&state.pendingAction==null,
-                    modifier=Modifier.fillMaxWidth()){Text("게임 취소")}
+                if (phase == GamePhase.FINISHED) {
+                    PrimaryAction("방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
+                }
+                if(phase==GamePhase.CANCELLED)Text("게임이 취소됐습니다.")
+                if(uid==ownerId&&phase!=GamePhase.FINISHED&&phase!=GamePhase.CANCELLED){
+                    OutlinedButton(onClick={vm.action("cancel")},
+                        enabled=!state.busy&&state.pendingAction==null,
+                        modifier=Modifier.fillMaxWidth()){Text("게임 취소")}
+                }
             }
         }
     }
