@@ -168,15 +168,27 @@ internal fun OnlineBalanceGameHost(
                 if(state.submitted){
                     ContentCard {
                         Text("선택을 제출했습니다. 결과 공개 전까지 다른 사람의 선택은 비공개입니다.")
-                        state.ownChoice?.let{Text("내 선택: $it")}
+                        state.ownChoice?.let { own ->
+                            val option = when (own) { "A" -> options.getOrNull(0); "B" -> options.getOrNull(1); else -> null }
+                            Text("내 선택: " + if (option == null) own else "$own · $option",
+                                style=MaterialTheme.typography.titleSmall)
+                        }
                     }
                 }else if(options.size==2){
+                    ContentCard {
+                        Text("이번 질문", style=MaterialTheme.typography.labelMedium,
+                            color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text((session.publicState["prompt"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: "A와 B 중 하나를 선택해 주세요.", style=MaterialTheme.typography.titleMedium,
+                            modifier=Modifier.testTag("balance-question"))
+                    }
                     options.forEachIndexed{index,item->
                         val key=if(index==0)"A" else "B"
                         GameChoiceAction(
                             label = "$key · $item"+if(choice==key)" · 선택됨" else "",
                             selected = choice==key,
                             onClick = {choice=key},
+                            enabled = !state.busy && state.pending == null,
                             modifier = Modifier.fillMaxWidth().testTag("balance-choice-$key")
                         )
                     }
@@ -189,25 +201,35 @@ internal fun OnlineBalanceGameHost(
             if(member&&phase==GamePhase.VOTING){
                 Text("친구의 선택 예측",style=MaterialTheme.typography.titleMedium)
                 if(state.submitted){
-                    Text("예측을 제출했습니다. 다른 참가자의 제출을 기다립니다.")
+                    ContentCard {
+                        Text("예측을 제출했습니다.", style=MaterialTheme.typography.titleSmall)
+                        Text("다른 참가자의 제출을 기다립니다.", style=MaterialTheme.typography.bodySmall)
+                    }
                 }else{
-                    Text("예측할 친구")
+                    Text("1. 예측할 친구", style=MaterialTheme.typography.titleSmall)
                     session.participants.filter{it.uid!=uid}.forEach{player->
                         GameChoiceAction(
                             label = (names[player.uid]?:"친구")+
                                 if(target==player.uid)" · 선택됨" else "",
                             selected = target==player.uid,
                             onClick = {target=player.uid},
+                            enabled = !state.busy && state.pending == null,
                             modifier = Modifier.fillMaxWidth().testTag("balance-predict-target-"+player.uid)
                         )
                     }
                     if(options.size==2){
+                        Text("2. 친구의 선택 예측", style=MaterialTheme.typography.titleSmall)
+                        Text(if(target.isBlank()) "먼저 예측할 친구를 선택해 주세요."
+                            else (names[target] ?: "친구") + "님은 어떤 선택을 했을까요?",
+                            style=MaterialTheme.typography.bodyMedium,
+                            modifier=Modifier.testTag("balance-prediction-target-label"))
                         options.forEachIndexed{index,item->
                             val key=if(index==0)"A" else "B"
                             GameChoiceAction(
                                 label = "$key · $item"+if(prediction==key)" · 선택됨" else "",
                                 selected = prediction==key,
                                 onClick = {prediction=key},
+                                enabled = target.isNotEmpty() && !state.busy && state.pending == null,
                                 modifier = Modifier.fillMaxWidth().testTag("balance-predict-choice-$key")
                             )
                         }
@@ -223,7 +245,9 @@ internal fun OnlineBalanceGameHost(
             if(phase==GamePhase.REVEAL||phase==GamePhase.FINISHED){
                 ContentCard {
                     Text("전체 선택·예측 결과",style=MaterialTheme.typography.titleMedium)
+                    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Text(session.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.",
+                        style=MaterialTheme.typography.bodyLarge,
                         modifier=Modifier.testTag("balance-result"))
                 }
                 if(phase==GamePhase.FINISHED){

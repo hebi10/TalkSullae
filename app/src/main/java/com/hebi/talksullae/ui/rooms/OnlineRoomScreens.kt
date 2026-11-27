@@ -347,7 +347,8 @@ internal fun OnlineRoomsHost(
             if (state.selectedId == null && entryMode != "records") {
                 PrimaryAction(if (createVisible) "생성 닫기" else "+ 새 방 만들기",
                     onClick = { createVisible = !createVisible },
-                    modifier = Modifier.testTag("online-create-toggle"))
+                    modifier = Modifier.testTag("online-create-toggle"),
+                    enabled = !state.working && state.createdRoomId == null)
             }
             if (state.selectedId != null || showClose) {
                 TextButton(onClick = { if (state.selectedId != null) vm.closeRoom() else onClose() }) {
@@ -376,6 +377,55 @@ internal fun OnlineRoomsHost(
             }
         }
         if (state.selectedId == null) {
+            if (entryMode != "records") {
+                if (createVisible) {
+                    SectionTitle("새 방 만들기")
+                    ContentCard {
+                        Text("친구들과 사용할 공간을 만들어 보세요.", style = MaterialTheme.typography.bodyMedium)
+                        val valid = RoomInputRules.valid(roomName, description)
+                        OutlinedTextField(
+                            value = roomName,
+                            enabled = !state.working && state.createdRoomId == null,
+                            onValueChange = { roomName = it },
+                            modifier = Modifier.fillMaxWidth().testTag("online-room-name"),
+                            label = { Text("방 이름") },
+                            isError = roomName.isNotEmpty() && RoomInputRules.nameError(roomName) != null,
+                            supportingText = { Text(RoomInputRules.nameError(roomName) ?: "${roomName.length}/24자") },
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = description,
+                            enabled = !state.working && state.createdRoomId == null,
+                            onValueChange = { description = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("설명 (선택)") },
+                            supportingText = { Text(RoomInputRules.descriptionError(description) ?: "${description.length}/120자") },
+                            isError = RoomInputRules.descriptionError(description) != null,
+                            maxLines = 4
+                        )
+                        HorizontalDivider()
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                Text("방장 가입 승인", style = MaterialTheme.typography.titleSmall)
+                                Text(if (approval) "방장이 확인한 친구만 입장할 수 있습니다." else "유효한 초대 코드로 바로 가입할 수 있습니다.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Switch(checked = approval, onCheckedChange = { approval = it },
+                                enabled = !state.working && state.createdRoomId == null)
+                        }
+                        PrimaryAction(
+                            "실제 방 생성",
+                            modifier = Modifier.fillMaxWidth().testTag("online-create-submit"),
+                            enabled = valid && !state.working && state.createdRoomId == null,
+                            onClick = {
+                                vm.createRoom(roomName, description, approval)
+                            }
+                        )
+                    }
+                }
+            }
             SectionTitle(if (entryMode == "records") "방별 게임 기록" else
                 "참여 중인 방 " + state.entries.count { it.status == "active" })
             if (state.loading) {
@@ -433,45 +483,17 @@ internal fun OnlineRoomsHost(
                             }
                         }
                     }
+                    if (entry.status != "active") {
+                        Text(membershipDetail(entry.status),
+                            modifier = Modifier.testTag("room-membership-detail-${entry.id}"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
             if (entryMode != "records") {
-            if (createVisible) {
-                SectionTitle("새 방 만들기")
-                val valid = RoomInputRules.valid(roomName, description)
-                OutlinedTextField(
-                    value = roomName,
-                    onValueChange = { roomName = it },
-                    modifier = Modifier.fillMaxWidth().testTag("online-room-name"),
-                    label = { Text("방 이름") },
-                    isError = roomName.isNotEmpty() && RoomInputRules.nameError(roomName) != null,
-                    supportingText = { Text(RoomInputRules.nameError(roomName) ?: "${roomName.length}/24자") },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("설명 (선택)") },
-                    supportingText = { Text(RoomInputRules.descriptionError(description) ?: "${description.length}/120자") },
-                    isError = RoomInputRules.descriptionError(description) != null,
-                    maxLines = 4
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("방장 가입 승인", modifier = Modifier.weight(1f))
-                    Switch(checked = approval, onCheckedChange = { approval = it })
-                }
-                PrimaryAction(
-                    "실제 방 생성",
-                    modifier = Modifier.fillMaxWidth().testTag("online-create-submit"),
-                    enabled = valid && !state.working && state.createdRoomId == null,
-                    onClick = {
-                        vm.createRoom(roomName, description, approval)
-                    }
-                )
-            }
             if (state.createdRoomId != null) {
-                Text("방 생성은 완료됐습니다. 방 목록과 동기화하는 중입니다.")
+                PreviewNotice("방 생성은 완료됐습니다. 방 목록과 동기화하는 중입니다.")
             }
             HorizontalDivider()
             SectionTitle("초대 코드로 가입")
@@ -517,8 +539,11 @@ internal fun OnlineRoomsHost(
             ) { Text("Google 계정 로그아웃") }
         } else if (selected?.status != "active") {
             SectionTitle(selected?.name ?: "방 가입 상태")
-            Text("현재 상태: ${membershipLabel(selected?.status.orEmpty())}")
-            Text("방장 승인 이전에는 멤버 목록이나 방 내용에 접근할 수 없습니다.")
+            ContentCard {
+                Text("현재 상태: ${membershipLabel(selected?.status.orEmpty())}",
+                    style = MaterialTheme.typography.titleMedium)
+                Text(membershipDetail(selected?.status.orEmpty()))
+            }
         } else if (room == null) {
             CircularProgressIndicator()
             Text("방 정보 확인 중…")
@@ -563,10 +588,28 @@ internal fun OnlineRoomsHost(
                 }
                 currentInvite?.let { invite ->
                     ContentCard {
-                        Text("만료: " + SimpleDateFormat("M월 d일 HH:mm", Locale.KOREA).format(Date(invite.expiresAtMillis)))
+                        var revealCode by remember(room.id, invite.code) { mutableStateOf(false) }
+                        Text("사용 가능한 초대 코드", style = MaterialTheme.typography.titleMedium)
+                        Text("만료: " + SimpleDateFormat("M월 d일 HH:mm", Locale.KOREA).format(Date(invite.expiresAtMillis)),
+                            style = MaterialTheme.typography.bodyMedium)
                         Text("신뢰하는 친구에게만 공유해 주세요.", style = MaterialTheme.typography.bodySmall)
-                        SelectionContainer {
-                            Text(invite.code, style = MaterialTheme.typography.bodySmall)
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (revealCode) {
+                                    SelectionContainer {
+                                        Text(invite.code, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                } else {
+                                    Text("초대 코드 숨김", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                TextButton(
+                                    onClick = {
+                                        if (invite.isCurrent(room, System.currentTimeMillis())) revealCode = !revealCode
+                                    },
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("live-invite-reveal")
+                                ) { Text(if (revealCode) "코드 숨기기" else "코드 보기") }
+                            }
                         }
                         val link = InviteLinkCodec.encode(invite.code)
                         Text("새 코드를 발급하면 이전 코드는 무효가 됩니다.", style = MaterialTheme.typography.bodySmall)
@@ -608,35 +651,46 @@ internal fun OnlineRoomsHost(
                 }
             }
             SectionTitle("멤버 · 서버 기록")
-            state.members.forEach { member ->
-                ContentCard {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ProfileAvatar(member.avatar, Modifier.size(36.dp))
-                            Text(
-                                member.name,
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Text(
-                                if (member.uid == room.ownerId) "방장"
-                                else membershipLabel(member.status),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        if (isOwner && member.uid != uid) {
-                            val actions = if (member.status == "pending") {
-                                listOf("approve" to "승인", "reject" to "거절")
-                            } else if (member.status == "active") {
-                                listOf("remove" to "강퇴", "transfer" to "방장 위임")
-                            } else emptyList()
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                actions.forEach { (action, title) ->
-                                    TextButton(
-                                        onClick = { confirmation = member.uid to action },
-                                        modifier = Modifier.heightIn(min = 48.dp)
-                                    ) { Text(title) }
+            val memberGroups = listOf(
+                "가입 요청" to state.members.filter { it.status == "pending" },
+                "멤버 목록" to state.members.filter { it.status == "active" },
+                "기타 상태" to state.members.filter { it.status !in listOf("pending", "active") }
+            )
+            memberGroups.forEach { (groupTitle, members) ->
+                if (members.isNotEmpty()) {
+                    SectionTitle("$groupTitle ${members.size}명")
+                }
+                members.forEach { member ->
+                    ContentCard {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ProfileAvatar(member.avatar, Modifier.size(36.dp))
+                                Text(
+                                    member.name,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    if (member.uid == room.ownerId) "방장"
+                                    else membershipLabel(member.status),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            if (isOwner && member.uid != uid) {
+                                val actions = if (member.status == "pending") {
+                                    listOf("approve" to "승인", "reject" to "거절")
+                                } else if (member.status == "active") {
+                                    listOf("remove" to "강퇴", "transfer" to "방장 위임")
+                                } else emptyList()
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    actions.forEach { (action, title) ->
+                                        TextButton(
+                                            onClick = { confirmation = member.uid to action },
+                                            enabled = !state.working,
+                                            modifier = Modifier.heightIn(min = 48.dp)
+                                        ) { Text(title) }
+                                    }
                                 }
                             }
                         }
@@ -692,6 +746,7 @@ internal fun OnlineRoomsHost(
                 onDismissRequest = { revokeInvite = null },
                 title = { Text("초대 코드 취소") },
                 text = { Text("현재 공유된 초대 코드를 사용할 수 없게 합니다. 기존 멤버와 가입 대기 요청은 유지됩니다.") },
+                shape = RoundedCornerShape(8.dp),
                 confirmButton = {
                     TextButton(onClick = {
                         revokeInvite = null
@@ -709,6 +764,7 @@ internal fun OnlineRoomsHost(
                 onDismissRequest = { confirmInviteRoomId = null },
                 title = { Text("초대 코드 재발급") },
                 text = { Text("이전 초대 코드는 즉시 무효가 됩니다. 새 코드를 발급할까요?") },
+                shape = RoundedCornerShape(8.dp),
                 confirmButton = {
                     TextButton(onClick = {
                         confirmInviteRoomId = null
@@ -729,28 +785,37 @@ internal fun OnlineRoomsHost(
                 }
             },
             title = { Text("초대 확인") },
+            shape = RoundedCornerShape(8.dp),
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(preview.roomName, style = MaterialTheme.typography.titleMedium)
-                    if (preview.description.isNotBlank()) Text(preview.description)
-                    Text("현재 참가 ${preview.memberCount}명")
+                Column(Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ContentCard {
+                        Text(preview.roomName, style = MaterialTheme.typography.titleMedium)
+                        if (preview.description.isNotBlank()) Text(preview.description)
+                        Text("현재 참가 ${preview.memberCount}명", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text(if (preview.requiresApproval) "가입 승인 필요" else "바로 가입 가능",
+                        style = MaterialTheme.typography.titleSmall)
                     Text(
                         if (preview.requiresApproval) "가입 신청 후 방장의 승인이 필요합니다."
                         else "가입하면 바로 방에 참여할 수 있습니다."
                     )
-                    Text("승인 전에는 방의 채팅·멤버 정보·게임 기록을 볼 수 없습니다.")
+                    if (preview.requiresApproval) Text("승인 전에는 방의 채팅·멤버 정보·게임 기록을 볼 수 없습니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {
-                TextButton(
+                PrimaryAction(
+                    label = "가입 신청",
                     onClick = {
                         vm.confirmJoin()
                         onInviteCodeHandled()
                     },
                     enabled = !state.working,
                     modifier = Modifier.testTag("live-invite-confirm")
-                ) { Text("가입 신청") }
+                )
             },
             dismissButton = {
                 TextButton(
@@ -802,6 +867,15 @@ private fun membershipLabel(status: String) = when (status) {
     "left" -> "탈퇴"
     "archived" -> "종료된 방"
     else -> "정보 확인 중"
+}
+
+private fun membershipDetail(status: String): String = when (status) {
+    "pending" -> "방장 승인 전에는 방 내용에 접근할 수 없습니다."
+    "rejected" -> "가입 요청이 거절되었습니다. 필요한 경우 방장에게 문의해 주세요."
+    "removed" -> "현재 이 방에 참여할 수 없습니다."
+    "left" -> "탈퇴한 방입니다. 다시 참여하려면 유효한 초대 코드가 필요합니다."
+    "archived" -> "종료된 방입니다. 더 이상 입장할 수 없습니다."
+    else -> "방 접근 권한을 확인할 수 없습니다."
 }
 
 @Composable

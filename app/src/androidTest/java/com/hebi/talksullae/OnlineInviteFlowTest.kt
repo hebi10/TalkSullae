@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.google.firebase.firestore.ListenerRegistration
 import com.hebi.talksullae.design.TalkSullaeTheme
@@ -29,6 +30,7 @@ class OnlineInviteFlowTest {
         var previewCalls = 0
         var acceptedCalls = 0
         var failNextPreview = false
+        var requiresApproval = true
         private fun listener() = object : ListenerRegistration {
             override fun remove() = Unit
         }
@@ -51,7 +53,7 @@ class OnlineInviteFlowTest {
                 error("일시적인 연결 오류")
             }
             return InvitationPreview("a".repeat(20), "친구 게임방", "우리만의 방",
-                3, true, System.currentTimeMillis()+60_000)
+                3, requiresApproval, System.currentTimeMillis()+60_000)
         }
         override suspend fun requestJoin(code: String): JoinResult {
             acceptedCalls++
@@ -80,6 +82,7 @@ class OnlineInviteFlowTest {
             }
         }
         compose.waitForIdle()
+        compose.onNodeWithText("가입 승인 필요").assertExists()
         compose.onNodeWithTag("live-invite-confirm").assertExists().performClick()
         compose.waitForIdle()
         assertEquals(1, repo.previewCalls)
@@ -111,4 +114,21 @@ class OnlineInviteFlowTest {
         assertEquals(2, repo.previewCalls)
     }
 
+
+    @Test fun directJoinDoesNotShowApprovalOnlyRestriction() {
+        val code = "a".repeat(20) + "." + "B".repeat(43)
+        val repo = PreviewRepository().apply { requiresApproval = false }
+        compose.setContent {
+            TalkSullaeTheme {
+                OnlineRoomsHost(uid = "direct-invite-user", accountName = "QA",
+                    onClose = {}, onSignOut = {}, repository = repo,
+                    incomingInviteCode = code, incomingInviteDeliveryId = 1L)
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("바로 가입 가능").assertExists()
+        compose.onNodeWithText("승인 전에는 방의 채팅·멤버 정보·게임 기록을 볼 수 없습니다.").assertDoesNotExist()
+        compose.onNodeWithTag("live-invite-confirm").assertExists()
+        compose.runOnIdle { assertEquals(0, repo.acceptedCalls) }
+    }
 }

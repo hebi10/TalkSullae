@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ListenerRegistration
@@ -158,7 +159,7 @@ class LiarGameComposeTest {
         compose.waitUntil(8000) {
             compose.onAllNodesWithTag("liar-ready").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithTag("liar-ready").performClick()
+        compose.onNodeWithTag("liar-ready").performScrollTo().performClick()
         compose.waitUntil(8000) { repo.lastAction != null }
         compose.runOnIdle {
             assertEquals("set_ready",repo.lastAction?.get("kind"))
@@ -175,8 +176,8 @@ class LiarGameComposeTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("내 역할: 라이어",substring = true).assertExists()
-        compose.onNodeWithTag("liar-chat-input").performTextInput("비밀을 추리해요")
-        compose.onNodeWithTag("liar-chat-send").assertIsEnabled().performClick()
+        compose.onNodeWithTag("liar-chat-input").performScrollTo().performTextInput("비밀을 추리해요")
+        compose.onNodeWithTag("liar-chat-send").performScrollTo().assertIsEnabled().performClick()
         compose.waitUntil(8000) { repo.lastText != null }
         compose.runOnIdle { assertEquals("비밀을 추리해요",repo.lastText) }
         compose.onNodeWithText("비밀 주제: 커피",substring = true)
@@ -192,8 +193,8 @@ class LiarGameComposeTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("비밀 주제: 커피",substring = true).assertExists()
-        compose.onNodeWithTag("liar-vote-friend3").performClick()
-        compose.onNodeWithTag("liar-vote-send").assertIsEnabled().performClick()
+        compose.onNodeWithTag("liar-vote-friend3").performScrollTo().performClick()
+        compose.onNodeWithTag("liar-vote-send").performScrollTo().assertIsEnabled().performClick()
         compose.waitUntil(8000) { repo.lastAction != null }
         compose.runOnIdle {
             assertEquals("submit",repo.lastAction?.get("kind"))
@@ -213,8 +214,8 @@ class LiarGameComposeTest {
             compose.onAllNodesWithTag("liar-topic-option-커피")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithTag("liar-topic-option-커피").performClick()
-        compose.onNodeWithTag("liar-topic-send").assertIsEnabled().performClick()
+        compose.onNodeWithTag("liar-topic-option-커피").performScrollTo().performClick()
+        compose.onNodeWithTag("liar-topic-send").performScrollTo().assertIsEnabled().performClick()
         compose.waitUntil(8000) { liarRepo.lastAction != null }
         compose.runOnIdle { assertEquals("커피",liarRepo.lastAction?.get("choice")) }
         compose.waitUntil(8000) { liarRepo.advanceRequested }

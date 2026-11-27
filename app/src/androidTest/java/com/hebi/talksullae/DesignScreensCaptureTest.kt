@@ -177,15 +177,18 @@ class DesignScreensCaptureTest {
     @Test fun d06Create(){
         mountRooms()
         tag("online-create-toggle").performScrollTo().performClick()
+        label("친구들과 사용할 공간을 만들어 보세요.").assertExists()
         capture("D06_create",tag("online-room-name"),true)
         capture("D06_create_bottom",tag("online-create-submit"),true)
     }
     @Test fun d07Invite(){
         mountRooms(pending=true,invite=true)
+        label("가입 승인 필요").assertExists()
         capture("D07_invite_preview",tag("live-invite-confirm"))
     }
     @Test fun d08Pending(){
         mountRooms(pending=true)
+        tag("room-membership-detail-"+roomId).assertExists()
         capture("D08_pending",tag("online-room-"+roomId),true)
     }
     @Test fun d09Chat(){
@@ -210,12 +213,20 @@ class DesignScreensCaptureTest {
         mountRooms()
         enterManagement()
         capture("D10_management",tag("room-edit-open"),true)
+        label("가입 요청 1명").assertExists()
+        label("멤버 목록 4명").assertExists()
         capture("D10_members",label("승인"),true)
     }
     @Test fun d11InviteManagement(){
         mountRooms()
         enterManagement()
         tag("live-invite-generate").performScrollTo().performClick()
+        label("초대 코드 숨김").assertExists()
+        compose.onNodeWithText(code).assertDoesNotExist()
+        tag("live-invite-reveal").performScrollTo().performClick()
+        label(code).assertExists()
+        tag("live-invite-reveal").performScrollTo().performClick()
+        compose.onNodeWithText(code).assertDoesNotExist()
         capture("D11_invite_manage",label("코드 복사"),true)
         tag("live-invite-revoke").performScrollTo().performClick()
         capture("D11_invite_revoke",label("초대 코드 취소"))
@@ -226,6 +237,7 @@ class DesignScreensCaptureTest {
     }
     @Test fun d12Icon(){
         mount("방 관리"){RoomIconDialog(room,false,null,{}, {_,_->})}
+        label("선택: 고양이").assertExists()
         capture("D12_room_icon",tag("room-icon-고양이"),true)
     }
     @Test fun d13Catalog(){
@@ -326,9 +338,15 @@ class DesignScreensCaptureTest {
         capture("D16_identity_guess_bottom",tag("identity-guess-send"),true)
     }
     @Test fun d17IdentityResult(){mountGame("identity",GamePhase.FINISHED);capture("D17_identity_result",label("정체 공개·결과"),true)}
-    @Test fun d18Liar(){mountGame("liar",GamePhase.PLAYING,role="liar");capture("D18_liar_secret",tag("liar-secret-role"),true)}
+    @Test fun d18Liar(){
+        mountGame("liar",GamePhase.PLAYING,role="liar")
+        tag("liar-secret-role").assertExists()
+        compose.onNodeWithText("비밀 주제:",substring=true).assertDoesNotExist()
+        capture("D18_liar_secret",tag("liar-secret-role"),true)
+    }
     @Test fun d18Citizen(){
         mountGame("liar",GamePhase.PLAYING)
+        label("비밀 주제: 커피").assertExists()
         capture("D18_citizen_secret",tag("liar-secret-role"),true)
         tag("liar-chat-input").performScrollTo().performClick().performTextInput("나는 아침에 마시는 편이야.")
         capture("D18_liar_input",tag("liar-chat-input"),true)
@@ -346,6 +364,8 @@ class DesignScreensCaptureTest {
     @Test fun d21LiarResult(){mountGame("liar",GamePhase.FINISHED);capture("D21_liar_result",tag("liar-result"),true)}
     @Test fun d22Forbidden(){
         mountGame("forbidden",GamePhase.PLAYING)
+        label("내 금지어는 공개되지 않습니다.").assertExists()
+        compose.onNodeWithTag("forbidden-other-owner").assertDoesNotExist()
         capture("D22_forbidden_chat",tag("forbidden-other-friend1"),true)
         tag("forbidden-chat-input").performScrollTo().performClick().performTextInput("오늘 어떤 계획이 있어?")
         capture("D22_forbidden_input",tag("forbidden-chat-input"),true)
@@ -355,6 +375,7 @@ class DesignScreensCaptureTest {
     @Test fun d24BalanceChoice(){
         mountGame("balance",GamePhase.PLAYING)
         tag("balance-choice-A").performScrollTo().performClick()
+        tag("balance-question").assertExists()
         capture("D24_balance_choice",tag("balance-choice-A"),true)
     }
     @Test fun d24BalanceSubmitted(){mountGame("balance",GamePhase.PLAYING,submitted=true);capture("D24_balance_submitted",label("선택을 제출했습니다. 결과 공개 전까지 다른 사람의 선택은 비공개입니다."),true)}
@@ -362,6 +383,7 @@ class DesignScreensCaptureTest {
         mountGame("balance",GamePhase.VOTING)
         tag("balance-predict-target-friend1").performScrollTo().performClick()
         tag("balance-predict-choice-A").performScrollTo().performClick()
+        label("지훈님은 어떤 선택을 했을까요?").assertExists()
         capture("D25_balance_predict",tag("balance-predict-choice-A"),true)
     }
     @Test fun d26BalanceResult(){mountGame("balance",GamePhase.FINISHED);capture("D26_balance_result",tag("balance-result"),true)}
@@ -381,7 +403,12 @@ class DesignScreensCaptureTest {
     }
     @Test fun d27Ranking(){mountRecords(records);capture("D27_ranking",tag("records-ranked-owner"),true)}
     @Test fun d27Closed(){mountRecords(records.copy(seasonId="2026-10",closed=true,finalResult=SeasonFinalResult(420,1,12)));capture("D27_closed",tag("season-final"),true)}
-    @Test fun d28Chronology(){mountRecords(records);capture("D28_chronology",label("방 연대기"),true)}
+    @Test fun d28Chronology(){
+        mountRecords(records)
+        tag("records-chronology-event-0").performScrollTo()
+        tag("records-chronology-event-0").assertIsDisplayed()
+        capture("D28_chronology",tag("records-chronology-event-0"),true)
+    }
     private val gameStats=listOf("identity","liar","forbidden","balance").associateWith{FriendGameStats(5,3)}
     private val pair=FriendComparison(12,5,4,3,mapOf("identity" to 4L,"liar" to 3L,"forbidden" to 2L,"balance" to 3L),4,3,4,2,3,2)
     @Test fun d29Friend(){

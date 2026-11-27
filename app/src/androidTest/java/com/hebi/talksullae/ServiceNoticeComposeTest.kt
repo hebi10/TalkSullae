@@ -2,6 +2,7 @@ package com.hebi.talksullae
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -26,9 +27,12 @@ class ServiceNoticeComposeTest {
             }
         }
         compose.onNodeWithTag("service-notice-continue").assertIsNotEnabled()
+        compose.onNodeWithTag("notice-confirmation-count").assertTextEquals("확인한 문서 0/2")
         compose.onNodeWithTag("terms-accept").performScrollTo().performClick()
+        compose.onNodeWithTag("notice-confirmation-count").assertTextEquals("확인한 문서 1/2")
         compose.onNodeWithTag("service-notice-continue").assertIsNotEnabled()
         compose.onNodeWithTag("privacy-read").performScrollTo().performClick()
+        compose.onNodeWithTag("notice-confirmation-count").assertTextEquals("확인한 문서 2/2")
         compose.onNodeWithTag("service-notice-continue").performScrollTo().assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(1,accepted) }
     }
@@ -55,6 +59,8 @@ class ServiceNoticeComposeTest {
         compose.onNodeWithTag("service-notice-continue").assertIsNotEnabled()
         confirmBoth()
         compose.runOnIdle { busy.value=true }
+        compose.onNodeWithTag("terms-accept").assertIsNotEnabled()
+        compose.onNodeWithTag("privacy-read").assertIsNotEnabled()
         compose.onNodeWithTag("service-notice-continue").assertIsNotEnabled()
     }
 }

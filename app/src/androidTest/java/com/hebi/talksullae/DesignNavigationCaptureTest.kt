@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import org.junit.Before
@@ -19,10 +20,14 @@ class DesignNavigationCaptureTest {
         compose.onNodeWithTag("onboarding-continue").performClick()
         compose.onNodeWithTag("main-tab-profile").performClick()
         compose.onNodeWithTag("profile-settings-open").performScrollTo().performClick()
+        compose.onNodeWithText("안전 및 지원").assertExists()
+        compose.onNodeWithTag("settings-theme-switch").assertExists()
         compose.onNodeWithTag("privacy-policy-open").performScrollTo().assertIsDisplayed()
         compose.waitForIdle();DesignCaptureIO.save("D32_settings_demo")
         compose.onNodeWithTag("safety-report-open").performScrollTo().performClick()
         compose.onNodeWithTag("safety-report-screen").assertIsDisplayed()
+        compose.onNodeWithText("신고 전 확인").assertExists()
+        compose.onNodeWithTag("safety-report-send").assertIsNotEnabled()
         compose.waitForIdle();DesignCaptureIO.save("D33_report_demo")
         // Return through the existing system back handler, not a test-only account.
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
@@ -31,6 +36,9 @@ class DesignNavigationCaptureTest {
         compose.onNodeWithTag("account-deletion-screen").assertIsDisplayed()
         compose.onNodeWithTag("account-deletion-reauth").assertIsNotEnabled()
         compose.onNodeWithTag("account-deletion-open-confirm").assertIsNotEnabled()
+        compose.onNodeWithText("삭제 범위").assertExists()
+        compose.onNodeWithText("요청 전 확인").assertExists()
+        compose.onNodeWithTag("account-deletion-open-confirm").performScrollTo().assertIsDisplayed()
         compose.waitForIdle();DesignCaptureIO.save("D34_delete_demo")
     }
 }

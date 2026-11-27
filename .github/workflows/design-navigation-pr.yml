@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   capture:
-    if: github.event.pull_request.head.repo.full_name == github.repository && (github.event.pull_request.head.ref == 'fix/ts-final-01-b-deletion-navigation' || github.event.pull_request.head.ref == 'design/ts-final-game-polish' || github.event.pull_request.head.ref == 'fix/ts-final-store-capture')
+    if: github.event.pull_request.head.repo.full_name == github.repository && (github.event.pull_request.head.ref == 'fix/ts-final-01-b-deletion-navigation' || github.event.pull_request.head.ref == 'design/ts-final-game-polish' || github.event.pull_request.head.ref == 'fix/ts-final-store-capture' || github.event.pull_request.head.ref == 'design/ts-audit-02-a-entry-profile' || github.event.pull_request.head.ref == 'design/ts-audit-02-b-room-management' || github.event.pull_request.head.ref == 'design/ts-audit-02-c-game-polish' || github.event.pull_request.head.ref == 'design/ts-audit-02-d-records-safety')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -51,6 +51,10 @@ jobs:
         env:
           EXPECTED: ${{ github.event.pull_request.head.sha }}
           STORE_CAPTURE: ${{ github.event.pull_request.head.ref == 'fix/ts-final-store-capture' }}
+          ENTRY_AUDIT: ${{ github.event.pull_request.head.ref == 'design/ts-audit-02-a-entry-profile' }}
+          ROOM_AUDIT: ${{ github.event.pull_request.head.ref == 'design/ts-audit-02-b-room-management' }}
+          GAME_AUDIT: ${{ github.event.pull_request.head.ref == 'design/ts-audit-02-c-game-polish' }}
+          SAFETY_AUDIT: ${{ github.event.pull_request.head.ref == 'design/ts-audit-02-d-records-safety' }}
         with:
           api-level: 36
           arch: x86_64
@@ -60,6 +64,10 @@ jobs:
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             if [ "$STORE_CAPTURE" = true ]; then python3 scripts/qa/export_play_store_captures.py store-captures; else python3 scripts/qa/export_design_captures.py --expected-sha "$EXPECTED" --profile phone --theme dark --font-scale 1.0 --output design-captures; fi
+            if [ "$ENTRY_AUDIT" = true ]; then bash -e -o pipefail -c 'adb shell am instrument -w -e class com.hebi.talksullae.ServiceNoticeComposeTest,com.hebi.talksullae.UserProfileEditorTest com.hebi.talksullae.test/androidx.test.runner.AndroidJUnitRunner | tee design-captures/entry-regression.txt; grep -Eq "^OK [(]6 tests[)][[:space:]]*$" design-captures/entry-regression.txt'; fi
+            if [ "$ROOM_AUDIT" = true ]; then bash -e -o pipefail -c 'adb shell am instrument -w -e class com.hebi.talksullae.OnlineInviteFlowTest,com.hebi.talksullae.TS08RoomEditComposeTest,com.hebi.talksullae.RoomIconComposeTest com.hebi.talksullae.test/androidx.test.runner.AndroidJUnitRunner | tee design-captures/room-regression.txt; grep -Eq "^OK [(]7 tests[)][[:space:]]*$" design-captures/room-regression.txt'; fi
+            if [ "$GAME_AUDIT" = true ]; then bash -e -o pipefail -c 'adb shell am instrument -w -e class com.hebi.talksullae.LiarGameComposeTest,com.hebi.talksullae.ForbiddenGameComposeTest,com.hebi.talksullae.BalanceGameComposeTest com.hebi.talksullae.test/androidx.test.runner.AndroidJUnitRunner | tee design-captures/game-regression.txt; grep -Eq "^OK [(]13 tests[)][[:space:]]*$" design-captures/game-regression.txt'; fi
+            if [ "$SAFETY_AUDIT" = true ]; then bash -e -o pipefail -c 'adb shell am instrument -w -e class "com.hebi.talksullae.RoomRecordsComposeTest,com.hebi.talksullae.MainNavigationTest#profileThemeAndSettingsExposePrivacyAndDeletionRequest,com.hebi.talksullae.MainNavigationTest#safetyReportOpensFromSettingsForGuests" com.hebi.talksullae.test/androidx.test.runner.AndroidJUnitRunner | tee design-captures/safety-regression.txt; grep -Eq "^OK [(]7 tests[)][[:space:]]*$" design-captures/safety-regression.txt'; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

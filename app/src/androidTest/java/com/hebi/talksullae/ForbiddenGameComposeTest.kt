@@ -5,6 +5,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ListenerRegistration
@@ -108,7 +109,7 @@ class ForbiddenGameComposeTest {
         compose.waitUntil(8000){
             compose.onAllNodesWithTag("forbidden-ready").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithTag("forbidden-ready").performClick()
+        compose.onNodeWithTag("forbidden-ready").performScrollTo().performClick()
         compose.waitUntil(8000){repo.lastAction!=null}
         compose.runOnIdle{
             assertEquals("set_ready",repo.lastAction?.get("kind"))
@@ -121,8 +122,8 @@ class ForbiddenGameComposeTest {
             compose.onAllNodesWithText("지훈 · 커피").fetchSemanticsNodes().isNotEmpty()
         }
         assertEquals(0,compose.onAllNodesWithText("치킨").fetchSemanticsNodes().size)
-        compose.onNodeWithTag("forbidden-chat-input").performTextInput("안전한 메시지")
-        compose.onNodeWithTag("forbidden-chat-send").performClick()
+        compose.onNodeWithTag("forbidden-chat-input").performScrollTo().performTextInput("안전한 메시지")
+        compose.onNodeWithTag("forbidden-chat-send").performScrollTo().performClick()
         compose.waitUntil(8000){repo.lastText!=null}
         compose.runOnIdle{assertEquals("안전한 메시지",repo.lastText)}
     }

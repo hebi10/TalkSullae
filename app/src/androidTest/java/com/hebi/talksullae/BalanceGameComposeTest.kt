@@ -1,11 +1,13 @@
 package com.hebi.talksullae
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ListenerRegistration
 import com.hebi.talksullae.design.TalkSullaeTheme
@@ -92,8 +94,8 @@ class BalanceGameComposeTest {
         compose.waitUntil(8000){
             compose.onAllNodesWithTag("balance-choice-A").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithTag("balance-choice-A").performClick()
-        compose.onNodeWithTag("balance-own-submit").performClick()
+        compose.onNodeWithTag("balance-choice-A").performScrollTo().performClick()
+        compose.onNodeWithTag("balance-own-submit").performScrollTo().performClick()
         compose.waitUntil(8000){repo.lastAction!=null}
         compose.runOnIdle{
             assertEquals("submit",repo.lastAction?.get("kind"))
@@ -106,9 +108,11 @@ class BalanceGameComposeTest {
         compose.waitUntil(8000){
             compose.onAllNodesWithTag("balance-predict-target-friend").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithTag("balance-predict-target-friend").performClick()
-        compose.onNodeWithTag("balance-predict-choice-B").performClick()
-        compose.onNodeWithTag("balance-predict-submit").performClick()
+        compose.onNodeWithTag("balance-predict-choice-B").assertIsNotEnabled()
+        compose.onNodeWithTag("balance-predict-submit").assertIsNotEnabled()
+        compose.onNodeWithTag("balance-predict-target-friend").performScrollTo().performClick()
+        compose.onNodeWithTag("balance-predict-choice-B").performScrollTo().performClick()
+        compose.onNodeWithTag("balance-predict-submit").performScrollTo().performClick()
         compose.waitUntil(8000){repo.lastAction!=null}
         compose.runOnIdle{
             assertEquals("submit",repo.lastAction?.get("kind"))
