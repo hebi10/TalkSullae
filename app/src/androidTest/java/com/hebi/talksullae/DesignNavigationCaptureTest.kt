@@ -17,7 +17,7 @@ class DesignNavigationCaptureTest {
     @Before fun setup(){DesignCaptureIO.requireMode()}
     @Test fun settingsSafetyAndDeletion(){
         compose.onNodeWithTag("welcome-start").performClick()
-        compose.onNodeWithTag("onboarding-continue").performClick()
+        compose.onNodeWithTag("onboarding-continue").performScrollTo().performClick()
         compose.onNodeWithTag("main-tab-profile").performClick()
         compose.onNodeWithTag("profile-settings-open").performScrollTo().performClick()
         compose.onNodeWithText("안전 및 지원").assertExists()
