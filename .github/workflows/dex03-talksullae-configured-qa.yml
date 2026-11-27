@@ -1,0 +1,102 @@
+name: DEX-03 TalkSullae synthetic-config release comparison
+
+on:
+  push:
+    branches: [qa/dex03-talksullae-configured]
+
+permissions:
+  contents: read
+
+jobs:
+  compare-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build matching release variants with synthetic configuration
+        env:
+          BASE_SHA: a0f375d9eb251bcaa8890e4d8c13eeb7307f1776
+          CANDIDATE_SHA: 979222306e67ccca91c57f483400fadd580793a1
+        run: |
+          set -euo pipefail
+          git diff --exit-code "$CANDIDATE_SHA" -- app gradle.properties gradle build.gradle.kts settings.gradle.kts
+          base="$RUNNER_TEMP/dex03-talksullae-base"
+          git worktree add --detach "$base" "$BASE_SHA"
+          test ! -e app/google-services.json
+          test ! -e "$base/app/google-services.json"
+          mkdir -p dex-qa-output
+          python3 - "$base/app/google-services.json" app/google-services.json <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          project_number = "123456789012"
+          config = {
+              "project_info": {"project_number": project_number, "project_id": "demo-talksullae"},
+              "client": [{
+                  "client_info": {
+                      "mobilesdk_app_id": "1:" + project_number + ":android:0123456789abcdef",
+                      "android_client_info": {"package_name": "com.hebi.talksullae"},
+                  },
+                  "api_key": [{"current_key": "synthetic-local-qa-only-no-cloud-key"}],
+              }],
+              "configuration_version": "1",
+          }
+          for filename in sys.argv[1:]:
+              Path(filename).write_text(json.dumps(config))
+          PY
+          (cd "$base" && ./gradlew --no-daemon --max-workers=2 :app:bundleRelease)
+          ./gradlew --no-daemon --max-workers=2 :app:bundleRelease
+          grep -q 'FIREBASE_CONFIGURED = true' app/build/generated/source/buildConfig/release/com/hebi/talksullae/BuildConfig.java
+          mapping="app/build/outputs/mapping/release/mapping.txt"
+          test -s "$mapping"
+          cp "$mapping" dex-qa-output/mapping.txt
+          python3 - "$base/app/build/outputs/bundle/release/app-release.aab" app/build/outputs/bundle/release/app-release.aab <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          def measure(filename):
+              artifact = Path(filename)
+              with ZipFile(artifact) as archive:
+                  entries = [entry for entry in archive.infolist()
+                             if re.search(r'(^|/)dex/classes(?:\d+)?\.dex$', entry.filename)]
+                  markers = sorted({match.decode() for entry in entries
+                                    for match in re.findall(rb'~~(?:R8|D8)\{[^\x00\r\n]+?\}', archive.read(entry))})
+                  return {'dex_entries': len(entries), 'dex_bytes': sum(e.file_size for e in entries),
+                          'compiler_markers': markers, 'aab_sha256': hashlib.sha256(artifact.read_bytes()).hexdigest()}
+
+          baseline, candidate = map(measure, sys.argv[1:])
+          assert baseline['dex_bytes'] > candidate['dex_bytes'] > 0
+          assert any(marker.startswith('~~R8') for marker in candidate['compiler_markers'])
+          report = {'baseline_sha': os.environ['BASE_SHA'], 'candidate_sha': os.environ['CANDIDATE_SHA'],
+                    'firebase_config': 'synthetic demo configuration in both builds; no Firebase runtime', 'baseline': baseline, 'candidate': candidate,
+                    'mapping_bytes': Path('dex-qa-output/mapping.txt').stat().st_size,
+                    'reduction_pct': round((1 - candidate['dex_bytes'] / baseline['dex_bytes']) * 100, 2)}
+          blob = json.dumps(report, indent=2) + '\n'
+          Path('dex-qa-output/dex.json').write_text(blob)
+          print(blob)
+          PY
+      - name: Preserve actual bundle and mapping evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: talksullae-dex03-configured-mapping
+          retention-days: 7
+          if-no-files-found: error
+          path: dex-qa-output/
