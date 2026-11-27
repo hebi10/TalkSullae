@@ -166,13 +166,17 @@ internal fun OnlineLiarGameHost(
             if (participant && (phase == GamePhase.PLAYING || phase == GamePhase.VOTING)) {
                 ContentCard {
                     if (state.role == "liar") {
-                        Text("내 역할: 라이어 · 주제는 공개되지 않습니다.",
-                            style = MaterialTheme.typography.titleMedium,
+                        Text("본인만 확인하는 역할", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("내 역할: 라이어", style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.testTag("liar-secret-role"))
+                        Text("주제는 공개되지 않습니다.", style = MaterialTheme.typography.bodySmall)
                     } else if (state.role == "citizen") {
-                        Text("내 역할: 일반 참가자 · 비밀 주제: " + (state.topic ?: "확인 중"),
-                            style = MaterialTheme.typography.titleMedium,
+                        Text("본인만 확인하는 역할", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("내 역할: 일반 참가자", style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.testTag("liar-secret-role"))
+                        Text("비밀 주제: " + (state.topic ?: "확인 중"), style = MaterialTheme.typography.bodyLarge)
                     } else {
                         Text("개인 역할을 확인하는 중입니다.")
                     }
@@ -189,7 +193,7 @@ internal fun OnlineLiarGameHost(
             if (participant && phase == GamePhase.PLAYING) {
                 Text(snap.publicState["prompt"] as? String ?: "채팅 준비 중",
                     style = MaterialTheme.typography.bodyMedium)
-                LiarMessages(state.messages,names,state.canLoadOlder,state.loadingOlder,vm::loadOlder)
+                LiarMessages(state.messages,names,uid,state.canLoadOlder,state.loadingOlder,vm::loadOlder)
                 OutlinedTextField(
                     value = state.draft, onValueChange = vm::editMessage,
                     enabled = state.role != null && state.pendingMessage == null && !state.sending,
@@ -218,7 +222,10 @@ internal fun OnlineLiarGameHost(
                     "vote","revote" -> {
                         if (notice == "revote") Text("동점 후보에게만 투표할 수 있습니다.")
                         if (state.hasSubmitted) {
-                            Text("투표를 제출했습니다. 다른 참가자 또는 서버 마감을 기다립니다.")
+                            ContentCard {
+                                Text("투표를 제출했습니다.", style = MaterialTheme.typography.titleSmall)
+                                Text("다른 참가자 또는 서버 마감을 기다립니다.", style = MaterialTheme.typography.bodySmall)
+                            }
                         } else {
                             options.filter { it != uid }.forEach { candidate ->
                                 GameChoiceAction(
@@ -240,9 +247,15 @@ internal fun OnlineLiarGameHost(
                     }
                     "guess" -> {
                         if (state.role != "liar") {
-                            Text("라이어가 마지막으로 주제를 맞힐 차례입니다.")
+                            ContentCard {
+                                Text("최후 추리 대기", style = MaterialTheme.typography.titleSmall)
+                                Text("라이어가 마지막으로 주제를 맞힐 차례입니다.")
+                            }
                         } else if (state.hasSubmitted) {
-                            Text("주제 답변을 제출했습니다. 결과 공개를 기다립니다.")
+                            ContentCard {
+                                Text("주제 답변을 제출했습니다.", style = MaterialTheme.typography.titleSmall)
+                                Text("결과 공개를 기다립니다.", style = MaterialTheme.typography.bodySmall)
+                            }
                         } else {
                             Text("비밀 주제를 추리해 하나를 선택해 주세요.")
                             options.forEach { topic ->
@@ -250,6 +263,7 @@ internal fun OnlineLiarGameHost(
                                     label = topic + if (selectedChoice == topic) " · 선택됨" else "",
                                     selected = selectedChoice == topic,
                                     onClick = { selectedChoice = topic },
+                                    enabled = !state.busy && state.pendingAction == null,
                                     modifier = Modifier.fillMaxWidth().testTag("liar-topic-option-" + topic)
                                 )
                             }
@@ -269,7 +283,9 @@ internal fun OnlineLiarGameHost(
             if (phase == GamePhase.REVEAL || phase == GamePhase.FINISHED) {
                 ContentCard {
                     Text("라이어 공개·최종 결과", style = MaterialTheme.typography.titleMedium)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Text(snap.publicState["publishedResult"] as? String ?: "결과를 불러오는 중입니다.",
+                        style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.testTag("liar-result"))
                 }
             }
@@ -294,6 +310,7 @@ internal fun OnlineLiarGameHost(
 private fun LiarMessages(
     messages: List<LiarChatMessage>,
     names: Map<String,String>,
+    uid: String,
     canLoadOlder: Boolean,
     loadingOlder: Boolean,
     onLoadOlder: () -> Unit
@@ -307,11 +324,8 @@ private fun LiarMessages(
             }
         }
         messages.forEach { message ->
-            Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-                Text(names[message.senderUid] ?: "친구",
-                    style = MaterialTheme.typography.labelMedium)
-                Text(message.text, style = MaterialTheme.typography.bodyMedium)
-            }
+            GameConversationMessage(message, names[message.senderUid] ?: "친구",
+                own = message.senderUid == uid)
         }
         if (messages.isEmpty()) Text("아직 게임 대화가 없습니다.")
     }

@@ -338,9 +338,15 @@ class DesignScreensCaptureTest {
         capture("D16_identity_guess_bottom",tag("identity-guess-send"),true)
     }
     @Test fun d17IdentityResult(){mountGame("identity",GamePhase.FINISHED);capture("D17_identity_result",label("정체 공개·결과"),true)}
-    @Test fun d18Liar(){mountGame("liar",GamePhase.PLAYING,role="liar");capture("D18_liar_secret",tag("liar-secret-role"),true)}
+    @Test fun d18Liar(){
+        mountGame("liar",GamePhase.PLAYING,role="liar")
+        tag("liar-secret-role").assertExists()
+        compose.onNodeWithText("비밀 주제:",substring=true).assertDoesNotExist()
+        capture("D18_liar_secret",tag("liar-secret-role"),true)
+    }
     @Test fun d18Citizen(){
         mountGame("liar",GamePhase.PLAYING)
+        label("비밀 주제: 커피").assertExists()
         capture("D18_citizen_secret",tag("liar-secret-role"),true)
         tag("liar-chat-input").performScrollTo().performClick().performTextInput("나는 아침에 마시는 편이야.")
         capture("D18_liar_input",tag("liar-chat-input"),true)
@@ -358,6 +364,8 @@ class DesignScreensCaptureTest {
     @Test fun d21LiarResult(){mountGame("liar",GamePhase.FINISHED);capture("D21_liar_result",tag("liar-result"),true)}
     @Test fun d22Forbidden(){
         mountGame("forbidden",GamePhase.PLAYING)
+        label("내 금지어는 공개되지 않습니다.").assertExists()
+        compose.onNodeWithTag("forbidden-other-owner").assertDoesNotExist()
         capture("D22_forbidden_chat",tag("forbidden-other-friend1"),true)
         tag("forbidden-chat-input").performScrollTo().performClick().performTextInput("오늘 어떤 계획이 있어?")
         capture("D22_forbidden_input",tag("forbidden-chat-input"),true)
@@ -367,6 +375,7 @@ class DesignScreensCaptureTest {
     @Test fun d24BalanceChoice(){
         mountGame("balance",GamePhase.PLAYING)
         tag("balance-choice-A").performScrollTo().performClick()
+        tag("balance-question").assertExists()
         capture("D24_balance_choice",tag("balance-choice-A"),true)
     }
     @Test fun d24BalanceSubmitted(){mountGame("balance",GamePhase.PLAYING,submitted=true);capture("D24_balance_submitted",label("선택을 제출했습니다. 결과 공개 전까지 다른 사람의 선택은 비공개입니다."),true)}
@@ -374,6 +383,7 @@ class DesignScreensCaptureTest {
         mountGame("balance",GamePhase.VOTING)
         tag("balance-predict-target-friend1").performScrollTo().performClick()
         tag("balance-predict-choice-A").performScrollTo().performClick()
+        label("지훈님은 어떤 선택을 했을까요?").assertExists()
         capture("D25_balance_predict",tag("balance-predict-choice-A"),true)
     }
     @Test fun d26BalanceResult(){mountGame("balance",GamePhase.FINISHED);capture("D26_balance_result",tag("balance-result"),true)}

@@ -1,6 +1,10 @@
 package com.hebi.talksullae.ui.rooms
 
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -10,6 +14,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.hebi.talksullae.design.ContentCard
+import com.hebi.talksullae.design.ChatBubbleWithTime
+import com.hebi.talksullae.game.online.LiarChatMessage
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.hebi.talksullae.game.core.GamePhase
 
 internal fun gamePhaseLabel(phase: GamePhase?): String = when (phase) {
@@ -75,5 +84,19 @@ internal fun GameChoiceAction(
         )
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+internal fun GameConversationMessage(message: LiarChatMessage, senderName: String, own: Boolean) {
+    val time = message.createdAtMillis?.let {
+        SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(it))
+    }
+    Column(Modifier.fillMaxWidth(),
+        horizontalAlignment = if (own) Alignment.End else Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(senderName, style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ChatBubbleWithTime(message.text, time, own)
     }
 }

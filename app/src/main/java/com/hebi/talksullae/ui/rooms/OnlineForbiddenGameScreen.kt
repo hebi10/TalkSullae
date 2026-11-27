@@ -149,11 +149,15 @@ internal fun OnlineForbiddenGameHost(
                     style=MaterialTheme.typography.titleMedium)
                 ContentCard {
                     Text("다른 친구의 금지어",style=MaterialTheme.typography.titleMedium)
+                    Text("내 금지어는 공개되지 않습니다.", style=MaterialTheme.typography.bodySmall,
+                        color=MaterialTheme.colorScheme.onSurfaceVariant)
                     if(state.personal==null){
                         Text("개인 금지어 정보를 확인 중입니다.")
                     }else{
-                        state.otherWords.forEach{(target,word)->
+                        state.otherWords.filter { (target, _) -> target != uid }.forEachIndexed { index, (target, word) ->
+                            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             Text((names[target]?:"친구")+" · "+word,
+                                style=MaterialTheme.typography.bodyLarge,
                                 modifier=Modifier.testTag("forbidden-other-"+target))
                         }
                     }
@@ -166,7 +170,8 @@ internal fun OnlineForbiddenGameHost(
                     }
                 }
                 ContentCard {
-                    Text("탈락 ${eliminated.size}명 / 참가 ${snap.participants.size}명")
+                    Text("탈락 ${eliminated.size}명 / 참가 ${snap.participants.size}명",
+                        style=MaterialTheme.typography.titleSmall)
                     if(uid in eliminated)Text("금지어를 말해 탈락했습니다. 채팅을 보낼 수 없습니다.",
                         color = MaterialTheme.colorScheme.error)
                 }
@@ -179,7 +184,8 @@ internal fun OnlineForbiddenGameHost(
                         }
                     }
                     state.messages.forEach{message->
-                        Text((names[message.senderUid]?:"친구")+": "+message.text)
+                        GameConversationMessage(message, names[message.senderUid] ?: "친구",
+                            own = message.senderUid == uid)
                     }
                     if(state.messages.isEmpty())Text("아직 대화가 없습니다.")
                 }
@@ -187,7 +193,8 @@ internal fun OnlineForbiddenGameHost(
                     value=state.draft,onValueChange=vm::editMessage,
                     enabled=state.personal!=null&&uid !in eliminated &&
                         state.pendingMessage==null&&!state.sending,
-                    label={Text("게임 메시지 · 최대 500자")},maxLines=3,
+                    label={Text("게임 메시지 · 최대 500자")},
+                    supportingText={Text("${state.draft.length}/500자")},maxLines=3,
                     modifier=Modifier.fillMaxWidth().testTag("forbidden-chat-input")
                 )
                 if(state.pendingMessage!=null&&!state.sending){
@@ -206,7 +213,9 @@ internal fun OnlineForbiddenGameHost(
             if(phase==GamePhase.REVEAL||phase==GamePhase.FINISHED){
                 ContentCard {
                     Text("금지어 결과",style=MaterialTheme.typography.titleMedium)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Text(snap.publicState["publishedResult"] as? String ?: "결과 집계 중",
+                        style=MaterialTheme.typography.bodyLarge,
                         modifier=Modifier.testTag("forbidden-result"))
                 }
             }
