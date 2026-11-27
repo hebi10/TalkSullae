@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.hebi.talksullae.data.RoomDraft
 import com.hebi.talksullae.data.RoomInputRules
@@ -45,33 +48,40 @@ import com.hebi.talksullae.design.PrimaryAction
 fun WelcomeScreen(onlineConfigured: Boolean, onContinue: () -> Unit, onInvitePreview: () -> Unit, allowPreview: Boolean = true) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(24.dp))
-        Icon(Icons.Default.ChatBubbleOutline, contentDescription = null, modifier = Modifier.height(72.dp).fillMaxWidth())
-        Text("톡술래", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-        Text("친구와 함께 쓰는 온라인 방", style = MaterialTheme.typography.bodyLarge)
-        ContentCard {
-            Text("모두 같은 방에서", style = MaterialTheme.typography.titleMedium)
-            Text("방을 만들고 초대 코드로 친구를 모아 가입 요청과 멤버를 관리하세요.")
-        }
-        PreviewNotice(
-            if (onlineConfigured && !allowPreview) "Google 계정으로 로그인해 친구들과 실제 채팅과 게임을 시작할 수 있습니다."
-            else if (onlineConfigured) "Google 계정으로 로그인하면 온라인 방을 이용할 수 있습니다. 채팅과 게임은 데모에서 미리 볼 수 있습니다."
-            else "이 빌드는 기기에서 데모를 체험할 수 있습니다."
-        )
-        PrimaryAction(
-            label = "시작하기",
-            onClick = onContinue,
-            modifier = Modifier.fillMaxWidth().testTag("welcome-start")
-        )
-        if (allowPreview) OutlinedButton(
-            onClick = onInvitePreview,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("welcome-invite-demo"),
-            shape = RoundedCornerShape(8.dp)
+        Column(
+            modifier = Modifier.widthIn(max = 520.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("초대받은 화면 미리보기")
+            Spacer(Modifier.height(24.dp))
+            Icon(Icons.Default.ChatBubbleOutline, contentDescription = null, modifier = Modifier.size(72.dp))
+            Text("톡술래", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+            Text("친구와 함께 쓰는 온라인 방", style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center)
+            ContentCard {
+                Text("모두 같은 방에서", style = MaterialTheme.typography.titleMedium)
+                Text("방을 만들고 초대 코드로 친구를 모아 대화하고 익명 추리 게임을 즐겨 보세요.",
+                    style = MaterialTheme.typography.bodyMedium)
+            }
+            PreviewNotice(
+                if (onlineConfigured && !allowPreview) "Google 계정으로 로그인해 친구들과 실제 채팅과 게임을 시작할 수 있습니다."
+                else if (onlineConfigured) "Google 계정으로 로그인하면 온라인 방을 이용할 수 있습니다. 채팅과 게임은 데모에서 미리 볼 수 있습니다."
+                else "이 빌드는 기기에서 데모를 체험할 수 있습니다."
+            )
+            PrimaryAction(
+                label = "시작하기",
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth().testTag("welcome-start")
+            )
+            if (allowPreview) OutlinedButton(
+                onClick = onInvitePreview,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("welcome-invite-demo"),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("초대받은 화면 미리보기")
+            }
         }
     }
 }
@@ -91,74 +101,88 @@ fun OnboardingScreen(
     val validNickname = nickname.trim().length in 2..16 && !nickname.contains("\n")
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .imePadding().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("처음 오셨나요?", style = MaterialTheme.typography.headlineMedium)
-        if (allowDemo) {
-            Text("닉네임과 아바타를 선택해 UI를 체험해 보세요.", style = MaterialTheme.typography.bodyMedium)
-            PreviewNotice("아래 닉네임과 아바타는 기기 내 데모에서 사용합니다.")
-        } else {
-            Text("Google 로그인 후 실제 닉네임을 설정할 수 있습니다.")
-        }
-        if (allowDemo) OutlinedTextField(
-            value = nickname,
-            onValueChange = { nickname = it },
-            modifier = Modifier.fillMaxWidth().testTag("onboarding-nickname"),
-            label = { Text("닉네임") },
-            supportingText = { Text("2~16자, 이 기기 화면에서만 사용") },
-            isError = !validNickname,
-            singleLine = true
-        )
-        if (allowDemo) Text("기본 아바타", style = MaterialTheme.typography.titleMedium)
-        if (allowDemo) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("부엉이", "토끼", "고양이").forEach { choice ->
-                FilterChip(
-                    selected = avatar == choice,
-                    onClick = { avatar = choice },
-                    label = { Text(choice) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                        .testTag("avatar-${choice}")
-                )
+        Column(
+            modifier = Modifier.widthIn(max = 520.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("처음 오셨나요?", style = MaterialTheme.typography.headlineMedium)
+            if (allowDemo) {
+                Text("닉네임과 아바타를 선택해 UI를 체험해 보세요.", style = MaterialTheme.typography.bodyMedium)
+                PreviewNotice("아래 닉네임과 아바타는 기기 내 데모에서 사용합니다.")
+            } else {
+                Text("Google 로그인 후 실제 닉네임을 설정할 수 있습니다.")
             }
-        }
-        ContentCard {
-            Text("온라인 로그인", style = MaterialTheme.typography.titleSmall)
-            Text(if (onGoogleSignIn == null) "Firebase 설정이 없어 온라인 로그인을 사용할 수 없습니다."
-                 else "Google 계정으로 로그인해 온라인 방을 이용할 수 있습니다.")
-            OutlinedButton(
-                onClick = { onGoogleSignIn?.invoke() },
-                enabled = onGoogleSignIn != null && !signInBusy,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .testTag("onboarding-google-signin")
-            ) {
-                Text(if (signInBusy) "Google 로그인 진행 중…" else "Google 계정으로 로그인")
-            }
-            if (!allowDemo) {
-                OutlinedButton(onClick = {
-                    policyLinkError = try {
-                        context.startActivity(Intent(Intent.ACTION_VIEW,
-                            Uri.parse("https://github.com/hebi10/TalkSullae/blob/main/docs/privacy-policy.md")))
-                        false
-                    } catch (_: Exception) { true }
-                }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("onboarding-privacy-policy")) {
-                    Text("개인정보처리방침 보기")
+            if (allowDemo) OutlinedTextField(
+                value = nickname,
+                onValueChange = { nickname = it },
+                modifier = Modifier.fillMaxWidth().testTag("onboarding-nickname"),
+                label = { Text("닉네임") },
+                supportingText = { Text("2~16자, 이 기기 화면에서만 사용") },
+                isError = !validNickname,
+                singleLine = true
+            )
+            if (allowDemo) Text("기본 아바타", style = MaterialTheme.typography.titleMedium)
+            if (allowDemo) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("부엉이", "토끼", "고양이").forEach { choice ->
+                    FilterChip(
+                        selected = avatar == choice,
+                        onClick = { avatar = choice },
+                        label = { Text(choice) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("avatar-${choice}")
+                    )
                 }
-                if (policyLinkError) Text("정책 문서를 열지 못했습니다. 잠시 후 다시 시도해 주세요.",
-                    color = MaterialTheme.colorScheme.error)
             }
-            if (authError != null) {
-                Text(authError, color = MaterialTheme.colorScheme.error)
+            ContentCard {
+                Text("온라인 로그인", style = MaterialTheme.typography.titleSmall)
+                Text(if (onGoogleSignIn == null) "Firebase 설정이 없어 온라인 로그인을 사용할 수 없습니다."
+                     else "Google 계정으로 로그인해 온라인 방을 이용할 수 있습니다.")
+                val googleLabel = if (signInBusy) "Google 로그인 진행 중…" else "Google 계정으로 로그인"
+                if (allowDemo) {
+                    OutlinedButton(
+                        onClick = { onGoogleSignIn?.invoke() },
+                        enabled = onGoogleSignIn != null && !signInBusy,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("onboarding-google-signin")
+                    ) {
+                        Text(googleLabel)
+                    }
+                } else {
+                    PrimaryAction(
+                        label = googleLabel,
+                        onClick = { onGoogleSignIn?.invoke() },
+                        enabled = onGoogleSignIn != null && !signInBusy,
+                        modifier = Modifier.fillMaxWidth().testTag("onboarding-google-signin")
+                    )
+                }
+                if (!allowDemo) {
+                    OutlinedButton(onClick = {
+                        policyLinkError = try {
+                            context.startActivity(Intent(Intent.ACTION_VIEW,
+                                Uri.parse("https://github.com/hebi10/TalkSullae/blob/main/docs/privacy-policy.md")))
+                            false
+                        } catch (_: Exception) { true }
+                    }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("onboarding-privacy-policy")) {
+                        Text("개인정보처리방침 보기")
+                    }
+                    if (policyLinkError) Text("정책 문서를 열지 못했습니다. 잠시 후 다시 시도해 주세요.",
+                        color = MaterialTheme.colorScheme.error)
+                }
+                if (authError != null) {
+                    Text(authError, color = MaterialTheme.colorScheme.error)
+                }
             }
+            Spacer(Modifier.height(4.dp))
+            if (allowDemo) PrimaryAction(
+                label = "데모로 시작",
+                onClick = { onContinueDemo(nickname.trim()) },
+                modifier = Modifier.fillMaxWidth().testTag("onboarding-continue"),
+                enabled = validNickname
+            )
         }
-        Spacer(Modifier.height(4.dp))
-        if (allowDemo) PrimaryAction(
-            label = "데모로 시작",
-            onClick = { onContinueDemo(nickname.trim()) },
-            modifier = Modifier.fillMaxWidth().testTag("onboarding-continue"),
-            enabled = validNickname
-        )
     }
 }
 

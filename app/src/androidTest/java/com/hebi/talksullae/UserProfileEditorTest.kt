@@ -1,6 +1,7 @@
 package com.hebi.talksullae
 
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -37,6 +38,7 @@ class UserProfileEditorTest {
         compose.onNodeWithTag("profile-save").assertIsNotEnabled()
         compose.onNodeWithTag("profile-nickname").performTextInput("  해비  ")
         compose.onNodeWithTag("profile-avatar-고양이").performScrollTo().performClick()
+        compose.onNodeWithTag("profile-avatar-selection").assertTextEquals("선택한 아바타: 고양이")
         compose.onNodeWithTag("profile-save").performScrollTo().assertIsEnabled().performClick()
         assertEquals("해비", savedName)
         assertEquals("고양이", savedAvatar)
@@ -73,5 +75,15 @@ class UserProfileEditorTest {
         compose.onNodeWithTag("profile-avatar-펭귄").performScrollTo().performClick()
         compose.onNodeWithTag("profile-save").performScrollTo().assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals("펭귄", savedAvatar) }
+    }
+    @Test fun savingDisablesProfileInputs() {
+        compose.setContent {
+            TalkSullaeTheme {
+                UserProfileEditorScreen(UserProfile("민지", "고양이"), false, true, null, { _, _ -> })
+            }
+        }
+        compose.onNodeWithTag("profile-nickname").assertIsNotEnabled()
+        compose.onNodeWithTag("profile-avatar-고양이").assertIsNotEnabled()
+        compose.onNodeWithTag("profile-save").assertIsNotEnabled()
     }
 }
