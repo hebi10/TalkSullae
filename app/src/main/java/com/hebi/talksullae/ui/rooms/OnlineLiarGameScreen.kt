@@ -89,6 +89,7 @@ internal fun OnlineLiarGameHost(
     }
     val remaining = deadline?.let { max(0L,(it - nowMillis + 999L)/1000L) }
 
+    GameChatImeWindow()
     // Resize and clip the viewport before measuring the scrolling content.
     Box(Modifier.fillMaxSize().safeDrawingPadding().clipToBounds()
         .testTag("liar-game-viewport")) {

@@ -78,6 +78,7 @@ internal fun OnlineForbiddenGameHost(
         }
     }
     val remaining=deadline?.let{max(0L,(it-nowMillis+999L)/1000L)}
+    GameChatImeWindow()
     // Apply system and IME insets to the viewport, not to the scroll content.
     Box(Modifier.fillMaxSize().safeDrawingPadding().clipToBounds()
         .testTag("forbidden-game-viewport")) {

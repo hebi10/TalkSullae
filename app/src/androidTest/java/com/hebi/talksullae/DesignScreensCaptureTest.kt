@@ -126,12 +126,21 @@ class DesignScreensCaptureTest {
                 val frame = activity.windowManager.currentWindowMetrics.bounds
                 val statusBottom = frame.top + insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
                 val imeTop = frame.bottom - insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-                val detail = "$viewportTag host=$host control=$bounds offset=$offset statusBottom=$statusBottom imeTop=$imeTop"
+                val mode = activity.window.attributes.softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST
+                val rootLocation = IntArray(2)
+                decor.getLocationOnScreen(rootLocation)
+                val contentLocation = IntArray(2)
+                activity.findViewById<android.view.View>(android.R.id.content).getLocationOnScreen(contentLocation)
+                val detail = "$viewportTag host=$host control=$bounds offset=$offset statusBottom=$statusBottom imeTop=$imeTop mode=$mode decorY=${rootLocation[1]} contentY=${contentLocation[1]} decorHeight=${decor.height}"
+                check(mode == WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING) {
+                    "Game IME window adjustment not applied: $detail"
+                }
                 check(host.top + offset >= statusBottom - 1f &&
                     host.bottom + offset <= imeTop + 1f) { "Game viewport overlaps system bars or keyboard: $detail" }
                 check(bounds.top >= host.top - 1f && bounds.bottom <= host.bottom + 1f &&
                     bounds.top + offset >= statusBottom - 1f &&
                     bounds.bottom + offset <= imeTop + 1f) { "IME action overlaps system bars or keyboard: $detail" }
+                android.util.Log.i("DesignImeViewport", detail)
             }
         }
     }
