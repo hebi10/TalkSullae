@@ -177,15 +177,18 @@ class DesignScreensCaptureTest {
     @Test fun d06Create(){
         mountRooms()
         tag("online-create-toggle").performScrollTo().performClick()
+        label("친구들과 사용할 공간을 만들어 보세요.").assertExists()
         capture("D06_create",tag("online-room-name"),true)
         capture("D06_create_bottom",tag("online-create-submit"),true)
     }
     @Test fun d07Invite(){
         mountRooms(pending=true,invite=true)
+        label("가입 승인 필요").assertExists()
         capture("D07_invite_preview",tag("live-invite-confirm"))
     }
     @Test fun d08Pending(){
         mountRooms(pending=true)
+        tag("room-membership-detail-"+roomId).assertExists()
         capture("D08_pending",tag("online-room-"+roomId),true)
     }
     @Test fun d09Chat(){
@@ -210,12 +213,20 @@ class DesignScreensCaptureTest {
         mountRooms()
         enterManagement()
         capture("D10_management",tag("room-edit-open"),true)
+        label("가입 요청 1명").assertExists()
+        label("멤버 목록 4명").assertExists()
         capture("D10_members",label("승인"),true)
     }
     @Test fun d11InviteManagement(){
         mountRooms()
         enterManagement()
         tag("live-invite-generate").performScrollTo().performClick()
+        label("초대 코드 숨김").assertExists()
+        compose.onNodeWithText(code).assertDoesNotExist()
+        tag("live-invite-reveal").performScrollTo().performClick()
+        label(code).assertExists()
+        tag("live-invite-reveal").performScrollTo().performClick()
+        compose.onNodeWithText(code).assertDoesNotExist()
         capture("D11_invite_manage",label("코드 복사"),true)
         tag("live-invite-revoke").performScrollTo().performClick()
         capture("D11_invite_revoke",label("초대 코드 취소"))
@@ -226,6 +237,7 @@ class DesignScreensCaptureTest {
     }
     @Test fun d12Icon(){
         mount("방 관리"){RoomIconDialog(room,false,null,{}, {_,_->})}
+        label("선택: 고양이").assertExists()
         capture("D12_room_icon",tag("room-icon-고양이"),true)
     }
     @Test fun d13Catalog(){

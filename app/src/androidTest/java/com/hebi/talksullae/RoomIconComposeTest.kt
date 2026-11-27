@@ -2,6 +2,7 @@ package com.hebi.talksullae
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -26,6 +27,7 @@ class RoomIconComposeTest {
             }
         }
         compose.onNodeWithTag("room-icon-펭귄").performScrollTo().performClick()
+        compose.onNodeWithTag("room-icon-selection").assertTextEquals("선택: 펭귄")
         compose.onNodeWithTag("room-icon-save").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals("펭귄" to 7L,result) }
     }

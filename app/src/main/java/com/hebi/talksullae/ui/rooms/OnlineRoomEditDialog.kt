@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.hebi.talksullae.data.RoomInputRules
+import com.hebi.talksullae.design.PrimaryAction
 import com.hebi.talksullae.firebase.CloudRoom
 
 @Composable
@@ -34,6 +36,7 @@ internal fun OnlineRoomEditDialog(room: CloudRoom, working: Boolean, error: Stri
     val stale = revision != room.roomRevision
     AlertDialog(onDismissRequest = onDismiss,
         title = { Text("방 정보 수정") },
+        shape = RoundedCornerShape(8.dp),
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("방 이름") },
@@ -54,8 +57,9 @@ internal fun OnlineRoomEditDialog(room: CloudRoom, working: Boolean, error: Stri
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(name, description, approval, revision) },
+        confirmButton = { PrimaryAction(label = if (working) "저장 중…" else "저장",
+            onClick = { onSave(name, description, approval, revision) },
             enabled = !working && !stale && RoomInputRules.valid(name, description),
-            modifier = Modifier.testTag("room-edit-save")) { Text(if (working) "저장 중…" else "저장") } },
+            modifier = Modifier.testTag("room-edit-save")) },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !working) { Text("취소") } })
 }
