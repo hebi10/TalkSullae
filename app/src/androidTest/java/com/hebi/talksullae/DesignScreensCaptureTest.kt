@@ -4,6 +4,8 @@ import androidx.compose.ui.test.performTextInput
 import com.hebi.talksullae.ui.MainNavigation
 import com.hebi.talksullae.ui.ProfileScreen
 import android.graphics.Color
+import android.os.Build
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -26,6 +28,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ListenerRegistration
@@ -65,6 +69,9 @@ class DesignScreensCaptureTest {
                 navigationBarStyle = if(dark) SystemBarStyle.dark(Color.TRANSPARENT)
                     else SystemBarStyle.light(Color.TRANSPARENT,Color.TRANSPARENT)
             )
+            // Match MainActivity's manifest; the generic Compose-test Activity
+            // otherwise may pan the whole window when the IME gains focus.
+            activity.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
     }
     private fun mount(title:String,mainTab:String?=null,content:@Composable ()->Unit) {
@@ -86,6 +93,46 @@ class DesignScreensCaptureTest {
         compose.waitUntil(12000) { compose.onAllNodesWithText(value).fetchSemanticsNodes().isNotEmpty() }
         return compose.onNodeWithText(value)
     }
+    private fun waitForCaptureIme() {
+        val activity = compose.activity
+        compose.waitUntil(10000) {
+            compose.runOnUiThread {
+                ViewCompat.getRootWindowInsets(activity.window.decorView)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    private fun assertForbiddenImeViewport(control: SemanticsNodeInteraction) {
+        waitForCaptureIme()
+        val host = tag("forbidden-game-host").fetchSemanticsNode().boundsInWindow
+        val node = control.fetchSemanticsNode()
+        val bounds = node.boundsInWindow
+        check(bounds.height >= node.size.height - 1f) { "IME action is vertically clipped" }
+        val activity = compose.activity
+        compose.runOnUiThread {
+            val decor = activity.window.decorView
+            val insets = checkNotNull(ViewCompat.getRootWindowInsets(decor))
+            check(insets.isVisible(WindowInsetsCompat.Type.ime())) { "IME not visible" }
+            // Convert Compose window coordinates to screen coordinates. The
+            // capture workflow is API 36; retain the API guard for other runners.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val onScreen = IntArray(2)
+                val inWindow = IntArray(2)
+                decor.getLocationOnScreen(onScreen)
+                decor.getLocationInWindow(inWindow)
+                val offset = onScreen[1] - inWindow[1]
+                val frame = activity.windowManager.currentWindowMetrics.bounds
+                val statusBottom = frame.top + insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+                val imeTop = frame.bottom - insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+                check(host.top + offset >= statusBottom - 1f) { "Game viewport overlaps status bar" }
+                check(bounds.top + offset >= statusBottom - 1f &&
+                    bounds.bottom + offset <= imeTop + 1f) { "IME action overlaps system bars or keyboard" }
+            }
+        }
+    }
+
     private fun capture(name:String,anchor:SemanticsNodeInteraction,scroll:Boolean=false) {
         if(scroll && runCatching { anchor.assertIsDisplayed() }.isFailure) anchor.performScrollTo()
         anchor.assertIsDisplayed()
@@ -329,7 +376,9 @@ class DesignScreensCaptureTest {
     }
     private fun mountGame(id:String,phase:GamePhase,role:String="citizen",guess:Boolean=false,eliminated:Boolean=false,submitted:Boolean=false){
         val repo=Game(id,phase,role,guess,eliminated,submitted)
-        mount(if(id=="identity")"" else "톡술래"){
+        // Match the normal signed-in Main route for the forbidden-word host.
+        // It has its own heading/back action and no outer AppTopBar.
+        mount(if(id=="identity" || id=="forbidden")"" else "톡술래"){
             when(id){
                 "identity"->OnlineIdentityGameHost("owner",roomId,room.name,"owner",people,{},repo)
                 "liar"->OnlineLiarGameHost("owner",roomId,room.name,"owner",people,{},repo)
@@ -387,9 +436,12 @@ class DesignScreensCaptureTest {
         compose.onNodeWithTag("forbidden-other-owner").assertDoesNotExist()
         capture("D22_forbidden_chat",tag("forbidden-other-friend1"),true)
         tag("forbidden-chat-input").performScrollTo().performClick().performTextInput("오늘 어떤 계획이 있어?")
+        waitForCaptureIme()
         capture("D22_forbidden_input",tag("forbidden-chat-input"),true)
         val send=tag("forbidden-chat-send").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        assertForbiddenImeViewport(send)
         capture("D22_forbidden_send",send) // No actual message is sent.
+        assertForbiddenImeViewport(send)
     }
     @Test fun d22Eliminated(){mountGame("forbidden",GamePhase.PLAYING,eliminated=true);capture("D22_eliminated",label("금지어를 말해 탈락했습니다. 채팅을 보낼 수 없습니다."),true)}
     @Test fun d23ForbiddenResult(){mountGame("forbidden",GamePhase.FINISHED);capture("D23_forbidden_result",tag("forbidden-result"),true)}
