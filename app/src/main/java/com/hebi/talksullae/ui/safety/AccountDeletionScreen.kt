@@ -6,9 +6,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -21,12 +25,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.hebi.talksullae.design.PrimaryAction
+import com.hebi.talksullae.design.ContentCard
+import com.hebi.talksullae.design.PreviewNotice
 import com.hebi.talksullae.firebase.FirebaseBridge
 import com.hebi.talksullae.firebase.GoogleLogin
 import kotlinx.coroutines.launch
@@ -48,64 +55,86 @@ internal fun AccountDeletionScreen(onBack: () -> Unit, onSignedOut: () -> Unit) 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
             .testTag("account-deletion-screen"),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("계정 및 데이터 삭제", style = MaterialTheme.typography.titleLarge)
-        Text("삭제 요청 후 서버가 방 멤버 정보와 본인이 작성한 채팅을 정리하고 인증 계정을 삭제합니다. " +
-            "공동 경기 결과와 관련 법령에 따른 신고 기록은 별도의 보관 기준이 적용될 수 있습니다.")
-        Text("방장인 방은 먼저 다른 멤버에게 방장을 위임하거나 방을 종료해야 합니다. " +
-            "진행 중인 게임을 마친 뒤 요청해 주세요.")
-        Text("삭제 요청은 취소할 수 없으며, 완료까지 시간이 걸릴 수 있습니다.")
-        if (busy) CircularProgressIndicator()
-        failure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (!configured) Text("온라인 로그인 설정이 없는 시연 빌드에서는 계정 삭제 요청을 보낼 수 없습니다.")
-        if (requested) {
-            Text("삭제 요청이 접수됐습니다. 서버 처리 결과를 확인하는 동안 같은 계정으로 " +
-                "데이터를 추가하지 마세요. 처리가 지연되면 개인정보처리방침의 지원 연락처로 문의해 주세요.")
-        } else {
-            OutlinedButton(
-                onClick = {
-                    if (busy || activity == null || !configured) return@OutlinedButton
-                    busy = true
-                    failure = null
-                    scope.launch {
-                        try {
-                            val existing = FirebaseAuth.getInstance().currentUser?.uid
-                                ?: error("Google 로그인 후 요청해 주세요.")
-                            val refreshed = GoogleLogin(activity).reauthenticateCurrentUser()
-                            check(refreshed.uid == existing) {
-                                "같은 Google 계정으로 다시 로그인해 주세요."
+        Column(
+            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("계정 및 데이터 삭제", style = MaterialTheme.typography.titleLarge)
+            ContentCard {
+                Text("삭제 범위", style = MaterialTheme.typography.titleMedium)
+                Text("삭제 요청 후 서버가 방 멤버 정보와 본인이 작성한 채팅을 정리하고 인증 계정을 삭제합니다.")
+                Text("공동 경기 결과와 관련 법령에 따른 신고 기록은 별도의 보관 기준이 적용될 수 있습니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            ContentCard {
+                Text("요청 전 확인", style = MaterialTheme.typography.titleMedium)
+                Text("방장인 방은 먼저 다른 멤버에게 방장을 위임하거나 방을 종료해야 합니다.")
+                Text("진행 중인 게임을 마친 뒤 요청해 주세요.")
+                Text("삭제 요청은 취소할 수 없으며, 완료까지 시간이 걸릴 수 있습니다.",
+                    color = MaterialTheme.colorScheme.error)
+            }
+            if (busy) CircularProgressIndicator()
+            failure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (!configured) PreviewNotice("온라인 로그인 설정이 없는 시연 빌드에서는 계정 삭제 요청을 보낼 수 없습니다.")
+            if (requested) {
+                ContentCard {
+                    Text("삭제 요청 접수", style = MaterialTheme.typography.titleMedium)
+                    Text("계정 삭제가 완료된 상태는 아닙니다.")
+                    Text("서버 처리 결과를 확인하는 동안 같은 계정으로 데이터를 추가하지 마세요. 처리가 지연되면 개인정보처리방침의 지원 연락처로 문의해 주세요.")
+                }
+            } else {
+                Text("1. Google 계정 본인 확인", style = MaterialTheme.typography.titleSmall)
+                OutlinedButton(
+                    onClick = {
+                        if (busy || activity == null || !configured) return@OutlinedButton
+                        busy = true
+                        failure = null
+                        scope.launch {
+                            try {
+                                val existing = FirebaseAuth.getInstance().currentUser?.uid
+                                    ?: error("Google 로그인 후 요청해 주세요.")
+                                val refreshed = GoogleLogin(activity).reauthenticateCurrentUser()
+                                check(refreshed.uid == existing) {
+                                    "같은 Google 계정으로 다시 로그인해 주세요."
+                                }
+                                verifiedUid = existing
+                                confirmVisible = true
+                            } catch (error: Exception) {
+                                failure = error.localizedMessage ?: "다시 로그인할 수 없습니다."
+                            } finally {
+                                busy = false
                             }
-                            verifiedUid = existing
-                            confirmVisible = true
-                        } catch (error: Exception) {
-                            failure = error.localizedMessage ?: "다시 로그인할 수 없습니다."
-                        } finally {
-                            busy = false
                         }
-                    }
-                },
-                enabled = !busy && activity != null && configured,
-                modifier = Modifier.fillMaxWidth().testTag("account-deletion-reauth")
-            ) { Text("같은 Google 계정으로 본인 확인") }
-            PrimaryAction(
-                "계정 삭제 요청",
-                onClick = {
-                    if (verifiedUid != null &&
-                        FirebaseAuth.getInstance().currentUser?.uid == verifiedUid) {
-                        confirmVisible = true
-                    }
-                },
-                enabled = !busy && currentUser != null && verifiedUid == currentUser.uid,
-                modifier = Modifier.fillMaxWidth().testTag("account-deletion-open-confirm")
-            )
+                    },
+                    enabled = !busy && activity != null && configured,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-deletion-reauth"),
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("같은 Google 계정으로 본인 확인") }
+                Text("2. 삭제 요청 확인", style = MaterialTheme.typography.titleSmall)
+                PrimaryAction(
+                    "계정 삭제 요청",
+                    onClick = {
+                        if (verifiedUid != null &&
+                            FirebaseAuth.getInstance().currentUser?.uid == verifiedUid) {
+                            confirmVisible = true
+                        }
+                    },
+                    enabled = !busy && currentUser != null && verifiedUid == currentUser.uid,
+                    modifier = Modifier.fillMaxWidth().testTag("account-deletion-open-confirm")
+                )
+            }
+            TextButton(onClick = onBack, enabled = !busy,
+                modifier = Modifier.heightIn(min = 48.dp)) { Text("설정으로 돌아가기") }
         }
-        TextButton(onClick = onBack, enabled = !busy) { Text("설정으로 돌아가기") }
     }
     if (confirmVisible) {
         AlertDialog(
             onDismissRequest = { if (!busy) confirmVisible = false },
             title = { Text("계정을 삭제하시겠습니까?") },
+            shape = RoundedCornerShape(8.dp),
             text = { Text("본인 확인 후 삭제 요청을 제출하면 복원할 수 없습니다. " +
                 "최근 Google 로그인이 유효해야 합니다.") },
             confirmButton = {
@@ -139,7 +168,8 @@ internal fun AccountDeletionScreen(onBack: () -> Unit, onSignedOut: () -> Unit) 
                             }
                         }
                     },
-                    modifier = Modifier.testTag("account-deletion-confirm")
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("account-deletion-confirm")
                 ) { Text("삭제 요청 확정") }
             },
             dismissButton = {

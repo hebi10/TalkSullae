@@ -440,10 +440,29 @@ internal fun RoomRecordsContent(
         }
         HorizontalDivider()
         Text("방 연대기",style=MaterialTheme.typography.titleMedium)
-        if(state.events.isEmpty())Text("기록된 이벤트가 없습니다.")
-        state.events.forEach{event->
-            Text(event.seasonId+" · "+(gameLabels[event.gameId]?:event.gameId)+
-                " · "+event.participants+"명")
+        Text("최근 정산된 경기 최대 20개 · 시즌 선택과 별개",
+            style=MaterialTheme.typography.bodySmall,
+            color=MaterialTheme.colorScheme.onSurfaceVariant)
+        if(state.events.isEmpty()) {
+            Text(when {
+                state.loading -> "방 연대기를 확인하는 중입니다."
+                state.error != null -> "방 연대기를 표시할 수 없습니다. 연결 상태를 확인해 주세요."
+                else -> "현재 표시할 정산 기록이 없습니다."
+            }, modifier=Modifier.testTag("records-chronology-empty"),
+                style=MaterialTheme.typography.bodyMedium)
+        }
+        state.events.forEachIndexed { index, event ->
+            if (index == 0 || state.events[index - 1].seasonId != event.seasonId) {
+                Text(event.seasonId.ifBlank { "시즌 정보 없음" },
+                    style=MaterialTheme.typography.titleSmall)
+            }
+            ContentCard(Modifier.testTag("records-chronology-event-$index")) {
+                Text(gameLabels[event.gameId] ?: event.gameId,
+                    style=MaterialTheme.typography.titleMedium)
+                Text("정산된 경기 · 참가 ${event.participants}명",
+                    style=MaterialTheme.typography.bodySmall,
+                    color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

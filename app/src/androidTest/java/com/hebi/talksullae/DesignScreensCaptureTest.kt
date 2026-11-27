@@ -403,7 +403,12 @@ class DesignScreensCaptureTest {
     }
     @Test fun d27Ranking(){mountRecords(records);capture("D27_ranking",tag("records-ranked-owner"),true)}
     @Test fun d27Closed(){mountRecords(records.copy(seasonId="2026-10",closed=true,finalResult=SeasonFinalResult(420,1,12)));capture("D27_closed",tag("season-final"),true)}
-    @Test fun d28Chronology(){mountRecords(records);capture("D28_chronology",label("방 연대기"),true)}
+    @Test fun d28Chronology(){
+        mountRecords(records)
+        tag("records-chronology-event-0").performScrollTo()
+        tag("records-chronology-event-0").assertIsDisplayed()
+        capture("D28_chronology",tag("records-chronology-event-0"),true)
+    }
     private val gameStats=listOf("identity","liar","forbidden","balance").associateWith{FriendGameStats(5,3)}
     private val pair=FriendComparison(12,5,4,3,mapOf("identity" to 4L,"liar" to 3L,"forbidden" to 2L,"balance" to 3L),4,3,4,2,3,2)
     @Test fun d29Friend(){

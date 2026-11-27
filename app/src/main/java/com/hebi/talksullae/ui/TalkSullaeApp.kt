@@ -1179,50 +1179,67 @@ private fun SettingsScreen(
     }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (notificationUid != null) {
-            PushNotificationSettings(uid = notificationUid)
-        } else {
-            PreviewNotice("사용자 차단과 채팅 신고는 로그인 후 온라인 방에서 이용할 수 있습니다.")
-        }
-        ContentCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("다크 모드", modifier = Modifier.weight(1f))
-                Switch(checked = darkTheme, onCheckedChange = onThemeChange)
-            }
-        }
-        OutlinedButton(
-            onClick = onSafetyReport,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("safety-report-open"),
-            shape = RoundedCornerShape(8.dp)
+        Column(
+            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("안전 신고")
-        }
-        TextButton(
-            onClick = { openPolicyLink(privacyPolicyUrl) },
-            modifier = Modifier.fillMaxWidth().testTag("privacy-policy-open")
-        ) {
-            Text("개인정보처리방침 보기")
-        }
-        if (privacyLinkFailed) {
-            Text("개인정보처리방침을 열 수 없습니다.", color = MaterialTheme.colorScheme.error)
-        }
-        ContentCard {
-            Text("계정 삭제·차단", style = MaterialTheme.typography.titleMedium)
-            Text("온라인 계정은 최근 Google 로그인 후 삭제를 요청할 수 있습니다. 방장 위임과 진행 중 게임 종료가 필요합니다.")
-            OutlinedButton(
-                onClick = onAccountDeletion,
-                modifier = Modifier.fillMaxWidth().testTag("account-deletion-in-app")
-            ) { Text("앱에서 계정 삭제 요청") }
-            TextButton(
-                onClick = { openPolicyLink("$privacyPolicyUrl#account-deletion") },
-                modifier = Modifier.fillMaxWidth().testTag("account-deletion-request-open")
-            ) {
-                Text("계정 및 데이터 삭제 요청")
+            SectionTitle("알림")
+            if (notificationUid != null) {
+                PushNotificationSettings(uid = notificationUid)
+            } else {
+                PreviewNotice("로그인 후 온라인 알림을 설정할 수 있습니다.")
             }
+            SectionTitle("화면")
+            ContentCard {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("다크 모드", style = MaterialTheme.typography.titleSmall)
+                        Text(if (darkTheme) "다크 테마 사용 중" else "라이트 테마 사용 중",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = darkTheme, onCheckedChange = onThemeChange,
+                        modifier = Modifier.testTag("settings-theme-switch"))
+                }
+            }
+            SectionTitle("안전 및 지원")
+            ContentCard {
+                Text("사용자 차단과 채팅 신고는 로그인 후 온라인 방에서 이용할 수 있습니다.",
+                    style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(
+                    onClick = onSafetyReport,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("safety-report-open"),
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("안전 신고") }
+                HorizontalDivider()
+                TextButton(
+                    onClick = { openPolicyLink(privacyPolicyUrl) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("privacy-policy-open")
+                ) { Text("개인정보처리방침 보기") }
+            }
+            if (privacyLinkFailed) {
+                Text("개인정보처리방침을 열 수 없습니다.", color = MaterialTheme.colorScheme.error)
+            }
+            SectionTitle("계정")
+            ContentCard {
+                Text("계정 및 데이터 삭제", style = MaterialTheme.typography.titleMedium)
+                Text("온라인 계정은 최근 Google 로그인 후 삭제를 요청할 수 있습니다. 방장 위임과 진행 중 게임 종료가 필요합니다.",
+                    style = MaterialTheme.typography.bodyMedium)
+                OutlinedButton(
+                    onClick = onAccountDeletion,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-deletion-in-app"),
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("앱에서 계정 삭제 요청") }
+                TextButton(
+                    onClick = { openPolicyLink("$privacyPolicyUrl#account-deletion") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-deletion-request-open")
+                ) { Text("계정 및 데이터 삭제 안내") }
+            }
+            PrimaryAction("내 방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
         }
-        PrimaryAction("내 방으로 돌아가기", onClick = onBack, modifier = Modifier.fillMaxWidth())
     }
 }
 

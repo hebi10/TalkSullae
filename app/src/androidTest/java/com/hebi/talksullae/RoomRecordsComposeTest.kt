@@ -93,4 +93,21 @@ class RoomRecordsComposeTest {
         compose.onNodeWithTag("records-name-friend").assertTextEquals("보존 순위 1위 · 지훈")
         compose.onNodeWithText("우승 · 지훈").assertDoesNotExist()
     }
+
+    @Test fun chronologyShowsOnlyReturnedSettledEventsInServerOrder() {
+        compose.setContent {
+            TalkSullaeTheme {
+                RoomRecordsContent("친구방", sample().copy(events=listOf(
+                    RoomRecordEvent("liar","2026-11",4),
+                    RoomRecordEvent("balance","2026-10",2)
+                )), emptyMap(), onPrevious={}, onNext={}, canPrevious=true, canNext=false, onBack={})
+            }
+        }
+        compose.onNodeWithTag("records-chronology-event-0").performScrollTo().assertExists()
+        compose.onNodeWithTag("records-chronology-event-1").performScrollTo().assertExists()
+        compose.onNodeWithText("정산된 경기 · 참가 4명").assertExists()
+        compose.onNodeWithText("정산된 경기 · 참가 2명").assertExists()
+        compose.onNodeWithTag("records-chronology-event-2").assertDoesNotExist()
+        compose.onNodeWithText("현재 표시할 정산 기록이 없습니다.").assertDoesNotExist()
+    }
 }

@@ -74,6 +74,8 @@ internal fun SafetyReportScreen(
                 ContentCard(Modifier.testTag("safety-report-receipt")
                     .semantics { liveRegion = LiveRegionMode.Polite }) {
                     Text("신고가 접수되었습니다", style = MaterialTheme.typography.titleMedium)
+                    Text("접수는 처리 완료를 의미하지 않습니다.", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("접수 번호", style = MaterialTheme.typography.bodySmall)
                     SelectionContainer {
                         Text(result.reportId, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
@@ -95,8 +97,8 @@ internal fun SafetyReportScreen(
                                 selected = selected,
                                 onClick = { model.updateForm(model.form.copy(category = category)) },
                                 enabled = editable,
-                                shape = RoundedCornerShape(percent = 50),
-                                modifier = Modifier.testTag("safety-report-category-${category.key}"),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.heightIn(min = 48.dp).testTag("safety-report-category-${category.key}"),
                                 label = {
                                     Text(category.label(), fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
                                 }
@@ -139,20 +141,29 @@ internal fun SafetyReportScreen(
                         Text("방 이름은 ${MAX_REPORT_ROOM_REFERENCE}자까지 입력할 수 있습니다.")
                     }) else null
                 )
-                PreviewNotice("의심되는 이미지·영상이나 방 초대 코드는 첨부하거나 전달하지 마세요.")
+                ContentCard {
+                    Text("신고 전 확인", style = MaterialTheme.typography.titleSmall)
+                    Text("의심되는 이미지·영상이나 방 초대 코드는 첨부하거나 전달하지 마세요.",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Text("신고 접수와 사용자 차단·방장 강퇴는 서로 다른 기능입니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
 
                 if (needsLogin) {
                     if (onSignIn == null) {
                         PreviewNotice("이 미리보기 빌드에서는 신고를 보낼 수 없습니다.")
                     } else {
-                        Text("신고를 보내려면 Google 계정으로 로그인해 주세요.",
-                            style = MaterialTheme.typography.bodyMedium)
-                        TextButton(
-                            onClick = { focus.clearFocus(); onSignIn() },
-                            enabled = editable,
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("safety-report-sign-in")
-                        ) {
-                            Text(if (model.signingIn) "로그인 중…" else "Google 계정으로 로그인")
+                        ContentCard {
+                            Text("Google 로그인 필요", style = MaterialTheme.typography.titleSmall)
+                            Text("신고를 보내려면 Google 계정으로 로그인해 주세요.",
+                                style = MaterialTheme.typography.bodyMedium)
+                            PrimaryAction(
+                                label = if (model.signingIn) "로그인 중…" else "Google 계정으로 로그인",
+                                onClick = { focus.clearFocus(); onSignIn() },
+                                enabled = editable,
+                                modifier = Modifier.fillMaxWidth().testTag("safety-report-sign-in")
+                            )
                         }
                     }
                 }
