@@ -4,6 +4,8 @@ import androidx.compose.ui.test.performTextInput
 import com.hebi.talksullae.ui.MainNavigation
 import com.hebi.talksullae.ui.ProfileScreen
 import android.graphics.Color
+import android.os.Build
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -17,6 +19,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -24,6 +28,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ListenerRegistration
@@ -63,6 +69,9 @@ class DesignScreensCaptureTest {
                 navigationBarStyle = if(dark) SystemBarStyle.dark(Color.TRANSPARENT)
                     else SystemBarStyle.light(Color.TRANSPARENT,Color.TRANSPARENT)
             )
+            // Match MainActivity's manifest; the generic Compose-test Activity
+            // otherwise may pan the whole window when the IME gains focus.
+            activity.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
     }
     private fun mount(title:String,mainTab:String?=null,content:@Composable ()->Unit) {
@@ -84,6 +93,58 @@ class DesignScreensCaptureTest {
         compose.waitUntil(12000) { compose.onAllNodesWithText(value).fetchSemanticsNodes().isNotEmpty() }
         return compose.onNodeWithText(value)
     }
+    private fun waitForCaptureIme() {
+        val activity = compose.activity
+        compose.waitUntil(10000) {
+            compose.runOnUiThread {
+                ViewCompat.getRootWindowInsets(activity.window.decorView)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    private fun assertGameImeViewport(viewportTag: String, control: SemanticsNodeInteraction) {
+        waitForCaptureIme()
+        val host = tag(viewportTag).fetchSemanticsNode().boundsInWindow
+        val node = control.fetchSemanticsNode()
+        val bounds = node.boundsInWindow
+        check(bounds.height >= node.size.height - 1f) { "IME action is vertically clipped" }
+        val activity = compose.activity
+        compose.runOnUiThread {
+            val decor = activity.window.decorView
+            val insets = checkNotNull(ViewCompat.getRootWindowInsets(decor))
+            check(insets.isVisible(WindowInsetsCompat.Type.ime())) { "IME not visible" }
+            // Convert Compose window coordinates to screen coordinates. The
+            // capture workflow is API 36; retain the API guard for other runners.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val onScreen = IntArray(2)
+                val inWindow = IntArray(2)
+                decor.getLocationOnScreen(onScreen)
+                decor.getLocationInWindow(inWindow)
+                val offset = onScreen[1] - inWindow[1]
+                val frame = activity.windowManager.currentWindowMetrics.bounds
+                val statusBottom = frame.top + insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+                val imeTop = frame.bottom - insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+                val mode = activity.window.attributes.softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST
+                val rootLocation = IntArray(2)
+                decor.getLocationOnScreen(rootLocation)
+                val contentLocation = IntArray(2)
+                activity.findViewById<android.view.View>(android.R.id.content).getLocationOnScreen(contentLocation)
+                val detail = "$viewportTag host=$host control=$bounds offset=$offset statusBottom=$statusBottom imeTop=$imeTop mode=$mode decorY=${rootLocation[1]} contentY=${contentLocation[1]} decorHeight=${decor.height}"
+                check(mode == WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING) {
+                    "Game IME window adjustment not applied: $detail"
+                }
+                check(host.top + offset >= statusBottom - 1f &&
+                    host.bottom + offset <= imeTop + 1f) { "Game viewport overlaps system bars or keyboard: $detail" }
+                check(bounds.top >= host.top - 1f && bounds.bottom <= host.bottom + 1f &&
+                    bounds.top + offset >= statusBottom - 1f &&
+                    bounds.bottom + offset <= imeTop + 1f) { "IME action overlaps system bars or keyboard: $detail" }
+                android.util.Log.i("DesignImeViewport", detail)
+            }
+        }
+    }
+
     private fun capture(name:String,anchor:SemanticsNodeInteraction,scroll:Boolean=false) {
         if(scroll && runCatching { anchor.assertIsDisplayed() }.isFailure) anchor.performScrollTo()
         anchor.assertIsDisplayed()
@@ -144,7 +205,11 @@ class DesignScreensCaptureTest {
     }
     private fun enterManagement() {
         label("입장").performScrollTo().performClick()
-        tag("live-room-tab-members").performClick()
+        // The compact workspace has a fixed header action, not a scroll child.
+        // The expanded workspace may place it in a scrollable side panel.
+        val members = tag("live-room-tab-members")
+        if (runCatching { members.assertIsDisplayed() }.isFailure) members.performScrollTo()
+        members.assertIsDisplayed().assertIsEnabled().performClick()
         tag("room-edit-open")
     }
     @Test fun d01Welcome(){
@@ -216,6 +281,19 @@ class DesignScreensCaptureTest {
         label("가입 요청 1명").assertExists()
         label("멤버 목록 4명").assertExists()
         capture("D10_members",label("승인"),true)
+        capture("D10_active_members",label("지훈"),true)
+        // Fixture ordering is fixed. Verify the named target in the real dialog, and cancel.
+        val kick = compose.onAllNodesWithText("강퇴")[0]
+        kick.performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        label("지훈님에게 '강퇴'을 적용하시겠습니까? 서버에서 권한을 다시 검증합니다.").assertExists()
+        capture("D10_remove_confirm",label("확인"))
+        label("취소").performClick()
+        val transfer = compose.onAllNodesWithText("방장 위임")[0]
+        transfer.performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        label("지훈님에게 '방장 위임'을 적용하시겠습니까? 서버에서 권한을 다시 검증합니다.").assertExists()
+        capture("D10_transfer_confirm",label("확인"))
+        label("취소").performClick()
+        label("지훈").assertExists()
     }
     @Test fun d11InviteManagement(){
         mountRooms()
@@ -310,7 +388,8 @@ class DesignScreensCaptureTest {
     }
     private fun mountGame(id:String,phase:GamePhase,role:String="citizen",guess:Boolean=false,eliminated:Boolean=false,submitted:Boolean=false){
         val repo=Game(id,phase,role,guess,eliminated,submitted)
-        mount(if(id=="identity")"" else "톡술래"){
+        // These chat hosts own their heading/back action in the signed-in Main route.
+        mount(if(id=="identity" || id=="forbidden" || id=="liar")"" else "톡술래"){
             when(id){
                 "identity"->OnlineIdentityGameHost("owner",roomId,room.name,"owner",people,{},repo)
                 "liar"->OnlineLiarGameHost("owner",roomId,room.name,"owner",people,{},repo)
@@ -349,7 +428,12 @@ class DesignScreensCaptureTest {
         label("비밀 주제: 커피").assertExists()
         capture("D18_citizen_secret",tag("liar-secret-role"),true)
         tag("liar-chat-input").performScrollTo().performClick().performTextInput("나는 아침에 마시는 편이야.")
+        waitForCaptureIme()
         capture("D18_liar_input",tag("liar-chat-input"),true)
+        val send=tag("liar-chat-send").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        assertGameImeViewport("liar-game-viewport",send)
+        capture("D18_liar_send",send)
+        assertGameImeViewport("liar-game-viewport",send)
     }
     @Test fun d19LiarVote(){
         mountGame("liar",GamePhase.VOTING)
@@ -368,7 +452,12 @@ class DesignScreensCaptureTest {
         compose.onNodeWithTag("forbidden-other-owner").assertDoesNotExist()
         capture("D22_forbidden_chat",tag("forbidden-other-friend1"),true)
         tag("forbidden-chat-input").performScrollTo().performClick().performTextInput("오늘 어떤 계획이 있어?")
+        waitForCaptureIme()
         capture("D22_forbidden_input",tag("forbidden-chat-input"),true)
+        val send=tag("forbidden-chat-send").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        assertGameImeViewport("forbidden-game-viewport",send)
+        capture("D22_forbidden_send",send) // No actual message is sent.
+        assertGameImeViewport("forbidden-game-viewport",send)
     }
     @Test fun d22Eliminated(){mountGame("forbidden",GamePhase.PLAYING,eliminated=true);capture("D22_eliminated",label("금지어를 말해 탈락했습니다. 채팅을 보낼 수 없습니다."),true)}
     @Test fun d23ForbiddenResult(){mountGame("forbidden",GamePhase.FINISHED);capture("D23_forbidden_result",tag("forbidden-result"),true)}
@@ -381,10 +470,14 @@ class DesignScreensCaptureTest {
     @Test fun d24BalanceSubmitted(){mountGame("balance",GamePhase.PLAYING,submitted=true);capture("D24_balance_submitted",label("선택을 제출했습니다. 결과 공개 전까지 다른 사람의 선택은 비공개입니다."),true)}
     @Test fun d25BalancePredict(){
         mountGame("balance",GamePhase.VOTING)
+        tag("balance-predict-submit").assertIsNotEnabled()
         tag("balance-predict-target-friend1").performScrollTo().performClick()
+        tag("balance-predict-submit").assertIsNotEnabled()
         tag("balance-predict-choice-A").performScrollTo().performClick()
         label("지훈님은 어떤 선택을 했을까요?").assertExists()
         capture("D25_balance_predict",tag("balance-predict-choice-A"),true)
+        val submit=tag("balance-predict-submit").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        capture("D25_balance_submit",submit) // Do not submit a game action.
     }
     @Test fun d26BalanceResult(){mountGame("balance",GamePhase.FINISHED);capture("D26_balance_result",tag("balance-result"),true)}
     private val records=RoomRecordsState("2026-11",false,
@@ -408,6 +501,20 @@ class DesignScreensCaptureTest {
         tag("records-chronology-event-0").performScrollTo()
         tag("records-chronology-event-0").assertIsDisplayed()
         capture("D28_chronology",tag("records-chronology-event-0"),true)
+        val second=tag("records-chronology-event-1").performScrollTo().assertIsDisplayed()
+        capture("D28_chronology_bottom",second)
+    }
+    @Test fun d28EmptyChronology(){
+        mountRecords(records.copy(events=emptyList()))
+        val empty=tag("records-chronology-empty")
+        label("현재 표시할 정산 기록이 없습니다.").assertExists()
+        capture("D28_chronology_empty",empty,true)
+    }
+    @Test fun d28ErrorChronology(){
+        mountRecords(records.copy(events=emptyList(),error="방 연대기를 확인할 수 없습니다."))
+        val error=tag("records-chronology-empty")
+        label("방 연대기를 표시할 수 없습니다. 연결 상태를 확인해 주세요.").assertExists()
+        capture("D28_chronology_error",error,true)
     }
     private val gameStats=listOf("identity","liar","forbidden","balance").associateWith{FriendGameStats(5,3)}
     private val pair=FriendComparison(12,5,4,3,mapOf("identity" to 4L,"liar" to 3L,"forbidden" to 2L,"balance" to 3L),4,3,4,2,3,2)
@@ -434,6 +541,19 @@ class DesignScreensCaptureTest {
                 actualUid="owner",onEditProfile={},careerRepository=repo)
         }
         capture("D30_career_section",tag("career-level"),true)
+        capture("D30_career_bottom",tag("my-career-refresh").performScrollTo().assertIsDisplayed().assertIsEnabled())
+    }
+    @Test fun d30CareerPartial(){
+        val value=MyCareer(3,28,16,1600,4,listOf("first_game","games_10","wins_5"),
+            listOf("identity","liar","forbidden","balance").associateWith{CareerGame(7,4)},5,true,"fixture-next-page")
+        val repo=object:CareerRepository{override suspend fun getMyCareer()=value}
+        mount("",mainTab="profile"){
+            ProfileScreen(true,{},{}, "민지",actualProfile=UserProfile("민지","고양이"),
+                actualUid="owner",onEditProfile={},careerRepository=repo)
+        }
+        label("아직 모든 기록을 조회하지 않았습니다. 전체 전적과 레벨은 추가 조회 후 확인할 수 있습니다.").assertExists()
+        compose.onNodeWithTag("career-level").assertDoesNotExist()
+        capture("D30_career_partial",tag("my-career-more").performScrollTo().assertIsDisplayed().assertIsEnabled())
     }
     @Test fun d31ProfileEdit(){
         mount("프로필 편집"){UserProfileEditorScreen(UserProfile("민지","고양이"),false,false,null,{_,_->})}

@@ -90,11 +90,23 @@
       "dataType": "compose-fixture"
     },
     {
+      "name": "D10_active_members",
+      "dataType": "compose-fixture"
+    },
+    {
       "name": "D10_management",
       "dataType": "compose-fixture"
     },
     {
       "name": "D10_members",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D10_remove_confirm",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D10_transfer_confirm",
       "dataType": "compose-fixture"
     },
     {
@@ -158,6 +170,10 @@
       "dataType": "compose-fixture"
     },
     {
+      "name": "D18_liar_send",
+      "dataType": "compose-fixture"
+    },
+    {
       "name": "D19_liar_vote",
       "dataType": "compose-fixture"
     },
@@ -182,6 +198,10 @@
       "dataType": "compose-fixture"
     },
     {
+      "name": "D22_forbidden_send",
+      "dataType": "compose-fixture"
+    },
+    {
       "name": "D23_forbidden_result",
       "dataType": "compose-fixture"
     },
@@ -195,6 +215,10 @@
     },
     {
       "name": "D25_balance_predict",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D25_balance_submit",
       "dataType": "compose-fixture"
     },
     {
@@ -214,6 +238,18 @@
       "dataType": "compose-fixture"
     },
     {
+      "name": "D28_chronology_bottom",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D28_chronology_empty",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D28_chronology_error",
+      "dataType": "compose-fixture"
+    },
+    {
       "name": "D29_friend_comparison",
       "dataType": "compose-fixture"
     },
@@ -226,12 +262,24 @@
       "dataType": "compose-fixture"
     },
     {
+      "name": "D30_career_bottom",
+      "dataType": "compose-fixture"
+    },
+    {
+      "name": "D30_career_partial",
+      "dataType": "compose-fixture"
+    },
+    {
       "name": "D30_career_section",
       "dataType": "compose-fixture"
     },
     {
       "name": "D31_profile_edit",
       "dataType": "compose-fixture"
+    },
+    {
+      "name": "D32_settings_bottom",
+      "dataType": "demo-navigation"
     },
     {
       "name": "D32_settings_demo",
