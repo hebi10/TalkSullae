@@ -1,0 +1,49 @@
+name: DEX-04 TalkSullae isolated 200% navigation capture
+
+on:
+  push:
+    branches: [qa/dex04-talksullae-large-text-capture]
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 32
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build isolated original and scroll-aware runners from the exact main
+        run: bash .github/scripts/dex04-talksullae-capture-build.sh
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Repeat the original test and exercise every screenshot with the scroll-aware test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/dex04-talksullae-capture.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: talksullae-dex04-large-text-native-capture
+          retention-days: 14
+          if-no-files-found: warn
+          path: dex04-capture/
