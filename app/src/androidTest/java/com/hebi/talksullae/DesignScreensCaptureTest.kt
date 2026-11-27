@@ -146,7 +146,11 @@ class DesignScreensCaptureTest {
     }
     private fun enterManagement() {
         label("입장").performScrollTo().performClick()
-        tag("live-room-tab-members").performScrollTo().assertIsDisplayed().performClick()
+        // The compact workspace has a fixed header action, not a scroll child.
+        // The expanded workspace may place it in a scrollable side panel.
+        val members = tag("live-room-tab-members")
+        if (runCatching { members.assertIsDisplayed() }.isFailure) members.performScrollTo()
+        members.assertIsDisplayed().assertIsEnabled().performClick()
         tag("room-edit-open")
     }
     @Test fun d01Welcome(){
